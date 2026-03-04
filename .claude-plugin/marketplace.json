@@ -1,0 +1,22 @@
+{
+  "name": "aoshimash-skills",
+  "owner": {
+    "name": "Shuji Aoshima"
+  },
+  "metadata": {
+    "description": "Personal Claude Code skills collection",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "aoshimash-skills",
+      "description": "Collection of personal Claude Code skills by Shuji Aoshima",
+      "source": "./plugins/aoshimash-skills",
+      "version": "1.0.0",
+      "author": {
+        "name": "Shuji Aoshima"
+      },
+      "license": "MIT"
+    }
+  ]
+}
