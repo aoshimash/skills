@@ -7,6 +7,22 @@ description: Create well-structured issues on any platform (GitHub, GitLab, etc.
 
 Create issues structured around **Summary / Motivation / Background / Proposal / Acceptance Criteria / References** on any issue tracking platform. Always include codebase analysis for accurate context. Ensure issues are solvable by both humans and AI agents.
 
+## Step Tracking
+
+Throughout the workflow, maintain an internal checklist of completed steps. This ensures no step is skipped and provides data for the session log.
+
+Steps: `detect-platform` → `determine-type` → `gather-info` → `analyze-codebase` → `draft` → `self-evaluate` → `create-issue` → `log-and-improve`
+
+Mark each step as completed when it finishes. If a step is skipped (with reason) or abandoned, record that too. The final `log-and-improve` step is **mandatory** — always execute it, even if the workflow is abandoned partway through.
+
+### Signals to track during execution
+
+Observe and record these 3 signal types throughout Steps 1–7:
+
+1. **Draft rejection**: The user requests changes to the draft after it is presented. Record each occurrence with the reason.
+2. **Question round-trips**: Count the number of back-and-forth exchanges during information gathering (Step 3). A round-trip is one question from the skill followed by one answer from the user.
+3. **Self-evaluation miss**: The draft passed Step 6 self-evaluation but the user still identified a problem. Record what was missed.
+
 ## Principles
 
 - **Motivation & Proposal, never How**: Describe why it matters and what the desired outcome is. Never prescribe implementation.
@@ -104,6 +120,36 @@ Before showing the draft to the user, evaluate it against all criteria below.
 
 After user approval, create the issue using the platform-specific method from the loaded platform guide. Apply labels if determined in Step 3. Confirm creation and share the issue URL.
 
+### 8. Log & Improve (mandatory)
+
+**Always execute this step**, even if the workflow was abandoned or partially completed.
+
+#### Spawn skill-analyzer agent
+
+Pass a session summary containing:
+- `skill`: "create-issue"
+- `project`: repository name
+- `issue`: issue identifier (if created) or "not created"
+- `steps_completed`: list from step tracking checklist
+- `steps_skipped`: list with reasons
+- `rejections`: list of {step, reason} — primarily from draft rejections
+- `retries`: list of {step, reason} — e.g., returning to Step 3 for missing information
+- `user_friction`: list of observations — include question round-trip count and any self-evaluation misses
+- `outcome`: "success", "partial", or "abandoned"
+- `notes`: any additional observations
+
+The agent writes the log and analyzes accumulated entries for patterns.
+
+See [references/log-analysis.md](references/log-analysis.md) for how to handle the agent's results. If the agent reports improvement suggestions, present them to the user and offer to create a PR.
+
 ## Evaluation
 
 To improve this skill, run the test cases in [references/eval-cases.md](references/eval-cases.md) and iterate on this SKILL.md based on the results.
+
+## References
+
+- [references/templates.md](references/templates.md) — Issue templates
+- [references/platform-github.md](references/platform-github.md) — GitHub CLI commands
+- [references/platform-gitlab.md](references/platform-gitlab.md) — GitLab CLI commands
+- [references/log-analysis.md](references/log-analysis.md) — How to handle skill-analyzer agent results
+- [references/eval-cases.md](references/eval-cases.md) — Evaluation test cases
