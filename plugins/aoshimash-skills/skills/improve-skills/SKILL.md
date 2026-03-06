@@ -118,6 +118,8 @@ Present the full analysis report. No external submission occurs. End the workflo
 
 #### If "Issue" was selected:
 
+Create one issue per skill. For each skill with findings:
+
 1. Draft the issue body containing:
    - Skill name and number of sessions analyzed
    - Each pattern found (description, frequency, root cause, proposed fix)
@@ -128,10 +130,11 @@ Present the full analysis report. No external submission occurs. End the workflo
    gh issue create --title "improve(<skill-name>): <summary>" --body "<drafted body>" --label "enhancement"
    ```
 4. Return the issue URL.
+5. Repeat for the next skill.
 
 #### If "PR" was selected:
 
-For each approved fix:
+Create one PR per skill. For each skill with approved fixes:
 
 1. Create a branch: `fix/improve-<skill-name>-<description>`
 2. Modify the affected skill files.
