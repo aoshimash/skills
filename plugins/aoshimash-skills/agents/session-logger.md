@@ -1,20 +1,18 @@
 ---
-name: skill-analyzer
+name: session-logger
 description: >
-  Record skill usage session logs and analyze accumulated logs for recurring
-  issues. Spawned at the end of every skill workflow. Do not use directly.
+  Record skill usage session logs by appending entries to JSONL files.
+  Spawned at the end of every skill workflow. Do not use directly.
 tools:
   - Bash
   - Read
   - Write
-  - Edit
   - Glob
-  - Grep
 ---
 
-# Skill Analyzer Agent
+# Session Logger Agent
 
-Record a skill usage session log entry and analyze accumulated logs for improvement opportunities.
+Record a skill usage session log entry by appending it to a JSONL file.
 
 ## Input
 
@@ -30,14 +28,14 @@ You receive a session summary from the calling skill with:
 - `outcome`: "success", "partial", or "abandoned"
 - `notes`: Free-form observations
 
-## Step 1: Write Session Log
+## Procedure
 
-Log directory: `~/.claude/logs/skill-analyzer/`
-Log file: `~/.claude/logs/skill-analyzer/<skill-name>.jsonl`
+Log directory: `~/.claude/logs/session-logger/`
+Log file: `~/.claude/logs/session-logger/<skill-name>.jsonl`
 
 Create the directory if it does not exist:
 ```bash
-mkdir -p ~/.claude/logs/skill-analyzer
+mkdir -p ~/.claude/logs/session-logger
 ```
 
 Append one JSON line with the following fields:
@@ -73,53 +71,16 @@ Example:
 }
 ```
 
-## Step 2: Analyze Accumulated Logs
+## Return
 
-Read the log file for this skill:
-```bash
-cat ~/.claude/logs/skill-analyzer/<skill-name>.jsonl
+After writing the log entry, return:
+```
+Session logged (<N> total entries for <skill-name>).
 ```
 
-If fewer than 3 entries exist, skip analysis and return:
-```
-Session logged. Not enough data for pattern analysis yet (N/3 entries).
-```
-
-If 3+ entries exist, look for these patterns:
-
-| Signal | Threshold | Indicates |
-|---|---|---|
-| Same step rejected | 2+ sessions | Default approach doesn't match user expectations |
-| Same step retried | 2+ sessions | Instructions unclear or incomplete |
-| Similar friction notes | 2+ sessions | Missing context or explanation |
-| Same step skipped | 3+ sessions | Step may be unnecessary |
-| Multiple abandoned | 2+ sessions | Workflow too heavy or misaligned |
-
-## Step 3: Return Results
-
-### If no patterns found:
-```
-Session logged (N total entries for <skill-name>). No recurring patterns found.
-```
-
-### If patterns found, return a structured report:
-
-```
-Session logged (N total entries for <skill-name>).
-
-## Improvement Suggestions
-
-### <pattern description>
-- **Seen in**: X/N sessions
-- **Common reason**: "<aggregated reasons>"
-- **Root cause**: <what in the skill likely causes this>
-- **Proposed fix**: <what to change and in which file>
-```
-
-The calling skill will present these findings to the user and handle PR creation if approved.
+Where `<N>` is the total number of lines in the log file after appending.
 
 ## Important
 
-- Do NOT create PRs or modify skill files directly. Only report findings.
-- Keep analysis concise. Focus on actionable patterns only.
+- Do NOT analyze patterns or suggest improvements. Only record the log entry.
 - If the log file does not exist yet, create it with the current entry.

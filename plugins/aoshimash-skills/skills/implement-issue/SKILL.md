@@ -24,11 +24,15 @@ Read an issue, plan the implementation, get approval, implement, and create a PR
 
 Throughout the workflow, maintain an internal checklist of completed steps. This ensures no step is skipped and provides data for the session log.
 
-Steps: `setup` → `plan` → `implement` → `pr` → `log-and-improve`
+Steps: `setup` → `plan` → `implement` → `pr` → `log`
 
-Mark each step as completed when it finishes. If a step is skipped (with reason) or abandoned, record that too. The final `log-and-improve` step is **mandatory** — always execute it, even if the workflow is abandoned partway through.
+Mark each step as completed when it finishes. If a step is skipped (with reason) or abandoned, record that too. The final `log` step is **mandatory** — always execute it, even if the workflow is abandoned partway through.
 
 ## Workflow
+
+Before starting the workflow, inform the user that this skill records a session log:
+
+> This skill records a session log at the end of execution. The log is saved locally at `~/.claude/logs/session-logger/` and is never sent externally. It is used to detect recurring issues and improve skill quality — you can analyze it anytime with the `improve-skills` skill. If anything feels off or unclear during this workflow, don't hesitate to point it out or ask questions. Your feedback gets recorded in the log and directly helps improve this skill over time.
 
 ### Phase 0: Setup
 
@@ -77,7 +81,7 @@ See [references/workflow.md](references/workflow.md) for the PR/MR body format.
    - Body: summary of changes, link to the issue (Closes #N / Relates to #N), test plan
 3. Return the PR/MR URL to the user.
 
-### Phase 4: Log & Improve (mandatory)
+### Phase 4: Log Session (mandatory)
 
 **Always execute this phase**, even if the workflow was abandoned or partially completed.
 
@@ -91,7 +95,7 @@ Throughout Phases 0–3, observe and record these signals:
 - **Scope change**: User changes requirements mid-implementation
 - **Skip**: A step is skipped (e.g., no tests defined in project)
 
-#### Spawn skill-analyzer agent
+#### Spawn session-logger agent
 
 Pass a session summary containing:
 - `skill`: "implement-issue"
@@ -105,14 +109,11 @@ Pass a session summary containing:
 - `outcome`: "success", "partial", or "abandoned"
 - `notes`: any additional observations
 
-The agent writes the log and analyzes accumulated entries for patterns.
-
-See [references/log-analysis.md](references/log-analysis.md) for how to handle the agent's results. If the agent reports improvement suggestions, present them to the user and offer to create a PR.
+The agent records the session log. To analyze accumulated logs for improvement patterns, use the `improve-skills` skill separately.
 
 ## References
 
 - [references/workflow.md](references/workflow.md) — Detailed plan / implement / PR procedure
 - [references/platform-github.md](references/platform-github.md) — GitHub CLI commands
 - [references/platform-gitlab.md](references/platform-gitlab.md) — GitLab CLI commands
-- [references/log-analysis.md](references/log-analysis.md) — How to handle skill-analyzer agent results
 - [references/eval-cases.md](references/eval-cases.md) — Evaluation test cases

@@ -22,13 +22,14 @@ Personal Claude Code skills collection, packaged as a Plugin for easy installati
 |-------|-------------|
 | [create-issue](plugins/aoshimash-skills/skills/create-issue/) | Create well-structured issues on any platform (GitHub, GitLab, etc.) with codebase analysis and self-evaluation |
 | [implement-issue](plugins/aoshimash-skills/skills/implement-issue/) | Read a platform issue, plan implementation, get approval, implement changes, and open a PR/MR |
+| [improve-skills](plugins/aoshimash-skills/skills/improve-skills/) | Analyze accumulated skill session logs to detect recurring issues and propose improvements |
 | [multi-agent-review](plugins/aoshimash-skills/skills/multi-agent-review/) | Run multiple AI CLIs (Claude, Codex, Gemini) in parallel for code review and produce a unified review output |
 
 ## Agents
 
 | Agent | Description |
 |-------|-------------|
-| [skill-analyzer](plugins/aoshimash-skills/agents/skill-analyzer.md) | Record skill usage session logs and analyze accumulated logs for recurring issues (spawned automatically by skills) |
+| [session-logger](plugins/aoshimash-skills/agents/session-logger.md) | Record skill usage session logs by appending entries to JSONL files (spawned automatically by skills) |
 
 ## Structure
 
@@ -36,7 +37,7 @@ Personal Claude Code skills collection, packaged as a Plugin for easy installati
 plugins/aoshimash-skills/
 ├── .claude-plugin/plugin.json    # Plugin manifest
 ├── agents/
-│   └── skill-analyzer.md        # Session log analyzer agent
+│   └── session-logger.md        # Session log recorder agent
 └── skills/
     └── <skill-name>/
         ├── SKILL.md              # Skill definition (required)
