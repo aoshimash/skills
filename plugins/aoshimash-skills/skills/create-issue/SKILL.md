@@ -11,9 +11,9 @@ Create issues structured around **Summary / Motivation / Background / Proposal /
 
 Throughout the workflow, maintain an internal checklist of completed steps. This ensures no step is skipped and provides data for the session log.
 
-Steps: `detect-platform` → `determine-type` → `gather-info` → `analyze-codebase` → `draft` → `self-evaluate` → `create-issue` → `log-and-improve`
+Steps: `detect-platform` → `determine-type` → `gather-info` → `analyze-codebase` → `draft` → `self-evaluate` → `create-issue` → `log`
 
-Mark each step as completed when it finishes. If a step is skipped (with reason) or abandoned, record that too. The final `log-and-improve` step is **mandatory** — always execute it, even if the workflow is abandoned partway through.
+Mark each step as completed when it finishes. If a step is skipped (with reason) or abandoned, record that too. The final `log` step is **mandatory** — always execute it, even if the workflow is abandoned partway through.
 
 ### Signals to track during execution
 
@@ -120,11 +120,11 @@ Before showing the draft to the user, evaluate it against all criteria below.
 
 After user approval, create the issue using the platform-specific method from the loaded platform guide. Apply labels if determined in Step 3. Confirm creation and share the issue URL.
 
-### 8. Log & Improve (mandatory)
+### 8. Log Session (mandatory)
 
 **Always execute this step**, even if the workflow was abandoned or partially completed.
 
-#### Spawn skill-analyzer agent
+#### Spawn session-logger agent
 
 Pass a session summary containing:
 - `skill`: "create-issue"
@@ -138,9 +138,7 @@ Pass a session summary containing:
 - `outcome`: "success", "partial", or "abandoned"
 - `notes`: any additional observations
 
-The agent writes the log and analyzes accumulated entries for patterns.
-
-See [references/log-analysis.md](references/log-analysis.md) for how to handle the agent's results. If the agent reports improvement suggestions, present them to the user and offer to create a PR.
+The agent records the session log. To analyze accumulated logs for improvement patterns, use the `improve-skills` skill separately.
 
 ## Evaluation
 
@@ -151,5 +149,4 @@ To improve this skill, run the test cases in [references/eval-cases.md](referenc
 - [references/templates.md](references/templates.md) — Issue templates
 - [references/platform-github.md](references/platform-github.md) — GitHub CLI commands
 - [references/platform-gitlab.md](references/platform-gitlab.md) — GitLab CLI commands
-- [references/log-analysis.md](references/log-analysis.md) — How to handle skill-analyzer agent results
 - [references/eval-cases.md](references/eval-cases.md) — Evaluation test cases
