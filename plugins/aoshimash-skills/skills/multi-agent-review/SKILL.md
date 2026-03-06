@@ -20,14 +20,6 @@ Run multiple AI CLIs in parallel for code review and produce a unified review ou
 3. **Unified output** — Deduplicate, resolve contradictions, and sort by severity into a single review.
 4. **Review only** — This skill produces review output in the conversation. Where to post it (PR comment, file, etc.) is the caller's responsibility.
 
-## Step Tracking
-
-Maintain an internal checklist of completed steps throughout the workflow.
-
-Steps: `setup` -> `prepare` -> `execute` -> `aggregate` -> `present` -> `log-and-improve`
-
-Mark each step as completed when it finishes. If a step is skipped (with reason) or abandoned, record that too. The final `log-and-improve` step is **mandatory**.
-
 ## Workflow
 
 ### Phase 0: Setup — Agent Configuration
@@ -141,41 +133,9 @@ If no issues are found, state that clearly.
 
 Delete the temporary diff file. This must happen on every exit path (success, error, early termination).
 
-### Phase 6: Log & Improve (mandatory)
-
-**Always execute this phase**, even if the workflow was abandoned or partially completed.
-
-#### Signals to track during execution
-
-- **Agent failure**: A CLI fails to execute or times out
-- **Parse failure**: Agent output cannot be parsed into structured findings
-- **Contradiction**: Agents disagree on a finding
-- **User friction**: User asks for clarification or expresses confusion
-- **Skip**: A step is skipped (e.g., no agents available)
-
-#### Spawn skill-analyzer agent
-
-Pass a session summary containing:
-- `skill`: "multi-agent-review"
-- `project`: repository name
-- `target`: PR number or "local diff"
-- `agents_configured`: list of configured agents
-- `agents_executed`: list of agents that successfully ran
-- `agents_skipped`: list with reasons (not installed, timed out, failed)
-- `steps_completed`: list from step tracking checklist
-- `steps_skipped`: list with reasons
-- `findings_count`: {critical, warning, suggestion}
-- `contradictions`: list of contradictions found
-- `user_friction`: list of friction observations
-- `outcome`: "success", "partial", or "abandoned"
-- `notes`: any additional observations
-
-See [references/log-analysis.md](references/log-analysis.md) for how to handle the agent's results.
-
 ## References
 
 - [references/agent-cli.md](references/agent-cli.md) — CLI invocation commands and diff handling
 - [references/default-perspectives.md](references/default-perspectives.md) — Default review perspectives
 - [references/aggregation.md](references/aggregation.md) — Aggregation logic details
 - [references/eval-cases.md](references/eval-cases.md) — Evaluation test cases
-- [references/log-analysis.md](references/log-analysis.md) — Skill-analyzer agent integration

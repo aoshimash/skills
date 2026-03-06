@@ -18,7 +18,6 @@
 | 12 | AI self-review completed | Diff reviewed, issues fixed in loop (max 3 rounds, then escalate) |
 | 13 | Human escalation works | User consulted when human judgment is needed, with options and recommendation |
 | 14 | PR/MR well-formed | Has summary, issue link, changes list, test plan |
-| 15 | Session log written | skill-analyzer agent spawned with complete session data |
 
 ## Test Cases
 
@@ -32,9 +31,8 @@
 - Fix is minimal and targeted
 - Checks and review pass quickly
 - PR references and closes the issue
-- skill-analyzer agent spawned at the end
 
-**Criteria to test**: 1, 2, 4, 5, 8, 10, 11, 14, 15
+**Criteria to test**: 1, 2, 4, 5, 8, 10, 11, 14
 
 ### Case 2: Feature request with multiple valid approaches
 
@@ -103,9 +101,8 @@
 - Attempt to fix failures up to 3 times
 - After 3 attempts, escalate to user with: which checks fail, what was tried, options (continue/skip/abandon)
 - Respect user's choice and proceed accordingly
-- Session log records the retries and escalation
 
-**Criteria to test**: 11, 13, 15
+**Criteria to test**: 11, 13
 
 ### Case 8: AI review finds issue needing human judgment
 
@@ -142,17 +139,17 @@
 
 ### 2026-03-05 — Second evaluation (expanded criteria & cases)
 
-Criteria expanded from 10 to 15. Cases expanded from 6 to 8.
+Criteria expanded from 10 to 14. Cases expanded from 6 to 8.
 
 | Case | Result | Notes |
 |------|--------|-------|
-| 1 | Pass (9/9) | Simple flow covers all new criteria including location choice, checks, log |
+| 1 | Pass (8/8) | Simple flow covers all criteria including location choice, checks |
 | 2 | Pass (8/8) | Design decision step, check loop, AI review loop all covered |
 | 3 | Pass (3/3) | Vague criteria handling unchanged, still adequate |
 | 4 | Pass (3/3) | Scope control unchanged, still adequate |
 | 5 | Pass (4/4) | GitLab flow with new location choice covered |
 | 6 | Pass (3/3) | Existing branch detection unchanged, still adequate |
-| 7 | Pass (3/3) | New case: check loop max 3 + escalation with options verified |
+| 7 | Pass (2/2) | New case: check loop max 3 + escalation with options verified |
 | 8 | Pass (2/2) | New case: AI review escalation with options + recommendation verified |
 
-No issues found. All new steps (design decisions, check loop, AI review loop, escalation, agent spawn) are adequately covered by the current instructions.
+No issues found. All new steps (design decisions, check loop, AI review loop, escalation) are adequately covered by the current instructions.

@@ -16,9 +16,8 @@
 | 10 | Severity sorted | Output ordered Critical -> Warning -> Suggestion |
 | 11 | Output format correct | Unified review follows the specified markdown format |
 | 12 | Temp file cleaned up | Diff temp file deleted on every exit path |
-| 13 | Session log written | skill-analyzer agent spawned with complete session data |
-| 14 | All agents failed handled | When all agents fail, user is notified and temp file cleaned up |
-| 15 | Per-agent perspectives | When agent-specific perspectives are configured, only those are used |
+| 13 | All agents failed handled | When all agents fail, user is notified and temp file cleaned up |
+| 14 | Per-agent perspectives | When agent-specific perspectives are configured, only those are used |
 
 ## Test Cases
 
@@ -98,9 +97,8 @@
 **Expected behavior**:
 - Report that all agents failed with details
 - Clean up temp file
-- Session log records the failures
 
-**Criteria to test**: 12, 13, 14
+**Criteria to test**: 12, 13
 
 ### Case 8: One agent times out
 
@@ -111,7 +109,7 @@
 - Note Gemini timeout in the output header
 - Aggregate available results normally
 
-**Criteria to test**: 5, 11, 13
+**Criteria to test**: 5, 11
 
 ### Case 9: Custom per-agent perspectives
 
@@ -122,7 +120,7 @@
 - Codex receives prompt with only architecture + error-handling perspectives
 - Results aggregated normally despite different review scopes
 
-**Criteria to test**: 6, 15
+**Criteria to test**: 6, 14
 
 ### Case 10: Internal use from another skill
 
