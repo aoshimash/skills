@@ -30,6 +30,10 @@ Mark each step as completed when it finishes. If a step is skipped (with reason)
 
 ## Workflow
 
+Before starting the workflow, inform the user that this skill records a session log:
+
+> This skill records a session log at the end of execution. The log is saved locally at `~/.claude/logs/session-logger/` and is never sent externally. It is used to detect recurring issues and improve skill quality — you can analyze it anytime with the `improve-skills` skill.
+
 ### Phase 0: Setup
 
 1. Detect platform (check CLAUDE.md → git remote → ask user). Read the platform-specific guide:

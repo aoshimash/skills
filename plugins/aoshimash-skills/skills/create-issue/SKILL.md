@@ -33,6 +33,10 @@ Observe and record these 3 signal types throughout Steps 1–7:
 
 ## Workflow
 
+Before starting the workflow, inform the user that this skill records a session log:
+
+> This skill records a session log at the end of execution. The log is saved locally at `~/.claude/logs/session-logger/` and is never sent externally. It is used to detect recurring issues and improve skill quality — you can analyze it anytime with the `improve-skills` skill.
+
 ### 1. Detect Platform
 
 Determine the issue tracking platform in this order:
