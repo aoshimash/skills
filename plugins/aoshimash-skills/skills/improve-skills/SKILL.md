@@ -96,15 +96,52 @@ For each pattern:
 - **Proposed fix**: <what to change and in which file>
 ```
 
-### 4. Apply Improvements (with approval)
+### 4. Choose Output Method
+
+After presenting findings, ask the user how to proceed:
+
+1. **Issue** — Submit feedback as a GitHub Issue (no code changes)
+2. **PR** — Submit with SKILL.md modifications included
+3. **Conversation only** — No external submission; review findings in this session only
+
+### 5. Apply Improvements (with approval)
 
 For each improvement suggestion:
 
 1. **Present to the user** — Show the pattern, root cause, and proposed fix.
 2. **Ask for approval** — Do not modify skill files without explicit user approval.
-3. **If approved**, create a PR:
-   - Branch: `fix/improve-<skill-name>-<description>`
-   - Modify the affected skill files
-   - Commit: `fix(<skill-name>): <description>`
-   - Push and create PR
-4. **If declined**, acknowledge and move on.
+3. **If declined**, acknowledge and move to the next suggestion.
+
+#### If "Conversation only" was selected:
+
+Present the full analysis report. No external submission occurs. End the workflow.
+
+#### If "Issue" was selected:
+
+Create one issue per skill. For each skill with findings:
+
+1. Draft the issue body containing:
+   - Skill name and number of sessions analyzed
+   - Each pattern found (description, frequency, root cause, proposed fix)
+   - Do NOT include raw session data or project-specific details (privacy)
+2. Show the draft to the user for review and confirmation.
+3. On approval, create the issue:
+   ```bash
+   gh issue create --title "improve(<skill-name>): <summary>" --body "<drafted body>" --label "enhancement"
+   ```
+4. Return the issue URL.
+5. Repeat for the next skill.
+
+#### If "PR" was selected:
+
+Create one PR per skill. For each skill with approved fixes:
+
+1. Create a branch: `fix/improve-<skill-name>-<description>`
+2. Modify the affected skill files.
+3. Commit: `fix(<skill-name>): <description>`
+4. Show the diff to the user for review and confirmation.
+5. Push and create PR:
+   ```bash
+   gh pr create --title "fix(<skill-name>): <description>" --body "<summary of changes>"
+   ```
+6. Return the PR URL.
