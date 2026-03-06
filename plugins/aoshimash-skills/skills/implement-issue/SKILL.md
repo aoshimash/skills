@@ -20,19 +20,7 @@ Read an issue, plan the implementation, get approval, implement, and create a PR
 3. **Small, reviewable changes** — Prefer focused PRs. If the issue is large, suggest splitting. If the user insists on a single PR, implement incrementally with clear scope per commit.
 4. **Follow project conventions** — Read CLAUDE.md and existing code patterns before implementing.
 
-## Step Tracking
-
-Throughout the workflow, maintain an internal checklist of completed steps. This ensures no step is skipped and provides data for the session log.
-
-Steps: `setup` → `plan` → `implement` → `pr` → `log`
-
-Mark each step as completed when it finishes. If a step is skipped (with reason) or abandoned, record that too. The final `log` step is **mandatory** — always execute it, even if the workflow is abandoned partway through.
-
 ## Workflow
-
-Before starting the workflow, inform the user that this skill records a session log:
-
-> This skill records a session log at the end of execution. The log is saved locally at `~/.claude/logs/session-logger/` and is never sent externally. It is used to detect recurring issues and improve skill quality — you can analyze it anytime with the `improve-skills` skill. If anything feels off or unclear during this workflow, don't hesitate to point it out or ask questions. Your feedback gets recorded in the log and directly helps improve this skill over time.
 
 ### Phase 0: Setup
 
@@ -80,36 +68,6 @@ See [references/workflow.md](references/workflow.md) for the PR/MR body format.
    - Title: concise summary (under 70 chars)
    - Body: summary of changes, link to the issue (Closes #N / Relates to #N), test plan
 3. Return the PR/MR URL to the user.
-
-### Phase 4: Log Session (mandatory)
-
-**Always execute this phase**, even if the workflow was abandoned or partially completed.
-
-#### What to track during execution
-
-Throughout Phases 0–3, observe and record these signals:
-
-- **Rejection**: User says "no", "that's wrong", "change this", or rejects a proposal
-- **Retry**: A step fails (tests, lint, build) and must be re-done
-- **Friction**: User asks the same question twice, asks for clarification, or expresses confusion
-- **Scope change**: User changes requirements mid-implementation
-- **Skip**: A step is skipped (e.g., no tests defined in project)
-
-#### Spawn session-logger agent
-
-Pass a session summary containing:
-- `skill`: "implement-issue"
-- `project`: repository name
-- `issue`: issue identifier
-- `steps_completed`: list from step tracking checklist
-- `steps_skipped`: list with reasons
-- `rejections`: list of {step, reason} observed during this session
-- `retries`: list of {step, reason} observed during this session
-- `user_friction`: list of friction observations
-- `outcome`: "success", "partial", or "abandoned"
-- `notes`: any additional observations
-
-The agent records the session log. To analyze accumulated logs for improvement patterns, use the `improve-skills` skill separately.
 
 ## References
 

@@ -7,22 +7,6 @@ description: Create well-structured issues on any platform (GitHub, GitLab, etc.
 
 Create issues structured around **Summary / Motivation / Background / Proposal / Acceptance Criteria / References** on any issue tracking platform. Always include codebase analysis for accurate context. Ensure issues are solvable by both humans and AI agents.
 
-## Step Tracking
-
-Throughout the workflow, maintain an internal checklist of completed steps. This ensures no step is skipped and provides data for the session log.
-
-Steps: `detect-platform` → `determine-type` → `gather-info` → `analyze-codebase` → `draft` → `self-evaluate` → `create-issue` → `log`
-
-Mark each step as completed when it finishes. If a step is skipped (with reason) or abandoned, record that too. The final `log` step is **mandatory** — always execute it, even if the workflow is abandoned partway through.
-
-### Signals to track during execution
-
-Observe and record these 3 signal types throughout Steps 1–7:
-
-1. **Draft rejection**: The user requests changes to the draft after it is presented. Record each occurrence with the reason.
-2. **Question round-trips**: Count the number of back-and-forth exchanges during information gathering (Step 3). A round-trip is one question from the skill followed by one answer from the user.
-3. **Self-evaluation miss**: The draft passed Step 6 self-evaluation but the user still identified a problem. Record what was missed.
-
 ## Principles
 
 - **Motivation & Proposal, never How**: Describe why it matters and what the desired outcome is. Never prescribe implementation.
@@ -32,10 +16,6 @@ Observe and record these 3 signal types throughout Steps 1–7:
 - **Never settle for vague**: If the user's response is ambiguous, incomplete, or leaves room for multiple interpretations, ask follow-up questions until the intent is clear. It is better to ask too many questions than to create an issue that requires clarification later.
 
 ## Workflow
-
-Before starting the workflow, inform the user that this skill records a session log:
-
-> This skill records a session log at the end of execution. The log is saved locally at `~/.claude/logs/session-logger/` and is never sent externally. It is used to detect recurring issues and improve skill quality — you can analyze it anytime with the `improve-skills` skill. If anything feels off or unclear during this workflow, don't hesitate to point it out or ask questions. Your feedback gets recorded in the log and directly helps improve this skill over time.
 
 ### 1. Detect Platform
 
@@ -123,26 +103,6 @@ Before showing the draft to the user, evaluate it against all criteria below.
 ### 7. Create the Issue
 
 After user approval, create the issue using the platform-specific method from the loaded platform guide. Apply labels if determined in Step 3. Confirm creation and share the issue URL.
-
-### 8. Log Session (mandatory)
-
-**Always execute this step**, even if the workflow was abandoned or partially completed.
-
-#### Spawn session-logger agent
-
-Pass a session summary containing:
-- `skill`: "create-issue"
-- `project`: repository name
-- `issue`: issue identifier (if created) or "not created"
-- `steps_completed`: list from step tracking checklist
-- `steps_skipped`: list with reasons
-- `rejections`: list of {step, reason} — primarily from draft rejections
-- `retries`: list of {step, reason} — e.g., returning to Step 3 for missing information
-- `user_friction`: list of observations — include question round-trip count and any self-evaluation misses
-- `outcome`: "success", "partial", or "abandoned"
-- `notes`: any additional observations
-
-The agent records the session log. To analyze accumulated logs for improvement patterns, use the `improve-skills` skill separately.
 
 ## Evaluation
 
