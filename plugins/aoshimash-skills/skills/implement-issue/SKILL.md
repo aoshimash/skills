@@ -7,7 +7,6 @@ description: >
   "issue を実装", "issue #N を対応", "この issue をやって", "implement #N",
   "fix issue #N", "work on issue", or references an issue number/URL
   with the intent to implement it.
-argument-hint: "Issue key (e.g., PROJ-123) or number"
 ---
 
 # Implement Issue
@@ -31,8 +30,7 @@ Read an issue, plan the implementation, get approval, implement, and create a PR
    - Backlog: [references/platform-backlog.md](references/platform-backlog.md)
 2. Obtain the issue identifier (number, key, or URL) from the user. If not provided, list open issues from the platform (when supported) and ask the user to select one.
 3. Fetch the issue content using the platform CLI or MCP tool.
-4. Update the issue status to "In Progress" when the platform supports status updates (e.g., Backlog).
-5. Ask the user where to implement using `AskUserQuestion` with numbered options:
+4. Ask the user where to implement using `AskUserQuestion` with numbered options:
    - **Worktree** (default) — Create a git worktree for isolated work. Keeps current branch untouched.
    - **New branch** — Create a new branch in the current working tree.
    - **Current branch** — Work directly on the current branch (useful if already on a feature branch).

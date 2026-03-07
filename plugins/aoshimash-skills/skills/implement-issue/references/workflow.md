@@ -147,7 +147,9 @@ git checkout -b <branch-name>
 
 ### 2-1b. Update Issue Status
 
-If the issue tracker supports status updates (e.g., Backlog), update the issue status to "In Progress" after preparing the working environment. See the platform-specific guide for the command.
+If the issue tracker supports status updates (e.g., Backlog), update the issue status to "In Progress" after preparing the working environment and before starting implementation. See the platform-specific guide for the command.
+
+This step is placed here (after plan approval) rather than in Phase 0, so the issue is not marked "In Progress" if the plan is rejected or abandoned.
 
 ### 2-2. Implement Changes
 

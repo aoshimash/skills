@@ -124,7 +124,7 @@
 **Expected behavior**:
 - Detects Backlog as issue tracker from CLAUDE.md
 - Fetches issue via Backlog MCP tool using key `PROJ-42`
-- Updates issue status to "In Progress" on Backlog
+- Updates issue status to "In Progress" on Backlog after plan approval (Phase 2, not Phase 0)
 - Detects GitHub as code hosting from git remote
 - Creates PR on GitHub (not Backlog)
 - Posts comment on Backlog issue with PR link
