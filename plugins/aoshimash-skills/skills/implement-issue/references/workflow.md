@@ -42,14 +42,13 @@ Before drafting the plan, identify any decisions that require human judgment. Ex
 - Technology or library choices not dictated by CLAUDE.md
 - Scope boundaries (what's "good enough" for this issue)
 
-For each decision point:
+For each decision point, use `AskUserQuestion` with numbered options:
 
 1. **Present options** (2–4 choices) with:
    - A short label for each option
-   - Pros and cons, or key trade-offs
-   - Impact on complexity, performance, maintainability
-2. **Recommend one option** — Mark it clearly and explain why.
-3. **Wait for the user's choice** before proceeding.
+   - Pros and cons or key trade-offs in the description
+   - Mark the recommended option with "(Recommended)" in its label
+2. **Wait for the user's choice** before proceeding.
 
 If no design decisions require human input, skip this step and proceed to 1-4.
 
@@ -179,11 +178,10 @@ Run whatever the project defines. **Loop (max 3 attempts):**
 2. If any fail, fix the issue and re-run all checks.
 3. Repeat until all checks pass or 3 attempts are reached.
 
-If a fix requires a design decision (e.g., how to handle an unexpected edge case), present options with a recommendation to the user and wait for their choice.
+If a fix requires a design decision (e.g., how to handle an unexpected edge case), use `AskUserQuestion` to present numbered options with a recommendation and wait for the user's choice.
 
-**If checks still fail after 3 attempts**: Stop and escalate to the user. Present:
-- Which checks are still failing
-- What was tried to fix them
+**If checks still fail after 3 attempts**: Stop and escalate to the user. Use `AskUserQuestion` to present:
+- Which checks are still failing and what was tried
 - Options: continue trying, skip the failing check, or abandon the implementation
 
 If the project has no defined checks, skip this step but note it when creating the PR.
@@ -208,15 +206,23 @@ Check for:
 1. Review the diff.
 2. If issues found:
    - Fix issues that have a clear correct solution.
-   - If a fix requires human judgment (e.g., ambiguous requirements, UX trade-offs, business logic), present the issue with options and a recommendation to the user. Wait for their choice.
+   - If a fix requires human judgment (e.g., ambiguous requirements, UX trade-offs, business logic), use `AskUserQuestion` to present the issue with numbered options and a recommendation. Wait for the user's choice.
 3. After fixes, re-run project checks (Step 2-3) to ensure fixes don't break anything.
 4. Re-review the diff.
 5. Repeat until no issues remain or 3 review rounds are reached.
 
-**If issues remain after 3 rounds**: Stop and present remaining issues to the user. Let the user decide whether to:
+**If issues remain after 3 rounds**: Stop and use `AskUserQuestion` to present remaining issues. Let the user decide whether to:
 - Proceed with known issues
 - Fix manually
 - Abandon the implementation
+
+**After self-review completes**, output a visible summary to the user before proceeding to commit:
+
+```
+Self-review complete: N round(s), N issue(s) found, N fixed, N remaining
+```
+
+This ensures the user can verify that self-review was performed and see the result at a glance.
 
 ### 2-5. Commit
 

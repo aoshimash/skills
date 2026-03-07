@@ -29,7 +29,7 @@ Read an issue, plan the implementation, get approval, implement, and create a PR
    - GitLab: [references/platform-gitlab.md](references/platform-gitlab.md)
 2. Obtain the issue identifier (number or URL) from the user if not already provided.
 3. Fetch the issue content using the platform CLI.
-4. Ask the user where to implement. Options:
+4. Ask the user where to implement using `AskUserQuestion` with numbered options:
    - **Worktree** (default) — Create a git worktree for isolated work. Keeps current branch untouched.
    - **New branch** — Create a new branch in the current working tree.
    - **Current branch** — Work directly on the current branch (useful if already on a feature branch).
@@ -41,7 +41,7 @@ See [references/workflow.md](references/workflow.md) for the detailed procedure.
 **Summary:**
 1. Parse the issue — extract motivation, background, proposal, acceptance criteria.
 2. Analyze the codebase — identify files, patterns, dependencies relevant to the issue.
-3. Resolve design decisions — if multiple valid approaches exist, present options with pros/cons and a recommendation. Wait for the user's choice.
+3. Resolve design decisions — if multiple valid approaches exist, use `AskUserQuestion` to present numbered options with pros/cons and a recommendation. Wait for the user's choice.
 4. Draft implementation plan — list files to create/modify, approach for each, edge cases.
 5. Self-evaluate — verify plan addresses all acceptance criteria and stays in scope.
 6. Present the plan to the user and wait for approval.
@@ -56,7 +56,7 @@ See [references/workflow.md](references/workflow.md) for the detailed procedure.
 1. Prepare working environment (worktree / new branch / current branch).
 2. Implement changes following the approved plan.
 3. Run project checks (tests, lint, type-check, format) — loop until all pass.
-4. AI self-review of the full diff — loop until clean. Escalate to user when human judgment is needed.
+4. AI self-review of the full diff — loop until clean. Escalate to user (via `AskUserQuestion`) when human judgment is needed. After completion, output a visible self-review summary (e.g., "Self-review: N round(s), N issue(s) found, N fixed").
 5. Commit with a message referencing the issue.
 
 ### Phase 3: Pull/Merge Request
