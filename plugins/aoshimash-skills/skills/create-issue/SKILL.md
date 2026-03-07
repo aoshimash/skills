@@ -40,7 +40,7 @@ Infer the issue type from conversation context. If unclear, ask using plain lang
 
 ### 3. Gather Information
 
-Collect information through conversation using natural, plain-language questions. Do not ask for all fields at once — build on each response.
+Collect information through conversation using natural, plain-language questions. Do not ask for all fields at once — build on each response. Ask exactly one question at a time. Never combine multiple questions or sub-questions into a single message. Use AskUserQuestion when presenting choices.
 
 **Step-by-step:**
 
