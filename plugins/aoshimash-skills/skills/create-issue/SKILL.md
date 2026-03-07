@@ -28,15 +28,23 @@ Determine the issue tracking platform in this order:
 Load the corresponding platform guide from `references/`:
 - GitHub → [references/platform-github.md](references/platform-github.md)
 - GitLab → [references/platform-gitlab.md](references/platform-gitlab.md)
+- Backlog → [references/platform-backlog.md](references/platform-backlog.md)
 - Other → Output Markdown for the user to paste manually
 
 ### 2. Determine Issue Type
 
-Infer the issue type from conversation context. If unclear, ask using plain language:
+Infer the issue type from conversation context. Available types:
 
-- "Is something broken or not working as expected?" → **Bug Report**
-- "Are you requesting something new or an improvement?" → **Feature Request**
-- Only present **Technical Task** when the user's description is clearly technical (e.g., mentions refactoring, performance, tech debt)
+- **Bug Report** — Something is broken or not working as expected
+- **Feature Request** — New functionality or an improvement
+- **Technical Task** — Refactoring, performance, tech debt (present only when clearly technical)
+- **Operation** — Operational/procedural tasks with step-by-step procedures (available on platforms that support it, e.g., Backlog)
+
+If the type is unclear, ask using plain language:
+- "Is something broken or not working as expected?" → Bug Report
+- "Are you requesting something new or an improvement?" → Feature Request
+
+After inferring, confirm with the user: "I've identified this as a **[type]** — does that sound right?" Include platform-specific types (e.g., Operation for Backlog) in the options when applicable.
 
 ### 3. Gather Information
 
@@ -57,6 +65,8 @@ Collect information through conversation using natural, plain-language questions
 - Are the completion criteria things that can be verified at implementation time? Separate operational goals (e.g., "response time under 24h") from implementation criteria (e.g., "notification is sent on form submit").
 
 If any answer is no, ask a targeted follow-up question. Repeat until the information is sufficient for someone with zero context to implement correctly. Do not proceed to Step 4 until the information is complete.
+
+**Priority**: For platforms with built-in priority levels (e.g., Backlog: High / Normal / Low), ask the user to confirm the priority. Skip this for platforms without built-in priorities (e.g., GitHub, GitLab — use labels instead if needed).
 
 **Labels**: Fetch the existing labels from the project (e.g., `gh label list`). Based on the issue type and content, recommend appropriate labels from the available list. Present the recommendation to the user for confirmation.
 
@@ -113,4 +123,5 @@ To improve this skill, run the test cases in [references/eval-cases.md](referenc
 - [references/templates.md](references/templates.md) — Issue templates
 - [references/platform-github.md](references/platform-github.md) — GitHub CLI commands
 - [references/platform-gitlab.md](references/platform-gitlab.md) — GitLab CLI commands
+- [references/platform-backlog.md](references/platform-backlog.md) — Backlog MCP tools
 - [references/eval-cases.md](references/eval-cases.md) — Evaluation test cases

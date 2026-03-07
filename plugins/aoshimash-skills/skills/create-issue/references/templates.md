@@ -5,6 +5,7 @@
 - [Bug Report](#bug-report)
 - [Feature Request](#feature-request)
 - [Technical Task](#technical-task)
+- [Operation](#operation)
 
 ---
 
@@ -126,4 +127,54 @@
 ## References
 
 <!-- Related issues, PRs, ADRs, benchmarks, monitoring dashboards -->
+```
+
+---
+
+## Operation
+
+```markdown
+<!-- 1-2 sentence summary of the operation and its purpose -->
+
+## Motivation
+
+<!-- Why this operation is needed: business need, operational requirement -->
+
+## Background
+
+<!-- Context about the current operational process -->
+<!-- Constraints, dependencies, timing requirements -->
+
+### Related Code
+
+<!-- File paths and brief description of relevant areas -->
+
+## Proposal
+
+<!-- What should be achieved operationally -->
+
+## Procedure
+
+<!-- Step-by-step procedure to complete the operation -->
+<!-- Include pre-conditions, execution steps, and post-conditions -->
+
+1. **Pre-conditions**:
+   -
+
+2. **Steps**:
+   1.
+   2.
+   3.
+
+3. **Post-conditions / Verification**:
+   -
+
+## Acceptance Criteria
+
+- [ ]
+- [ ]
+
+## References
+
+<!-- Related issues, runbooks, operational docs -->
 ```

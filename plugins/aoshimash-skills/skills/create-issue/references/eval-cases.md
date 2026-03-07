@@ -72,6 +72,29 @@ For each test case:
   - Acceptance criteria are measurable
 - **Key criteria to watch**: #8 (Criteria independently verifiable), language matching
 
+### Case 7: Backlog issue creation with Operation type
+
+- **Persona**: DevOps engineer using Backlog
+- **Initial input**: "本番環境のDBマイグレーション手順をissueにしたい"
+- **Expected behavior**:
+  - Detects Backlog platform from CLAUDE.md config
+  - Presents issue type options including Operation
+  - Asks for priority confirmation (High / Normal / Low)
+  - Uses Operation template with Procedure section
+  - Creates issue via Backlog MCP tool
+- **Key criteria to watch**: Issue type confirmation, priority confirmation, Operation template usage
+
+### Case 8: Cross-platform setup (Backlog issues + GitHub PRs)
+
+- **Persona**: Engineer in a team using Backlog for task management and GitHub for code
+- **Initial input**: "Create a feature request for adding user notifications"
+- **Expected behavior**:
+  - Detects Backlog as issue tracker from CLAUDE.md
+  - Creates the issue on Backlog (not GitHub)
+  - Issue type confirmation step is shown
+  - Priority confirmation step is shown (Backlog-specific)
+- **Key criteria to watch**: Correct platform detection, Backlog-specific fields
+
 ---
 
 ## Evaluation Log
