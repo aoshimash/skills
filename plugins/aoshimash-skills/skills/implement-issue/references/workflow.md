@@ -145,6 +145,10 @@ git checkout -b <branch-name>
 
 **If "Current branch"**: Verify the branch is clean (`git status`). Continue on the current branch.
 
+### 2-1b. Update Issue Status
+
+If the issue tracker supports status updates (e.g., Backlog), update the issue status to "In Progress" after preparing the working environment. See the platform-specific guide for the command.
+
 ### 2-2. Implement Changes
 
 Follow the approved plan file by file. For each file:
@@ -253,7 +257,18 @@ Guidelines:
 
 ## Phase 3: Pull/Merge Request
 
-Push and create the PR/MR. See the platform-specific guide for exact commands.
+### 3-0. Detect Code Hosting Platform
+
+The code hosting platform (for PRs) is independent of the issue tracker. Detect from the git remote URL:
+
+- `github.com` → GitHub (use `gh` CLI)
+- `gitlab.com` or known GitLab instance → GitLab (use `glab` CLI)
+
+This allows cross-platform setups (e.g., Backlog for issue tracking + GitHub for code hosting).
+
+### 3-1. Push and Create PR/MR
+
+Push and create the PR/MR using the **code hosting** platform's CLI. See the platform-specific guide for exact commands.
 
 PR/MR body format:
 
@@ -270,5 +285,11 @@ Closes #<issue-number>
 - [ ] <how each acceptance criterion was verified>
 - [ ] <any manual testing steps>
 ```
+
+### 3-2. Comment on Issue
+
+If the issue tracker supports comments (e.g., Backlog), post a comment on the issue with the PR/MR link. This is especially useful for cross-platform setups where the PR is not automatically linked to the issue.
+
+### 3-3. Return Result
 
 Return the PR/MR URL to the user.

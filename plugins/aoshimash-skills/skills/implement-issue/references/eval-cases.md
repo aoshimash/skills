@@ -117,6 +117,35 @@
 
 **Criteria to test**: 12, 13
 
+### Case 9: Backlog issue implementation
+
+**Scenario**: User says "PROJ-42 を実装して" in a project with Backlog configured as issue tracker and GitHub as code hosting.
+
+**Expected behavior**:
+- Detects Backlog as issue tracker from CLAUDE.md
+- Fetches issue via Backlog MCP tool using key `PROJ-42`
+- Updates issue status to "In Progress" on Backlog
+- Detects GitHub as code hosting from git remote
+- Creates PR on GitHub (not Backlog)
+- Posts comment on Backlog issue with PR link
+- Continuous flow from Phase 2 to Phase 3 without stopping
+
+**Criteria to test**: 1, 2, 4, 5, 8, 9, 10, 14
+
+### Case 10: Cross-platform with issue listing
+
+**Scenario**: User says "implement issue" without specifying an identifier, in a project with Backlog + GitHub setup.
+
+**Expected behavior**:
+- Lists open issues from Backlog
+- Presents the list and asks user to select one
+- After selection, proceeds with the normal implementation flow
+- Issue status updated to "In Progress" on Backlog
+- PR created on GitHub
+- Comment posted on Backlog issue with PR link
+
+**Criteria to test**: 1, 2, 7, 8, 14
+
 ---
 
 ## Evaluation Log
