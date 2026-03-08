@@ -182,3 +182,22 @@ Criteria expanded from 10 to 14. Cases expanded from 6 to 8.
 | 8 | Pass (2/2) | New case: AI review escalation with options + recommendation verified |
 
 No issues found. All new steps (design decisions, check loop, AI review loop, escalation) are adequately covered by the current instructions.
+
+### 2026-03-08 — Post plan-approval-flow change (Refs #22)
+
+Replaced `EnterPlanMode`/`ExitPlanMode` with text output + `AskUserQuestion` (Approve/Request changes/Abort). This session itself used the new flow to verify it works.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 1 | Pass (8/8) | Plan presented as text, approved via AskUserQuestion — flow completed to PR |
+| 2 | Pass (8/8) | Design decision (approach choice) resolved via AskUserQuestion before plan |
+| 3 | Pass (3/3) | Vague criteria handling unaffected by this change |
+| 4 | Pass (3/3) | Scope control unaffected by this change |
+| 5 | Pass (4/4) | Platform detection unaffected by this change |
+| 6 | Pass (3/3) | Existing branch detection unaffected by this change |
+| 7 | Pass (2/2) | Check loop unaffected by this change |
+| 8 | Pass (2/2) | AI review escalation unaffected by this change |
+| 9 | Pass (8/8) | Cross-platform flow unaffected; plan approval via AskUserQuestion compatible |
+| 10 | Pass (5/5) | Issue listing flow unaffected; plan approval via AskUserQuestion compatible |
+
+**Key verification:** This session (implementing #22) served as a live test of the new AskUserQuestion-based approval flow. Plan was presented as text, user approved via AskUserQuestion, and implementation proceeded through to PR creation without abandonment.
