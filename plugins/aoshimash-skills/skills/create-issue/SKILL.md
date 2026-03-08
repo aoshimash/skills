@@ -40,21 +40,27 @@ Infer the issue type from conversation context. Available types:
 - **Technical Task** — Refactoring, performance, tech debt (present only when clearly technical)
 - **Operation** — Operational/procedural tasks with step-by-step procedures (available on platforms that support it, e.g., Backlog)
 
-If the type is unclear, ask using plain language:
+If the type is **clearly inferable** from the user's message (e.g., "something is broken" → Bug Report, "I want to add..." → Feature Request), proceed without confirmation.
+
+If the type is **genuinely ambiguous** or could be multiple types, ask using plain language:
 - "Is something broken or not working as expected?" → Bug Report
 - "Are you requesting something new or an improvement?" → Feature Request
 
-After inferring, confirm with the user: "I've identified this as a **[type]** — does that sound right?" Include platform-specific types (e.g., Operation for Backlog) in the options when applicable.
+Include platform-specific types (e.g., Operation for Backlog) in the options when applicable.
 
 ### 3. Gather Information
 
-Collect information through conversation using natural, plain-language questions. Do not ask for all fields at once — build on each response. Ask exactly one question at a time. Never combine multiple questions or sub-questions into a single message. Use AskUserQuestion when presenting choices.
+Collect information through conversation using natural, plain-language questions. Use AskUserQuestion when presenting choices.
 
-**Step-by-step:**
+**Fast path**: If the user's initial message already provides clear motivation, desired outcome, and enough detail to generate verifiable acceptance criteria, skip the step-by-step questions below and proceed directly to generating AC (without confirming it yet — see Step 4).
+
+**Step-by-step** (when more information is needed):
+
+Do not ask for all fields at once — build on each response. Ask exactly one question at a time. Never combine multiple questions or sub-questions into a single message.
 
 1. Ask: "Why is this needed?" or "What problem are you experiencing?"
 2. Based on the response, ask: "What would you like the result to look like?" or "How should it work when it's fixed/done?"
-3. Do NOT ask the user for Acceptance Criteria. Instead, generate verifiable criteria from the Motivation and Proposal, then confirm: "I've drafted the following completion criteria — do these look right?"
+3. Generate verifiable acceptance criteria from the Motivation and Proposal. Do NOT ask the user to confirm AC yet — it will be cross-checked against codebase analysis in Step 4 and presented in the draft.
 
 **Ensure completeness through follow-up questions.** After each response, check:
 - Is the scope clear? Could two different people interpret this differently?
@@ -68,9 +74,11 @@ If any answer is no, ask a targeted follow-up question. Repeat until the informa
 
 **Priority**: For platforms with built-in priority levels (e.g., Backlog: High / Normal / Low), ask the user to confirm the priority. Skip this for platforms without built-in priorities (e.g., GitHub, GitLab — use labels instead if needed).
 
-**Labels**: Fetch the existing labels from the project (e.g., `gh label list`). Based on the issue type and content, recommend appropriate labels from the available list. Present the recommendation to the user for confirmation.
+**Labels**: Check CLAUDE.md for default labels configuration. If defaults are configured, apply them without asking. If not, fetch the existing labels from the project (e.g., `gh label list`), recommend appropriate labels based on the issue type and content, and present the recommendation to the user for confirmation.
 
-**Assignees**: Ask the user: assign to yourself, someone else, or no one. If someone else, fetch the available assignees (e.g., `gh api repos/{owner}/{repo}/assignees`) and let the user choose.
+**Assignees**: Check CLAUDE.md for default assignee configuration (e.g., "always self-assign"). If defaults are configured, apply them without asking. If not, ask the user: assign to yourself, someone else, or no one. If someone else, fetch the available assignees (e.g., `gh api repos/{owner}/{repo}/assignees`) and let the user choose.
+
+When both labels and assignees need user input (no defaults configured for either), combine them into a single AskUserQuestion call instead of asking separately.
 
 ### 4. Analyze Codebase
 
@@ -82,13 +90,15 @@ Always run codebase analysis to enrich the issue with accurate background:
 
 Use findings to populate the **Background** and **Related Code** sections. Present current state as factual background, not implementation suggestions.
 
+**Cross-check AC**: After codebase analysis, review the acceptance criteria generated in Step 3 against analysis results. If the codebase reveals information that would improve or correct AC items (e.g., existing config files, related modules, edge cases), revise the AC before including it in the draft. The user sees the finalized AC in the Step 5 draft, not as a separate confirmation.
+
 ### 5. Draft the Issue
 
 Load the appropriate template from [references/templates.md](references/templates.md) and fill it in.
 
 Every issue starts with a **1-2 sentence summary** at the top before any sections. This summary enables quick scanning in issue lists.
 
-**Language**: Match the user's language. If the user writes in Japanese, write the issue in Japanese. If in English, write in English.
+**Language**: If CLAUDE.md or project conventions specify a language for issues (e.g., "Write issue titles/bodies in English"), use that language. Otherwise, match the user's language.
 
 ### 6. Self-Evaluate Before Presenting
 
