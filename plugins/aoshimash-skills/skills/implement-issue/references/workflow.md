@@ -99,13 +99,29 @@ If any check fails, revise the plan before presenting.
 
 ### 1-6. Present and Get Approval
 
-Present the plan to the user. Clearly state:
+Present the plan as **text output** (not via `EnterPlanMode`). Clearly state:
 
 - What will change and why
 - Any assumptions or decisions made
 - Questions or trade-offs requiring user input
 
-Wait for explicit approval. If the user requests changes, revise the plan and re-present.
+Then use `AskUserQuestion` to request approval:
+
+```
+AskUserQuestion with options:
+- "Approve" — Proceed with implementation.
+- "Request changes" — Revise the plan based on feedback.
+- "Abort" — Cancel the implementation.
+```
+
+**If the user selects "Request changes"** (or provides feedback via "Other"):
+1. Read the user's feedback.
+2. Revise the plan to address the feedback.
+3. Re-present the revised plan.
+4. Ask for approval again using `AskUserQuestion` with the same options.
+5. Repeat until the user approves or aborts.
+
+**Important:** Do NOT use `EnterPlanMode`/`ExitPlanMode` for plan approval. The `ExitPlanMode` UI can cause accidental rejections with no way to provide feedback, leading to abandoned sessions.
 
 ## Phase 2: Implement
 
