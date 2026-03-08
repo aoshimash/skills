@@ -43,11 +43,11 @@ See [references/workflow.md](references/workflow.md) for the detailed procedure.
 1. Parse the issue — extract motivation, background, proposal, acceptance criteria.
 2. Analyze the codebase — identify files, patterns, dependencies relevant to the issue.
 3. Resolve design decisions — if multiple valid approaches exist, use `AskUserQuestion` to present numbered options with pros/cons and a recommendation. Wait for the user's choice.
-4. Draft implementation plan — list files to create/modify, approach for each, edge cases. Use `EnterPlanMode` to draft the plan, then `ExitPlanMode` when ready to present.
+4. Draft implementation plan — list files to create/modify, approach for each, edge cases.
 5. Self-evaluate — verify plan addresses all acceptance criteria and stays in scope.
-6. Present the plan to the user and wait for approval.
+6. Present the plan as text output, then use `AskUserQuestion` to ask for approval with options: Approve / Request changes / Abort. If the user requests changes, revise and re-present. Do not proceed without approval.
 
-If the user requests changes, revise and re-present. Do not proceed without approval.
+**Important:** Do NOT use `EnterPlanMode`/`ExitPlanMode` for plan approval. Present the plan directly as text and use `AskUserQuestion` for the approval step.
 
 ### Phase 2: Implement
 
