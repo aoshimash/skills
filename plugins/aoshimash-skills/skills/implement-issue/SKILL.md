@@ -29,8 +29,14 @@ Read an issue, plan the implementation, get approval, implement, and create a PR
    - GitLab: [references/platform-gitlab.md](references/platform-gitlab.md)
    - Backlog: [references/platform-backlog.md](references/platform-backlog.md)
 2. Obtain the issue identifier (number, key, or URL) from the user. If not provided, list open issues from the platform (when supported) and ask the user to select one.
-3. Fetch the issue content using the platform CLI.
-4. Ask the user where to implement using `AskUserQuestion` with numbered options:
+3. Fetch the issue content using the platform CLI or MCP tool.
+4. **Check issue state** — If the issue is already closed or merged:
+   - Inform the user: "Issue #N is already \<state\>."
+   - Use `AskUserQuestion` to ask: "Reopen and implement" / "Pick another issue" / "Abort"
+   - If "Reopen and implement": reopen the issue using the platform CLI or MCP tool, then continue.
+   - If "Pick another issue": return to step 2.
+   - If "Abort": stop.
+5. Ask the user where to implement using `AskUserQuestion` with numbered options:
    - **Worktree** (default) — Create a git worktree for isolated work. Keeps current branch untouched.
    - **New branch** — Create a new branch in the current working tree.
    - **Current branch** — Work directly on the current branch (useful if already on a feature branch).

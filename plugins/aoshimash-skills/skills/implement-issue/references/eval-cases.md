@@ -18,7 +18,8 @@
 | 12 | AI self-review completed | Diff reviewed, issues fixed in loop (max 3 rounds, then escalate) |
 | 13 | Human escalation works | User consulted when human judgment is needed, with options and recommendation |
 | 14 | PR/MR well-formed | Has summary, issue link, changes list, test plan |
-| 15 | "Other" free-text respected | When user selects "Other" with free-text, their text is treated as the chosen approach without re-presenting new options |
+| 15 | Closed issue detected early | Closed/merged issues caught in Phase 0 with user options (reopen/pick another/abort) |
+| 16 | "Other" free-text respected | When user selects "Other" with free-text, their text is treated as the chosen approach without re-presenting new options |
 
 ## Test Cases
 
@@ -147,7 +148,21 @@
 
 **Criteria to test**: 1, 2, 7, 8, 14
 
-### Case 11: User selects "Other" with free-text in design decision
+### Case 11: Already-closed issue
+
+**Scenario**: User says "implement issue #15" — issue #15 is already closed (e.g., fixed in a previous PR).
+
+**Expected behavior**:
+- Fetch the issue and detect that it is closed/merged in Phase 0 (before Phase 1)
+- Inform the user: "Issue #15 is already closed."
+- Present options via AskUserQuestion: "Reopen and implement" / "Pick another issue" / "Abort"
+- If "Reopen and implement": reopen the issue and proceed with normal flow
+- If "Pick another issue": return to issue selection
+- If "Abort": stop without entering Phase 1
+
+**Criteria to test**: 15
+
+### Case 12: User selects "Other" with free-text in design decision
 
 **Scenario**: During step 1-3, user is presented with 3 approach options (e.g., REST vs GraphQL vs gRPC) but selects "Other" and types "Use WebSocket for real-time updates".
 
@@ -156,9 +171,9 @@
 - Draft the plan using WebSocket — do NOT present new options like "WebSocket vs SSE vs long polling"
 - Only re-ask if the text is genuinely ambiguous (e.g., too vague to implement)
 
-**Criteria to test**: 3, 7, 15
+**Criteria to test**: 3, 7, 16
 
-### Case 12: User selects "Other" with free-text in plan approval
+### Case 13: User selects "Other" with free-text in plan approval
 
 **Scenario**: Plan is presented for approval. User selects "Other" and types "Looks good but use a factory pattern instead of direct instantiation in the service layer".
 
@@ -168,7 +183,7 @@
 - Re-present the revised plan for approval — do NOT present new multiple-choice options about the factory pattern
 - Only re-ask if the feedback contradicts other requirements or is too vague
 
-**Criteria to test**: 7, 15
+**Criteria to test**: 7, 16
 
 ---
 
@@ -226,15 +241,35 @@ Replaced `EnterPlanMode`/`ExitPlanMode` with text output + `AskUserQuestion` (Ap
 
 **Key verification:** This session (implementing #22) served as a live test of the new AskUserQuestion-based approval flow. Plan was presented as text, user approved via AskUserQuestion, and implementation proceeded through to PR creation without abandonment.
 
+### 2026-03-14 — Added closed-issue early detection (Refs #28)
+
+Added Phase 0 Step 4 to check issue state before proceeding. Added criterion #15 and Case 11.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 1 | Pass (8/8) | Unaffected; open issues skip the new state check |
+| 2 | Pass (8/8) | Unaffected by Phase 0 change |
+| 3 | Pass (3/3) | Unaffected by Phase 0 change |
+| 4 | Pass (3/3) | Unaffected by Phase 0 change |
+| 5 | Pass (4/4) | Unaffected by Phase 0 change |
+| 6 | Pass (3/3) | Unaffected by Phase 0 change |
+| 7 | Pass (2/2) | Unaffected by Phase 0 change |
+| 8 | Pass (2/2) | Unaffected by Phase 0 change |
+| 9 | Pass (8/8) | Unaffected by Phase 0 change |
+| 10 | Pass (5/5) | Unaffected by Phase 0 change |
+| 11 | Pass (1/1) | New case: closed issue detected in Phase 0, user presented with reopen/pick another/abort options |
+
+No issues found. The new step is a simple guard clause in Phase 0 that only triggers for closed/merged issues, so all existing cases remain unaffected.
+
 ### 2026-03-14 — Other free-text handling (Refs #29)
 
-Added guidance in workflow.md sections 1-3 and 1-6 to treat "Other" free-text as the chosen approach. Added criterion 15 and cases 11-12.
+Added guidance in workflow.md sections 1-3 and 1-6 to treat "Other" free-text as the chosen approach. Added criterion 16 and cases 12-13.
 
 | Case | Result | Notes |
 |------|--------|-------|
 | 2 | Pass (8/8) | Design decision flow unaffected; new "Other" guidance is additive |
 | 3 | Pass (3/3) | Vague criteria handling unaffected by this change |
-| 11 | Pass (3/3) | New case: "Other" free-text in design decision treated as chosen approach, no re-presentation of options |
-| 12 | Pass (2/2) | New case: "Other" free-text in plan approval treated as specific change request, plan revised directly |
+| 12 | Pass (3/3) | New case: "Other" free-text in design decision treated as chosen approach, no re-presentation of options |
+| 13 | Pass (2/2) | New case: "Other" free-text in plan approval treated as specific change request, plan revised directly |
 
 No issues found. Changes are additive — existing behavior for predefined options is unchanged. New guidance only applies when user selects "Other" with free-text.
