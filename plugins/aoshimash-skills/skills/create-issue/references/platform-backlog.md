@@ -2,28 +2,30 @@
 
 ## Prerequisites
 
-- Backlog MCP server configured and available (tool names may vary by MCP server implementation — check available tools with `mcp__backlog__*` prefix)
+- `bee` CLI (`@nulab/bee`) installed and authenticated (`bee auth login`)
 
 ## Create Issue
 
-Use the Backlog MCP tool to create an issue. Example:
+Before creating, fetch available issue types from the project:
 
-```
-mcp__backlog__create_issue(
-  projectId: "<project_id>",
-  summary: "<title>",
-  description: "<body>",
-  issueTypeId: <issue_type_id>,
-  priorityId: <priority_id>,
-  categoryId: [<category_id>]
-)
+```bash
+bee issue-type list <project_key>
 ```
 
-Before creating, fetch available issue types and priorities from the project:
+Then create the issue:
 
+```bash
+bee issue create -p <project_key> -t "<title>" -d "<body>" -T <issue_type_id> -P <priority>
 ```
-mcp__backlog__get_issue_types(projectId: "<project_id>")
-mcp__backlog__get_priorities()
+
+Priority accepts: `high`, `normal`, `low`.
+
+Optional flags:
+
+```bash
+bee issue create -p <project_key> -t "<title>" -d "<body>" -T <issue_type_id> -P <priority> \
+  --category <category_id> \
+  -a <assignee_id>
 ```
 
 ## Built-in Issue Types
@@ -59,6 +61,5 @@ Ask the user to confirm the priority when creating an issue.
 
 ## Notes
 
-- Tool names depend on the MCP server implementation. The examples above use `mcp__backlog__*` as placeholders.
-- Check available MCP tools to confirm the exact function names and parameters.
 - Backlog uses project keys (e.g., `PROJ-123`) as issue identifiers, not just numbers.
+- Use `--json` flag on any command for structured JSON output.

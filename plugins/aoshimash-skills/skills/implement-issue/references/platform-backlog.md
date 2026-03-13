@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Backlog MCP server configured and available (tool names may vary by MCP server implementation — check available tools with `mcp__backlog__*` prefix)
+- `bee` CLI (`@nulab/bee`) installed and authenticated (`bee auth login`)
 
 ## Detect Platform
 
@@ -12,50 +12,47 @@ Check in order:
 
 ## Read Issue
 
+```bash
+bee issue view PROJ-123
 ```
-mcp__backlog__get_issue(issueIdOrKey: "PROJ-123")
+
+To get structured JSON:
+```bash
+bee issue view PROJ-123 --json
 ```
 
 ## List Issues
 
 To let the user select an issue when no identifier is provided:
 
+```bash
+bee issue list -p <project_key> -S <open_status_id> -L 20
 ```
-mcp__backlog__get_issues(
-  projectId: ["<project_id>"],
-  statusId: [1, 2],
-  count: 20
-)
+
+Fetch available statuses first:
+```bash
+bee status list <project_key>
 ```
 
 Present the list to the user and ask them to select one.
 
 ## Update Issue Status
 
-Update the issue status to reflect progress (e.g., "In Progress"):
-
-```
-mcp__backlog__update_issue(
-  issueIdOrKey: "PROJ-123",
-  statusId: <in_progress_status_id>
-)
+Fetch available statuses:
+```bash
+bee status list <project_key>
 ```
 
-Fetch available statuses first:
-
-```
-mcp__backlog__get_statuses(projectId: "<project_id>")
+Update the issue status (e.g., to "In Progress"):
+```bash
+bee issue edit PROJ-123 -S <in_progress_status_id>
 ```
 
 ## Add Comment
 
 Post a comment on the issue (e.g., with PR link):
-
-```
-mcp__backlog__add_comment(
-  issueIdOrKey: "PROJ-123",
-  content: "PR created: <pr_url>"
-)
+```bash
+bee issue comment PROJ-123 -b "PR created: <pr_url>"
 ```
 
 ## CLAUDE.md Config Example
@@ -70,7 +67,6 @@ mcp__backlog__add_comment(
 
 ## Notes
 
-- Tool names depend on the MCP server implementation. The examples above use `mcp__backlog__*` as placeholders.
-- Check available MCP tools to confirm the exact function names and parameters.
 - Backlog uses project keys (e.g., `PROJ-123`) as issue identifiers, not just numbers.
 - Backlog is an issue tracker only — it does not host git repositories. Code hosting is always a separate platform (GitHub, GitLab, etc.), detected from the git remote URL.
+- Use `--json` flag on any command for structured JSON output.
