@@ -1,15 +1,16 @@
 ---
-name: improve-skills
+name: analyze-sessions
 description: >
-  Analyze Claude Code session history to detect recurring skill usage issues and
-  propose improvements. Use when the user says "improve skills", "analyze skill logs",
-  "スキルを改善", "ログを分析", "スキルの問題を調べて", or wants to review
-  skill usage patterns.
+  Analyze Claude Code session history to detect recurring patterns and
+  propose improvements to skills and settings.json. Use when the user says
+  "analyze sessions", "improve skills", "analyze skill logs",
+  "セッションを分析", "スキルを改善", "ログを分析", "設定を提案",
+  or wants to review skill usage patterns and environment configuration.
 ---
 
-# Improve Skills
+# Analyze Sessions
 
-Analyze Claude Code's built-in conversation history to detect recurring patterns in skill executions and propose concrete improvements to skill definitions.
+Analyze Claude Code's built-in conversation history to detect recurring patterns in skill executions and propose concrete improvements to skill definitions and `settings.json` configuration.
 
 ## Data Source
 
@@ -59,25 +60,53 @@ If sessions are found, list which skills were used and how many sessions each ha
 
 For each session file containing the target skill invocation, read the conversation. Focus on `human` and `assistant` message types to understand the interaction flow — skip large `tool_result` entries unless needed for context (e.g., to confirm a test failure). Detect these patterns:
 
-#### Rejection
+#### Skill-Level Patterns
+
+These patterns indicate issues with the skill definition itself:
+
+##### Rejection
 User explicitly rejects a proposal or asks to change something. Look for:
 - User messages containing negation ("no", "that's wrong", "change this", "違う", "修正して")
 - User requesting revisions to plans, drafts, or implementations
 
-#### Retry
+##### Retry
 A step fails and must be re-done. Look for:
 - Tool results showing test/lint/build failures followed by fix attempts
 - Repeated tool calls to the same file or command
 
-#### Friction
+##### Friction
 User experiences confusion or frustration. Look for:
 - User asking the same question multiple times
 - User requesting clarification on skill behavior
 - User expressing frustration or confusion
 
-#### Abandonment
+##### Abandonment
 Workflow was not completed. Look for:
 - Sessions that start a skill workflow but never reach the final step (e.g., no PR created for implement-issue)
+
+#### Environment-Level Patterns
+
+These patterns indicate issues solvable by `settings.json` or `settings.local.json` changes rather than skill modifications:
+
+##### Permission Friction
+Repeated tool permission prompts slow down the workflow. Look for:
+- The same tool type being invoked multiple times across sessions with short user approval responses ("yes", "y", "allow", "approve", "許可") immediately following
+- User expressing annoyance at repeated permission prompts
+- Patterns where a tool is consistently approved (never denied) across sessions
+
+When detected, propose adding the tool to `permissions.allow` in the appropriate settings file:
+- `~/.claude/settings.json` for global tools (used across all projects)
+- `.claude/settings.local.json` for project-specific tools
+
+##### Hook Opportunity
+Repeated manual actions suggest automation via hooks. Look for:
+- The same Bash command or sequence executed at the start of multiple sessions (→ `SessionStart` hook)
+- Repeated manual validation before specific tool calls (→ `PreToolUse` hook)
+- Consistent post-action cleanup steps (→ `PostToolUse` or `Stop` hook)
+
+When detected, propose a specific hook configuration with the event type and command.
+
+#### Aggregation Thresholds
 
 If fewer than 3 sessions exist for a skill, inform the user:
 ```
@@ -92,6 +121,8 @@ If 3+ sessions exist, aggregate findings using these thresholds:
 | Same-step retry | 2+ sessions | Instructions unclear or incomplete |
 | Similar friction | 2+ sessions | Missing context or explanation |
 | Abandonment | 2+ sessions | Workflow too heavy or misaligned |
+| Permission friction | 2+ sessions | Tool should be added to permissions.allow |
+| Hook opportunity | 2+ sessions | Manual step should be automated via hook |
 
 ### 3. Present Findings
 
@@ -102,13 +133,30 @@ No recurring patterns found in <skill-name> sessions (N sessions analyzed).
 
 #### If patterns found, present a structured report:
 
-For each pattern:
+Group findings by target:
+
+**Skill Improvements** (changes to SKILL.md):
 ```
 ### <pattern description>
+- **Type**: Rejection / Retry / Friction / Abandonment
 - **Seen in**: X/N sessions
 - **Common reason**: "<aggregated reasons>"
 - **Root cause**: <what in the skill likely causes this>
-- **Proposed fix**: <what to change and in which file>
+- **Proposed fix**: <what to change in SKILL.md>
+```
+
+**Settings Proposals** (changes to settings.json / settings.local.json):
+```
+### <pattern description>
+- **Type**: Permission Friction / Hook Opportunity
+- **Seen in**: X/N sessions
+- **Common reason**: "<aggregated reasons>"
+- **Root cause**: <missing configuration>
+- **Proposed fix**: Add to <target file>
+- **Configuration**:
+  ```json
+  <proposed JSON snippet>
+  ```
 ```
 
 ### 4. Choose Output Method
@@ -124,7 +172,7 @@ After presenting findings, ask the user how to proceed:
 For each improvement suggestion:
 
 1. **Present to the user** — Show the pattern, root cause, and proposed fix.
-2. **Ask for approval** — Do not modify skill files without explicit user approval.
+2. **Ask for approval** — Do not modify files without explicit user approval.
 3. **If declined**, acknowledge and move to the next suggestion.
 
 #### If "Conversation only" was selected:
@@ -138,6 +186,7 @@ Create an issue for the analyzed skill:
 1. Draft the issue body containing:
    - Skill name and number of sessions analyzed
    - Each pattern found (description, frequency, root cause, proposed fix)
+   - Settings.json proposals (if any) with proposed configuration snippets
    - Do NOT include raw session data or project-specific details (privacy)
 2. Show the draft to the user for review and confirmation.
 3. On approval, create the issue:
@@ -159,3 +208,5 @@ Create a PR with the approved fixes for the analyzed skill:
    gh pr create --title "fix(<skill-name>): <description>" --body "<summary of changes>"
    ```
 6. Return the PR URL.
+
+Note: Settings.json proposals are **not** auto-applied via PR — they are included in the PR description as recommendations for the user to apply manually. This avoids modifying the user's environment configuration without explicit action.
