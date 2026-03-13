@@ -18,6 +18,7 @@
 | 12 | AI self-review completed | Diff reviewed, issues fixed in loop (max 3 rounds, then escalate) |
 | 13 | Human escalation works | User consulted when human judgment is needed, with options and recommendation |
 | 14 | PR/MR well-formed | Has summary, issue link, changes list, test plan |
+| 15 | Closed issue detected early | Closed/merged issues caught in Phase 0 with user options (reopen/pick another/abort) |
 
 ## Test Cases
 
@@ -146,6 +147,20 @@
 
 **Criteria to test**: 1, 2, 7, 8, 14
 
+### Case 11: Already-closed issue
+
+**Scenario**: User says "implement issue #15" — issue #15 is already closed (e.g., fixed in a previous PR).
+
+**Expected behavior**:
+- Fetch the issue and detect that it is closed/merged in Phase 0 (before Phase 1)
+- Inform the user: "Issue #15 is already closed."
+- Present options via AskUserQuestion: "Reopen and implement" / "Pick another issue" / "Abort"
+- If "Reopen and implement": reopen the issue and proceed with normal flow
+- If "Pick another issue": return to issue selection
+- If "Abort": stop without entering Phase 1
+
+**Criteria to test**: 15
+
 ---
 
 ## Evaluation Log
@@ -201,3 +216,23 @@ Replaced `EnterPlanMode`/`ExitPlanMode` with text output + `AskUserQuestion` (Ap
 | 10 | Pass (5/5) | Issue listing flow unaffected; plan approval via AskUserQuestion compatible |
 
 **Key verification:** This session (implementing #22) served as a live test of the new AskUserQuestion-based approval flow. Plan was presented as text, user approved via AskUserQuestion, and implementation proceeded through to PR creation without abandonment.
+
+### 2026-03-14 — Added closed-issue early detection (Refs #28)
+
+Added Phase 0 Step 4 to check issue state before proceeding. Added criterion #15 and Case 11.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 1 | Pass (8/8) | Unaffected; open issues skip the new state check |
+| 2 | Pass (8/8) | Unaffected by Phase 0 change |
+| 3 | Pass (3/3) | Unaffected by Phase 0 change |
+| 4 | Pass (3/3) | Unaffected by Phase 0 change |
+| 5 | Pass (4/4) | Unaffected by Phase 0 change |
+| 6 | Pass (3/3) | Unaffected by Phase 0 change |
+| 7 | Pass (2/2) | Unaffected by Phase 0 change |
+| 8 | Pass (2/2) | Unaffected by Phase 0 change |
+| 9 | Pass (8/8) | Unaffected by Phase 0 change |
+| 10 | Pass (5/5) | Unaffected by Phase 0 change |
+| 11 | Pass (1/1) | New case: closed issue detected in Phase 0, user presented with reopen/pick another/abort options |
+
+No issues found. The new step is a simple guard clause in Phase 0 that only triggers for closed/merged issues, so all existing cases remain unaffected.
