@@ -29,7 +29,7 @@ Read an issue, plan the implementation, get approval, implement, and create a PR
    - GitLab: [references/platform-gitlab.md](references/platform-gitlab.md)
    - Backlog: [references/platform-backlog.md](references/platform-backlog.md)
 2. Obtain the issue identifier (number, key, or URL) from the user. If not provided, list open issues from the platform (when supported) and ask the user to select one.
-3. Fetch the issue content using the platform CLI or MCP tool.
+3. Fetch the issue content using the platform CLI.
 4. Ask the user where to implement using `AskUserQuestion` with numbered options:
    - **Worktree** (default) — Create a git worktree for isolated work. Keeps current branch untouched.
    - **New branch** — Create a new branch in the current working tree.
@@ -79,5 +79,5 @@ See [references/workflow.md](references/workflow.md) for the PR/MR body format.
 - [references/workflow.md](references/workflow.md) — Detailed plan / implement / PR procedure
 - [references/platform-github.md](references/platform-github.md) — GitHub CLI commands
 - [references/platform-gitlab.md](references/platform-gitlab.md) — GitLab CLI commands
-- [references/platform-backlog.md](references/platform-backlog.md) — Backlog MCP tools
+- [references/platform-backlog.md](references/platform-backlog.md) — Backlog CLI commands (bee)
 - [references/eval-cases.md](references/eval-cases.md) — Evaluation test cases
