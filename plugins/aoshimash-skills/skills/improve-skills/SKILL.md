@@ -41,7 +41,7 @@ Search only the most recent session files (up to 20, within the last 30 days) fo
 find "$SESSION_DIR" -name "*.jsonl" -mtime -30 -type f -print0 \
   | xargs -0 ls -t 2>/dev/null \
   | head -20 \
-  | xargs grep -l "aoshimash-skills:" 2>/dev/null
+  | xargs -d '\n' grep -l "aoshimash-skills:" 2>/dev/null
 ```
 
 A skill invocation is identified by the presence of `<command-name>aoshimash-skills:<skill-name></command-name>` in the conversation.

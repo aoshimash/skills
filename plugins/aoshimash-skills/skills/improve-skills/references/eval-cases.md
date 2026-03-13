@@ -98,4 +98,5 @@ Record results here after each evaluation run.
 |------|--------|-----------|-------|---------------------------|
 | 2026-03-07 | 3 | Pass | Simulated with real data (5 create-issue + 5 implement-issue sessions). Detected language friction (5/5), interrupts (2/5), rejections (5/5). Structured report format works. | No |
 | 2026-03-07 | 4 | Pass | Simulated: "Conversation only" selected, no external commands executed. | No |
-| 2026-03-07 | 7 | Pass | Simulated cross-skill analysis with create-issue (5) and implement-issue (5). Per-skill findings presented. **Note**: Case 7 was redesigned in #32 to test single-skill enforcement instead of cross-skill batch analysis. Previous result no longer applies. | Consider adding guidance to distinguish permission rejections from user rejections |
+| 2026-03-07 | 7 | Pass | Simulated cross-skill analysis with create-issue (5) and implement-issue (5). Per-skill findings presented. | Consider adding guidance to distinguish permission rejections from user rejections |
+| 2026-03-14 | 7 | Pending | Case 7 redesigned in #32 to test single-skill enforcement. Requires interactive eval after merge. | N/A |
