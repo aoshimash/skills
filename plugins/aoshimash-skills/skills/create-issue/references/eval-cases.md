@@ -81,7 +81,7 @@ For each test case:
   - Presents issue type options including Operation
   - Asks for priority confirmation (High / Normal / Low)
   - Uses Operation template with Procedure section
-  - Creates issue via Backlog MCP tool
+  - Creates issue via `bee issue create`
 - **Key criteria to watch**: Issue type confirmation, priority confirmation, Operation template usage
 
 ### Case 8: Cross-platform setup (Backlog issues + GitHub PRs)

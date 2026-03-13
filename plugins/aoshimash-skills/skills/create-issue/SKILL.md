@@ -133,5 +133,5 @@ To improve this skill, run the test cases in [references/eval-cases.md](referenc
 - [references/templates.md](references/templates.md) — Issue templates
 - [references/platform-github.md](references/platform-github.md) — GitHub CLI commands
 - [references/platform-gitlab.md](references/platform-gitlab.md) — GitLab CLI commands
-- [references/platform-backlog.md](references/platform-backlog.md) — Backlog MCP tools
+- [references/platform-backlog.md](references/platform-backlog.md) — Backlog CLI commands (bee)
 - [references/eval-cases.md](references/eval-cases.md) — Evaluation test cases
