@@ -18,6 +18,7 @@
 | 12 | AI self-review completed | Diff reviewed, issues fixed in loop (max 3 rounds, then escalate) |
 | 13 | Human escalation works | User consulted when human judgment is needed, with options and recommendation |
 | 14 | PR/MR well-formed | Has summary, issue link, changes list, test plan |
+| 15 | Closed issue detected early | Closed/merged issues caught in Phase 0 with user options (reopen/pick another/abort) |
 
 ## Test Cases
 
@@ -145,6 +146,20 @@
 - Comment posted on Backlog issue with PR link
 
 **Criteria to test**: 1, 2, 7, 8, 14
+
+### Case 11: Already-closed issue
+
+**Scenario**: User says "implement issue #15" — issue #15 is already closed (e.g., fixed in a previous PR).
+
+**Expected behavior**:
+- Fetch the issue and detect that it is closed/merged in Phase 0 (before Phase 1)
+- Inform the user: "Issue #15 is already closed."
+- Present options via AskUserQuestion: "Reopen and implement" / "Pick another issue" / "Abort"
+- If "Reopen and implement": reopen the issue and proceed with normal flow
+- If "Pick another issue": return to issue selection
+- If "Abort": stop without entering Phase 1
+
+**Criteria to test**: 15
 
 ---
 
