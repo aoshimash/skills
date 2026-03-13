@@ -50,6 +50,10 @@ For each decision point, use `AskUserQuestion` with numbered options:
    - Mark the recommended option with "(Recommended)" in its label
 2. **Wait for the user's choice** before proceeding.
 
+**Handling "Other" free-text responses:**
+
+When the user selects "Other" and provides free-text input, treat their text as the chosen approach. Incorporate it directly into the plan — do NOT re-present a new set of multiple-choice options. Only re-ask if the free-text is genuinely ambiguous (e.g., too vague to determine a concrete implementation direction, or contradicts constraints). If re-asking, quote the user's text and explain specifically what needs clarification.
+
 If no design decisions require human input, skip this step and proceed to 1-4.
 
 ### 1-4. Draft Implementation Plan
@@ -115,11 +119,13 @@ AskUserQuestion with options:
 ```
 
 **If the user selects "Request changes"** (or provides feedback via "Other"):
-1. Read the user's feedback.
-2. Revise the plan to address the feedback.
+1. Read the user's feedback carefully.
+2. Treat the feedback as specific change requests — incorporate them directly into the revised plan. Do NOT re-present new multiple-choice options based on the feedback. If the user wrote "do X instead of Y", revise the plan to do X.
 3. Re-present the revised plan.
 4. Ask for approval again using `AskUserQuestion` with the same options.
 5. Repeat until the user approves or aborts.
+
+Only re-ask for clarification if the feedback is genuinely ambiguous (e.g., contradicts other requirements, or is too vague to act on). If re-asking, quote the user's text and explain specifically what needs clarification.
 
 **Important:** Do NOT use `EnterPlanMode`/`ExitPlanMode` for plan approval. The `ExitPlanMode` UI can cause accidental rejections with no way to provide feedback, leading to abandoned sessions.
 

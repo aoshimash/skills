@@ -18,6 +18,7 @@
 | 12 | AI self-review completed | Diff reviewed, issues fixed in loop (max 3 rounds, then escalate) |
 | 13 | Human escalation works | User consulted when human judgment is needed, with options and recommendation |
 | 14 | PR/MR well-formed | Has summary, issue link, changes list, test plan |
+| 15 | "Other" free-text respected | When user selects "Other" with free-text, their text is treated as the chosen approach without re-presenting new options |
 
 ## Test Cases
 
@@ -145,6 +146,29 @@
 - Comment posted on Backlog issue with PR link
 
 **Criteria to test**: 1, 2, 7, 8, 14
+
+### Case 11: User selects "Other" with free-text in design decision
+
+**Scenario**: During step 1-3, user is presented with 3 approach options (e.g., REST vs GraphQL vs gRPC) but selects "Other" and types "Use WebSocket for real-time updates".
+
+**Expected behavior**:
+- Treat "Use WebSocket for real-time updates" as the chosen approach
+- Draft the plan using WebSocket — do NOT present new options like "WebSocket vs SSE vs long polling"
+- Only re-ask if the text is genuinely ambiguous (e.g., too vague to implement)
+
+**Criteria to test**: 3, 7, 15
+
+### Case 12: User selects "Other" with free-text in plan approval
+
+**Scenario**: Plan is presented for approval. User selects "Other" and types "Looks good but use a factory pattern instead of direct instantiation in the service layer".
+
+**Expected behavior**:
+- Treat the text as a specific change request
+- Revise the plan to use factory pattern in the service layer
+- Re-present the revised plan for approval — do NOT present new multiple-choice options about the factory pattern
+- Only re-ask if the feedback contradicts other requirements or is too vague
+
+**Criteria to test**: 7, 15
 
 ---
 
