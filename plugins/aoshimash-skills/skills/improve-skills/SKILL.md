@@ -24,25 +24,40 @@ Each line is a JSON object with a `type` field (`"human"`, `"assistant"`, `"tool
 
 ### 1. Discover Skill Sessions
 
-Scan session history files to find sessions where skills were invoked.
+Scan **recent** session history files in the **current project** to find sessions where skills were invoked.
 
-Search for skill invocation markers in session files:
+#### 1a. Determine the session directory
+
+Derive the current project's session directory from `pwd`:
 ```bash
-grep -rl "aoshimash-skills:" ~/.claude/projects/ 2>/dev/null
+PROJECT_DIR=$(pwd | sed 's|/|-|g; s|^-||')
+SESSION_DIR="$HOME/.claude/projects/$PROJECT_DIR"
+```
+
+#### 1b. Find recent sessions with skill invocations
+
+Search only the most recent session files (up to 20, within the last 30 days) for skill invocation markers:
+```bash
+find "$SESSION_DIR" -name "*.jsonl" -mtime -30 -type f -print0 \
+  | xargs -0 ls -t 2>/dev/null \
+  | head -20 \
+  | xargs grep -l "aoshimash-skills:" 2>/dev/null
 ```
 
 A skill invocation is identified by the presence of `<command-name>aoshimash-skills:<skill-name></command-name>` in the conversation.
 
 If no sessions are found, inform the user:
 ```
-No skill execution sessions found in Claude Code history.
+No skill execution sessions found in recent history (last 30 days, current project).
 ```
 
-If sessions are found, list which skills were used and how many sessions each has. Ask the user which skill to analyze, or offer to analyze all.
+#### 1c. Select a skill to analyze
+
+If sessions are found, list which skills were used and how many sessions each has. Ask the user which **single skill** to analyze. Do not offer an "analyze all" option — analyze one skill per invocation to keep execution fast.
 
 ### 2. Analyze Sessions
 
-For each session file containing the target skill invocation, read the full conversation and detect these patterns:
+For each session file containing the target skill invocation, read the conversation. Focus on `human` and `assistant` message types to understand the interaction flow — skip large `tool_result` entries unless needed for context (e.g., to confirm a test failure). Detect these patterns:
 
 #### Rejection
 User explicitly rejects a proposal or asks to change something. Look for:
@@ -118,7 +133,7 @@ Present the full analysis report. No external submission occurs. End the workflo
 
 #### If "Issue" was selected:
 
-Create one issue per skill. For each skill with findings:
+Create an issue for the analyzed skill:
 
 1. Draft the issue body containing:
    - Skill name and number of sessions analyzed
@@ -130,11 +145,10 @@ Create one issue per skill. For each skill with findings:
    gh issue create --title "improve(<skill-name>): <summary>" --body "<drafted body>" --label "enhancement"
    ```
 4. Return the issue URL.
-5. Repeat for the next skill.
 
 #### If "PR" was selected:
 
-Create one PR per skill. For each skill with approved fixes:
+Create a PR with the approved fixes for the analyzed skill:
 
 1. Create a branch: `fix/improve-<skill-name>-<description>`
 2. Modify the affected skill files.

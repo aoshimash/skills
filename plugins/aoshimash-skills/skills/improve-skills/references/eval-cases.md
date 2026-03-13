@@ -14,7 +14,7 @@ For each test case:
 ### Case 1: No session history available
 
 - **Persona**: User with a fresh Claude Code installation
-- **Setup**: No skill session files exist in `~/.claude/projects/`
+- **Setup**: No skill session files exist in the current project's session directory
 - **Initial input**: "スキルを改善して"
 - **Expected behavior**:
   - Skill reports no sessions found
@@ -77,16 +77,16 @@ For each test case:
   - PR URL is returned
 - **Key criteria**: User confirmation before code changes, correct branch/commit/PR flow
 
-### Case 7: Cross-skill analysis
+### Case 7: User requests multi-skill analysis
 
 - **Persona**: User with sessions across multiple skills
 - **Setup**: 3+ sessions each for implement-issue and create-issue
 - **Initial input**: "全スキルを分析して"
 - **Expected behavior**:
-  - Analyzes all skills with sufficient data
-  - Presents findings per skill in a structured report
-  - Asks for output method once (applies to all findings)
-- **Key criteria**: Multi-skill aggregation, organized report
+  - Lists available skills with session counts
+  - Prompts user to select a **single** skill to analyze (does NOT analyze all at once)
+  - After analysis completes, user can re-invoke the skill for the next skill
+- **Key criteria**: Single-skill enforcement, clear guidance to re-invoke for other skills
 
 ---
 
@@ -98,4 +98,4 @@ Record results here after each evaluation run.
 |------|--------|-----------|-------|---------------------------|
 | 2026-03-07 | 3 | Pass | Simulated with real data (5 create-issue + 5 implement-issue sessions). Detected language friction (5/5), interrupts (2/5), rejections (5/5). Structured report format works. | No |
 | 2026-03-07 | 4 | Pass | Simulated: "Conversation only" selected, no external commands executed. | No |
-| 2026-03-07 | 7 | Pass | Simulated cross-skill analysis with create-issue (5) and implement-issue (5). Per-skill findings presented. | Consider adding guidance to distinguish permission rejections from user rejections |
+| 2026-03-07 | 7 | Pass | Simulated cross-skill analysis with create-issue (5) and implement-issue (5). Per-skill findings presented. **Note**: Case 7 was redesigned in #32 to test single-skill enforcement instead of cross-skill batch analysis. Previous result no longer applies. | Consider adding guidance to distinguish permission rejections from user rejections |
