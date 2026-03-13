@@ -127,3 +127,5 @@ Record results here after each evaluation run.
 | 2026-03-07 | 4 | Pass | Simulated: "Conversation only" selected, no external commands executed. | No |
 | 2026-03-07 | 7 | Pass | Simulated cross-skill analysis with create-issue (5) and implement-issue (5). Per-skill findings presented. | Consider adding guidance to distinguish permission rejections from user rejections |
 | 2026-03-14 | 7 | Pending | Case 7 redesigned in #32 to test single-skill enforcement. Requires interactive eval after merge. | N/A |
+| 2026-03-14 | 8 | Pending | New case added in #36. Requires sessions with repeated tool permission approvals for interactive eval. | N/A |
+| 2026-03-14 | 9 | Pending | New case added in #36. Requires sessions with both skill-level and environment-level patterns for interactive eval. | N/A |
