@@ -216,3 +216,23 @@ Replaced `EnterPlanMode`/`ExitPlanMode` with text output + `AskUserQuestion` (Ap
 | 10 | Pass (5/5) | Issue listing flow unaffected; plan approval via AskUserQuestion compatible |
 
 **Key verification:** This session (implementing #22) served as a live test of the new AskUserQuestion-based approval flow. Plan was presented as text, user approved via AskUserQuestion, and implementation proceeded through to PR creation without abandonment.
+
+### 2026-03-14 — Added closed-issue early detection (Refs #28)
+
+Added Phase 0 Step 4 to check issue state before proceeding. Added criterion #15 and Case 11.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 1 | Pass (8/8) | Unaffected; open issues skip the new state check |
+| 2 | Pass (8/8) | Unaffected by Phase 0 change |
+| 3 | Pass (3/3) | Unaffected by Phase 0 change |
+| 4 | Pass (3/3) | Unaffected by Phase 0 change |
+| 5 | Pass (4/4) | Unaffected by Phase 0 change |
+| 6 | Pass (3/3) | Unaffected by Phase 0 change |
+| 7 | Pass (2/2) | Unaffected by Phase 0 change |
+| 8 | Pass (2/2) | Unaffected by Phase 0 change |
+| 9 | Pass (8/8) | Unaffected by Phase 0 change |
+| 10 | Pass (5/5) | Unaffected by Phase 0 change |
+| 11 | Pass (1/1) | New case: closed issue detected in Phase 0, user presented with reopen/pick another/abort options |
+
+No issues found. The new step is a simple guard clause in Phase 0 that only triggers for closed/merged issues, so all existing cases remain unaffected.
