@@ -225,3 +225,16 @@ Replaced `EnterPlanMode`/`ExitPlanMode` with text output + `AskUserQuestion` (Ap
 | 10 | Pass (5/5) | Issue listing flow unaffected; plan approval via AskUserQuestion compatible |
 
 **Key verification:** This session (implementing #22) served as a live test of the new AskUserQuestion-based approval flow. Plan was presented as text, user approved via AskUserQuestion, and implementation proceeded through to PR creation without abandonment.
+
+### 2026-03-14 — Other free-text handling (Refs #29)
+
+Added guidance in workflow.md sections 1-3 and 1-6 to treat "Other" free-text as the chosen approach. Added criterion 15 and cases 11-12.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 2 | Pass (8/8) | Design decision flow unaffected; new "Other" guidance is additive |
+| 3 | Pass (3/3) | Vague criteria handling unaffected by this change |
+| 11 | Pass (3/3) | New case: "Other" free-text in design decision treated as chosen approach, no re-presentation of options |
+| 12 | Pass (2/2) | New case: "Other" free-text in plan approval treated as specific change request, plan revised directly |
+
+No issues found. Changes are additive — existing behavior for predefined options is unchanged. New guidance only applies when user selects "Other" with free-text.
