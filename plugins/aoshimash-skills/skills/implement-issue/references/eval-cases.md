@@ -20,6 +20,8 @@
 | 14 | PR/MR well-formed | Has summary, issue link, changes list, test plan |
 | 15 | Closed issue detected early | Closed/merged issues caught in Phase 0 with user options (reopen/pick another/abort) |
 | 16 | "Other" free-text respected | When user selects "Other" with free-text, their text is treated as the chosen approach without re-presenting new options |
+| 17 | Auto-fix runs before check loop | Auto-fix commands (formatters, linters with --fix) run once before the check loop when defined in CLAUDE.md |
+| 18 | Post-PR CI monitored | CI checks monitored after PR creation; fixable failures result in a fix commit before returning the PR URL |
 
 ## Test Cases
 
@@ -185,6 +187,29 @@
 
 **Criteria to test**: 7, 16
 
+### Case 14: Auto-fix reduces check loop iterations
+
+**Scenario**: CLAUDE.md defines a format auto-fix command (e.g., `prettier --write .`). Generated code has formatting violations that would fail the strict format check.
+
+**Expected behavior**:
+- Before entering the check loop, run the auto-fix command once
+- Strict format check now passes on the first loop attempt instead of requiring a manual fix cycle
+- Check loop completes in 1 attempt instead of 2-3
+
+**Criteria to test**: 11, 17
+
+### Case 15: Post-PR CI monitoring catches a fixable failure
+
+**Scenario**: All local checks pass. PR is created. CI fails due to a check that wasn't run locally (e.g., an integration test or a stricter linting rule enabled only in CI).
+
+**Expected behavior**:
+- After PR creation, run `gh pr checks --watch` (GitHub) or `glab mr checks` (GitLab)
+- Detect the CI failure and investigate
+- If fixable: push a fix commit and re-monitor CI until it passes
+- Return the PR URL only after CI is green (or note the failure if not fixable)
+
+**Criteria to test**: 14, 18
+
 ---
 
 ## Evaluation Log
@@ -273,3 +298,27 @@ Added guidance in workflow.md sections 1-3 and 1-6 to treat "Other" free-text as
 | 13 | Pass (2/2) | New case: "Other" free-text in plan approval treated as specific change request, plan revised directly |
 
 No issues found. Changes are additive — existing behavior for predefined options is unchanged. New guidance only applies when user selects "Other" with free-text.
+
+### 2026-03-22 — Auto-fix before checks and post-PR CI monitoring (Refs #39)
+
+Added auto-fix step in §2-3 of workflow.md, regenerated-files guidance in §2-2, post-PR CI monitoring in §3-2 of workflow.md and §4 of SKILL.md Phase 3. Added platform-specific CI commands to platform-github.md and platform-gitlab.md. Added criteria #17-18 and cases 14-15.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 1 | Pass (8/8) | Auto-fix step is skipped when not defined; post-PR CI monitoring is platform-agnostic |
+| 2 | Pass (8/8) | Existing check loop and design decision flows unaffected |
+| 3 | Pass (3/3) | Vague criteria handling unaffected |
+| 4 | Pass (3/3) | Scope control unaffected |
+| 5 | Pass (4/4) | GitLab now has `glab mr checks` in platform guide; MR flow unaffected |
+| 6 | Pass (3/3) | Existing branch detection unaffected |
+| 7 | Pass (2/2) | Check loop escalation unaffected |
+| 8 | Pass (2/2) | AI review escalation unaffected |
+| 9 | Pass (8/8) | Cross-platform flow unaffected; CI monitoring applies to GitHub code hosting |
+| 10 | Pass (5/5) | Issue listing flow unaffected |
+| 11 | Pass (1/1) | Closed issue detection unaffected |
+| 12 | Pass (3/3) | "Other" free-text handling unaffected |
+| 13 | Pass (2/2) | Plan revision flow unaffected |
+| 14 | Pass (2/2) | New case: auto-fix runs before check loop, reducing loop iterations |
+| 15 | Pass (2/2) | New case: post-PR CI monitored, fixable failures addressed before returning PR URL |
+
+No issues found. Changes are additive and localized to §2-2, §2-3, and §3-x of workflow.md. Existing behavior unchanged for projects that don't define auto-fix commands or CI.

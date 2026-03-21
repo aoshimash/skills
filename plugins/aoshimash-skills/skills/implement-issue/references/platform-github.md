@@ -56,3 +56,13 @@ EOF
 
 Include `Closes #<number>` in the PR body to auto-close the issue on merge.
 Use `Relates to #<number>` if the PR only partially addresses the issue.
+
+## Monitor CI
+
+After creating the PR, monitor CI and wait for all checks to complete:
+
+```bash
+gh pr checks --watch
+```
+
+Exits 0 if all checks pass, non-zero if any fail.
