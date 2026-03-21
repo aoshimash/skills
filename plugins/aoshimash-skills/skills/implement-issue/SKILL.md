@@ -61,8 +61,8 @@ See [references/workflow.md](references/workflow.md) for the detailed procedure.
 
 **Summary:**
 1. Prepare working environment (worktree / new branch / current branch).
-2. Implement changes following the approved plan.
-3. Run project checks (tests, lint, type-check, format) — loop until all pass.
+2. Implement changes following the approved plan. Regenerate derived files if source files that drive code generation were modified.
+3. Run auto-fix commands (formatters, linters with `--fix`) once, then run project checks (tests, lint, type-check, build) — loop until all pass.
 4. AI self-review of the full diff — loop until clean. Escalate to user (via `AskUserQuestion`) when human judgment is needed. After completion, output a visible self-review summary (e.g., "Self-review: N round(s), N issue(s) found, N fixed").
 5. Commit with a message referencing the issue.
 
@@ -77,8 +77,9 @@ See [references/workflow.md](references/workflow.md) for the PR/MR body format.
 3. Create a PR/MR with:
    - Title: concise summary (under 70 chars)
    - Body: summary of changes, link to the issue (Closes #N / Relates to #N), test plan
-4. If the issue tracker supports comments (e.g., Backlog), post a comment on the issue with the PR/MR link.
-5. Return the PR/MR URL to the user.
+4. Monitor CI — run `gh pr checks --watch` (GitHub) or `glab mr checks` (GitLab) and verify all checks pass. If CI fails and is fixable, push a fix commit and re-monitor.
+5. If the issue tracker supports comments (e.g., Backlog), post a comment on the issue with the PR/MR link.
+6. Return the PR/MR URL to the user.
 
 ## References
 

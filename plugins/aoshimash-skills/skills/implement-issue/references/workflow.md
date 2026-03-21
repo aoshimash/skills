@@ -187,6 +187,7 @@ Guidelines:
 - **No unrelated changes** — Do not refactor, clean up, or "improve" code outside the plan scope.
 - **No over-engineering** — Implement the simplest solution that satisfies the acceptance criteria.
 - **Secure by default** — Validate user input, avoid injection vulnerabilities, handle errors at system boundaries.
+- **Regenerate derived files** — If source files that drive code generation were modified (e.g., API schemas, proto files, OpenAPI specs), run the project's regeneration command (check CLAUDE.md) before running checks. Skip if no such command is defined.
 
 ### 2-3. Run Project Checks (loop until all pass)
 
@@ -199,6 +200,15 @@ Check CLAUDE.md for project-specific commands. Common checks:
 | Type check | `tsc --noEmit`, `mypy .`, etc. |
 | Build | `npm run build`, `go build ./...`, etc. |
 | Format | `prettier --write`, `ruff format`, `gofmt`, etc. |
+
+For typed languages (TypeScript, Python with mypy, Go, etc.), always include type-check and build in the check suite to catch type errors locally before pushing.
+
+**Step 0 (once): Auto-fix** — Before entering the check loop, run any auto-fix commands defined in CLAUDE.md (e.g., formatters, linters with `--fix`). This resolves mechanically fixable issues without burning loop attempts. Skip if no auto-fix commands are defined.
+
+| Auto-fix | Typical command |
+|---|---|
+| Format | `prettier --write .`, `ruff format .`, `gofmt -w .`, etc. |
+| Lint fix | `eslint --fix`, `ruff check --fix`, etc. |
 
 Run whatever the project defines. **Loop (max 3 attempts):**
 
@@ -310,10 +320,23 @@ Closes #<issue-number>
 - [ ] <any manual testing steps>
 ```
 
-### 3-2. Comment on Issue
+### 3-2. Monitor CI
+
+After the PR/MR is created, verify that CI passes. See the platform-specific guide for the exact command.
+
+**Loop (max 1 fix attempt):**
+
+1. Run the CI monitoring command and wait for all checks to complete.
+2. If all checks pass → proceed to 3-3.
+3. If a check fails:
+   - Investigate the failure. Common causes: missed auto-fix, stale generated file, type error caught only in CI.
+   - If fixable: push a fix commit and re-run CI monitoring.
+   - If not fixable or CI is not configured: note the failure in the PR description and proceed.
+
+### 3-3. Comment on Issue
 
 If the issue tracker supports comments (e.g., Backlog), post a comment on the issue with the PR/MR link. This is especially useful for cross-platform setups where the PR is not automatically linked to the issue.
 
-### 3-3. Return Result
+### 3-4. Return Result
 
 Return the PR/MR URL to the user.

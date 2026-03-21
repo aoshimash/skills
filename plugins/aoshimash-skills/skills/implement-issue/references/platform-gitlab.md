@@ -56,3 +56,11 @@ EOF
 
 Include `Closes #<number>` in the MR description to auto-close the issue on merge.
 Use `Relates to #<number>` if the MR only partially addresses the issue.
+
+## Monitor CI
+
+After creating the MR, monitor CI and wait for all checks to complete:
+
+```bash
+glab mr checks
+```
