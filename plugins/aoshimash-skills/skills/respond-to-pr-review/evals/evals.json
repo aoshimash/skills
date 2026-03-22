@@ -1,0 +1,19 @@
+{
+  "skill_name": "respond-to-pr-review",
+  "evals": [
+    {
+      "id": 1,
+      "name": "main-flow",
+      "prompt": "PR #41 のレビューコメントに対応してください。各コメントを確認してグループ化し、対応方針を決めてください（実装が必要な場合は実際にコードを変更してください）。返信の下書きまで作成してください。実際のGitHubへの返信投稿は行わないでください（テスト目的のため）。作業リポジトリは aoshimash/skills です。",
+      "expected_output": "1) FYI comment (CI passed) filtered out with no reply. 2) Two comments on exception chaining (line 20) grouped as single item. 3) Out-of-scope type hints suggestion identified as candidate for separate issue. 4) Reply drafts written in Japanese matching the Japanese comment language. 5) All actionable comments have reply drafts.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "no-pr-detection",
+      "prompt": "PRコメントに対応してください。現在のブランチは main です（オープンなPRはありません）。",
+      "expected_output": "Skill detects no PR on current branch and asks the user to provide a PR number or URL before proceeding.",
+      "files": []
+    }
+  ]
+}
