@@ -110,3 +110,12 @@
 - [ ] Uses `bee` for issue operations
 - [ ] Uses `gh` for PR operations
 - [ ] Backlog issue gets comment with GitHub PR link
+
+---
+
+## Evaluation Log
+
+Record results here after each evaluation run.
+
+| Date | Case # | Criteria passed | Criteria failed | Notes | SKILL.md revision needed? |
+|------|--------|-----------------|-----------------|-------|---------------------------|

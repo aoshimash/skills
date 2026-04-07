@@ -81,3 +81,12 @@
 - [ ] Code examples match the new approach
 - [ ] Dependency graph is updated if needed
 - [ ] No stale references to the old approach remain
+
+---
+
+## Evaluation Log
+
+Record results here after each evaluation run.
+
+| Date | Case # | Criteria passed | Criteria failed | Notes | SKILL.md revision needed? |
+|------|--------|-----------------|-----------------|-------|---------------------------|
