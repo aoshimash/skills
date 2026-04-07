@@ -194,7 +194,7 @@ When an issue returns `BLOCKED` or `NEEDS_CONTEXT`:
 
 After all issues in a group complete:
 
-1. Update the status of each issue (DONE / BLOCKED / SKIPPED).
+1. Update the status of each issue (DONE / DONE_WITH_CONCERNS / BLOCKED / SKIPPED).
 2. Check if any issues in subsequent groups now have all dependencies met.
 3. Proceed to the next group.
 

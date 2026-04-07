@@ -81,7 +81,7 @@ Repeat until all issues are completed or all remaining issues are blocked:
 4. **Update DAG** — Mark completed issues. Check if new issues are now unblocked.
 5. **Handle failures** — If an issue fails after retries:
    - Mark it as BLOCKED with reason
-   - Also mark all issues that depend on it as BLOCKED (transitively)
+   - Also mark all issues that depend on it as SKIPPED (transitively)
    - Continue with remaining independent issues
 
 ### Phase 3: Summary
