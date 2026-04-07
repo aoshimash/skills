@@ -175,5 +175,7 @@
 
 | Date | Case | Result | Notes |
 |------|------|--------|-------|
-| 2026-03-22 | Case 1 (PR #41) | with_skill 100% / without_skill 43% | Real Devin bot reviewed the PR |
-| 2026-03-22 | Case 4 (No PR) | with_skill 100% / without_skill 50% | without_skill lacked structured next step |
+| 2026-03-22 | Case 1 (PR #41) | with_skill 100% / without_skill 43% | Real Devin bot reviewed the PR (pre-refactor) |
+| 2026-03-22 | Case 4 (No PR) | with_skill 100% / without_skill 50% | without_skill lacked structured next step (pre-refactor) |
+| 2026-04-08 | Case 1 (PR #44) | with_skill 5/5 criteria passed | Devin bot comments on refactored skill. Bot tone correct, grouping correct, batch approval worked. Verification Gate not tested (old skill version loaded from marketplace). |
+| 2026-04-08 | Case 2-3, 5-8 | Not tested | Require specific PR scenarios (out-of-scope comments, informational-only, verification gate mismatch, GitLab MR) not available in current environment |
