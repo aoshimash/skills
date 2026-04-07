@@ -22,6 +22,7 @@
 - [ ] Human comment replies include brief thanks and commit SHA link
 - [ ] Group 3 (2 reviewers) presented as one group, tagged `critical`
 - [ ] Verification Gate executed: subagent for critical, self-review for normal
+- [ ] Reject group (Group 1) reply uses factual bot format ("Keeping current approach: [reason].")
 - [ ] Reply batch shown for approval before posting
 
 ---

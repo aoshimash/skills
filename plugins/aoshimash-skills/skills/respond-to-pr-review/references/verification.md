@@ -8,9 +8,11 @@ Prevent replying "Fixed in abc1234" when the fix doesn't actually address the co
 
 ## Procedure
 
-### 5-1: Sort by criticality
+### 5-1: Filter and sort
 
-Process `critical` groups first, then `normal` groups. Within each tier, process in the order they were implemented.
+Only groups with an "Implement" decision enter the Verification Gate. Skip groups decided as Reject, Create Issue, or Skip reply — they require no code verification.
+
+Within Implement groups, process `critical` first, then `normal`. Within each tier, process in the order they were implemented.
 
 ### 5-2: Verify critical groups (subagent)
 

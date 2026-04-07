@@ -58,19 +58,16 @@ If a reviewer has NOT approved and has left resolvable comments → treat as equ
 
 ## Check if an Inline Comment is Outdated
 
-```bash
-glab api "projects/:id/merge_requests/{mr_iid}/notes/{note_id}" \
-  --jq '.resolved'
-```
-
-Also check if the position still maps to a valid diff location:
+Check if the position still maps to a valid diff location using the discussions API:
 
 ```bash
 glab api "projects/:id/merge_requests/{mr_iid}/discussions" \
-  --jq '.[] | select(.notes[0].id == {note_id}) | .notes[0].position'
+  --jq --arg nid "{note_id}" '.[] | select(.notes[0].id == ($nid | tonumber)) | .notes[0].position'
 ```
 
-If the position references a line no longer in the current diff, the comment is outdated.
+If `position` is null or references a line no longer in the current diff, the comment is outdated.
+
+Note: `.resolved` on a note indicates whether the thread was manually resolved by a user, NOT whether the comment is outdated. Do not use `.resolved` for outdated detection.
 
 ## Bot Detection
 
