@@ -1,5 +1,15 @@
 # GitHub CLI / API Commands for PR Review Comments
 
+## Prerequisites
+
+- `gh` CLI installed and authenticated (`gh auth status`)
+
+## Detect Platform
+
+Check in order:
+1. CLAUDE.md `## Code Hosting` section with `platform: github`
+2. Git remote URL contains `github.com`
+
 ## Fetch PR Info
 
 ```bash
@@ -13,20 +23,29 @@ gh repo view --json owner,name
 ## Fetch Comments
 
 ### Inline code review comments (attached to lines)
+
 ```bash
 gh api repos/{owner}/{repo}/pulls/{pr_number}/comments \
-  --jq '.[] | {id, path, line, body, user: .user.login, user_type: .user.type, in_reply_to_id}'
+  --jq '.[] | {id, path, line, body, user: .user.login, user_type: .user.type, in_reply_to_id, created_at}'
 ```
+
 Only process root comments: filter out entries where `in_reply_to_id` is not null.
 
 ### Review body comments (submitted with APPROVE/REQUEST_CHANGES/COMMENT)
+
 ```bash
 gh api repos/{owner}/{repo}/pulls/{pr_number}/reviews \
   --jq '.[] | {id, state, body, user: .user.login, user_type: .user.type}'
 ```
+
 Skip entries where `body` is empty or whitespace-only.
 
+The `state` field maps to criticality:
+- `CHANGES_REQUESTED` → associated comments are `critical`
+- `APPROVED`, `COMMENTED` → `normal` unless multi-reviewer
+
 ### General PR comments (conversation thread)
+
 ```bash
 gh api repos/{owner}/{repo}/issues/{pr_number}/comments \
   --jq '.[] | {id, body, user: .user.login, user_type: .user.type}'
@@ -34,16 +53,23 @@ gh api repos/{owner}/{repo}/issues/{pr_number}/comments \
 
 ## Check if an Inline Comment is Outdated
 
-An inline comment is outdated when its original line no longer exists in the current diff.
 ```bash
 gh api repos/{owner}/{repo}/pulls/{pr_number}/comments/{comment_id} \
   --jq '.position'
 ```
-If `position` is `null`, the comment is outdated (the line was changed).
+
+If `position` is `null`, the comment is outdated (the line was changed or removed).
+
+## Bot Detection
+
+Check `user.type` in the API response:
+- `"Bot"` → Bot
+- `"User"` → Human
 
 ## Post Replies
 
 ### Reply to an inline code review comment
+
 ```bash
 gh api --method POST \
   repos/{owner}/{repo}/pulls/{pr_number}/comments/{comment_id}/replies \
@@ -51,13 +77,17 @@ gh api --method POST \
 ```
 
 ### Reply to a review body comment or general PR comment
-There is no "reply" concept for these — post a new general comment instead:
+
+Post a new general comment (no native reply-to for these types):
+
 ```bash
 gh api --method POST \
   repos/{owner}/{repo}/issues/{pr_number}/comments \
   --field body="YOUR REPLY TEXT"
 ```
-To make it clear what you're replying to, you can quote the original:
+
+To quote the original:
+
 ```bash
 gh api --method POST \
   repos/{owner}/{repo}/issues/{pr_number}/comments \
@@ -66,11 +96,12 @@ gh api --method POST \
 YOUR REPLY TEXT"
 ```
 
-## Resolve a Thread (mark as resolved)
+## Resolve a Thread (optional)
 
-Resolving inline comment threads requires the GraphQL API.
+Requires the GraphQL API.
 
-First, get the thread ID:
+Get the thread ID:
+
 ```bash
 gh api graphql -f query='
   query($owner: String!, $repo: String!, $pr: Int!) {
@@ -85,7 +116,8 @@ gh api graphql -f query='
 ' -f owner={owner} -f repo={repo} -F pr={pr_number}
 ```
 
-Then resolve:
+Resolve:
+
 ```bash
 gh api graphql -f query='
   mutation($threadId: ID!) {
@@ -96,12 +128,17 @@ gh api graphql -f query='
 ' -f threadId={thread_node_id}
 ```
 
-Note: Resolving threads is optional. Replying to inline comments is usually sufficient.
-
 ## Get Commit URL for a Reply
 
 ```bash
 git log --oneline -1
 # → abc1234 commit message
 # URL: https://github.com/{owner}/{repo}/commit/abc1234
+```
+
+## CLAUDE.md Config Example
+
+```markdown
+## Code Hosting
+- platform: github
 ```
