@@ -85,7 +85,7 @@ Find the discussion ID for the note:
 
 ```bash
 glab api "projects/:id/merge_requests/{mr_iid}/discussions" \
-  --jq '.[] | select(.notes[].id == {note_id}) | .id'
+  --jq --arg nid "{note_id}" '.[] | select(.notes[].id == ($nid | tonumber)) | .id'
 ```
 
 Post a reply to the discussion:
