@@ -57,9 +57,31 @@ design-sprint                              run-sprint
 
 - **Issue tracker is the interface** — Both skills connect only through the issue tracker (GitHub, GitLab, Backlog). No skill-specific files persist after completion.
 - **Works with humans and AI** — Issues created by design-sprint are readable and implementable by anyone. Issues written by hand work with run-sprint.
-- **Annotation cycle** — Plans are refined through inline notes in a local markdown file (inspired by [Boris Tane's workflow](https://boristane.com/blog/how-i-use-claude-code/)). The file is deleted after issues are created.
+- **Annotation cycle** — Plans are refined through inline notes in a local markdown file. The file is deleted after issues are created.
 - **Parallel execution** — run-sprint resolves issue dependencies as a DAG and dispatches independent issues in parallel using git worktrees.
 - **Two-stage review** — Each issue's PR is reviewed for spec compliance (does it match the issue?) then code quality (is it well-written?).
+
+### Design Philosophy
+
+The sprint workflow draws from two sources and combines them with an issue-centric approach:
+
+**From [superpowers](https://github.com/obra/superpowers):**
+- Staged workflow with hard gates (no implementation before design approval)
+- Brainstorming quality — deep clarifying questions, multiple approaches with trade-offs
+- Subagent-driven parallel execution with git worktree isolation
+- Two-stage review — spec compliance before code quality, because they catch different classes of problems
+- "Boring implementation" test — if a task requires design judgment, it's not decomposed enough
+
+**From [Boris Tane's workflow](https://boristane.com/blog/how-i-use-claude-code/):**
+- Dedicated research phase before design — prevents implementations that ignore existing patterns, caching layers, or conventions
+- Plan as shared mutable state — a local markdown file the user annotates inline, not chat-based steering. Document-based iteration is more precise than conversational back-and-forth
+- Annotation cycle — the user adds `<!-- NOTE: ... -->` comments directly in the plan file, Claude addresses each one, repeat until clean. This is where the highest-value human input happens
+- "Implementation should be boring" — all creative decisions are resolved during planning, not during coding
+
+**Issue-centric design (original):**
+- superpowers stores specs and plans in `docs/superpowers/` files. This works for solo use but creates friction in team settings — not everyone uses the same tools, and tool-specific files clutter the repo
+- Instead, the issue tracker is the single shared artifact. design-sprint uses local files only temporarily during the annotation cycle, then converts everything to issues and deletes the files
+- This means a team member who doesn't use these skills can still read the issues, pick one up, and implement it — the workflow degrades gracefully
 
 ## Skills
 
