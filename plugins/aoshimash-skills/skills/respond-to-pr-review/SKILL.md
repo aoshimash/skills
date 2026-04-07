@@ -110,7 +110,7 @@ Draft a reply for every group that requires a response.
 | Decision | Human | Bot |
 |---|---|---|
 | Implement | "Thanks! Fixed in [SHA] — [description]." | "Fixed in [SHA]: [description]." |
-| Implement (WITH_CONCERNS) | "Fixed in [SHA] — [description]. Please verify this matches your intent." | "Fixed in [SHA]: [description]. Verification requested." |
+| Implement (WITH_CONCERNS) | "Thanks! Fixed in [SHA] — [description]. Please verify this matches your intent." | "Fixed in [SHA]: [description]. Verification requested." |
 | Reject | "Thanks for the note. Keeping current approach because [reason]." | "Keeping current approach: [reason]." |
 | Create Issue | "Good point — outside scope. Created #N to track it." | "Out of scope. Tracked in #N." |
 
