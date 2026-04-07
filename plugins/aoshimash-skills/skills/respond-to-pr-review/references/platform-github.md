@@ -40,8 +40,8 @@ gh api repos/{owner}/{repo}/pulls/{pr_number}/reviews \
 
 Skip entries where `body` is empty or whitespace-only.
 
-The `state` field maps to criticality:
-- `CHANGES_REQUESTED` → associated comments are `critical`
+The `state` field maps to criticality. Note: the API returns `CHANGES_REQUESTED` as the state value, which corresponds to `REQUEST_CHANGES` (the term used throughout this skill):
+- `CHANGES_REQUESTED` (= REQUEST_CHANGES) → associated comments are `critical`
 - `APPROVED`, `COMMENTED` → `normal` unless multi-reviewer
 
 ### General PR comments (conversation thread)
