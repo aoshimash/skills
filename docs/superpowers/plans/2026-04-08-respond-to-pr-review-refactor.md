@@ -687,7 +687,7 @@ Expand from 4 to 8 test cases, adding verification gate and GitLab scenarios. Fo
 ```markdown
 # Evaluation Test Cases
 
-## Case 1: Mixed comments — implement + reject + create issue
+## Case 1: Mixed comments — implement + reject
 
 **Setup**: PR with 3 comment groups:
 1. Bot (CodeClimate): "Method `processData` has cognitive complexity of 15 (threshold: 10)"
