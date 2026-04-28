@@ -50,7 +50,7 @@ See [references/workflow.md](references/workflow.md) for detailed procedure.
 
 See [references/workflow.md](references/workflow.md) for detailed procedure.
 
-**Summary:** Group comments pointing out the same issue across reviewers/bots/lines. Record metadata (bodies, IDs, reviewers, files). Tag criticality: `critical` (REQUEST_CHANGES or 2+ reviewers) vs `normal`.
+**Summary:** Group comments pointing out the same issue across reviewers/bots/lines. Record metadata (bodies, IDs, reviewers, files). Tag criticality: `critical` (REQUEST_CHANGES or 2+ reviewers) vs `normal`. Tag comment type: `rule-violation-instance` (pattern applies to multiple locations) vs `one-off-bug` (specific defect).
 
 ### Phase 3: Interactive Decision Loop
 
@@ -73,14 +73,21 @@ For each "Implement" decision:
 3. Commit referencing the context (e.g., `fix: address review comment on foo.ts:42`)
 4. Record the commit SHA for use in replies
 
+### Phase 4.5: Pattern Broadening
+
+See [references/workflow.md](references/workflow.md) for detailed procedure.
+
+**Summary:** For each `rule-violation-instance` group just implemented, search the changed files for other instances of the same pattern. Present found instances to the user via `AskUserQuestion` (Apply all / Skip / Pick subset). Apply selected fixes in the same commit, or create a new commit if the previous commit is already pushed.
+
 ### Phase 5: Verification Gate
 
 See [references/verification.md](references/verification.md) for detailed procedure.
 
-**Summary:** Verify that Phase 4 changes match the reviewer's intent.
+**Summary:** Verify that Phase 4 (and 4.5) changes match the reviewer's intent.
 
 - `critical` groups → subagent verification (3 criteria: Intent Match, Scope Guard, Side Effect)
 - `normal` groups → self-review using the same 3 criteria
+- For `rule-violation-instance` groups, same-pattern expansion from Phase 4.5 is considered in-scope for the Scope Guard criterion.
 - NEEDS_FIX → fix loop (max 2 rounds)
 - UNCERTAIN → present to user for decision
 - Still failing → DONE_WITH_CONCERNS (caveat added to reply)
@@ -110,6 +117,7 @@ Draft a reply for every group that requires a response.
 | Decision | Human | Bot |
 |---|---|---|
 | Implement | "Thanks! Fixed in [SHA] — [description]." | "Fixed in [SHA]: [description]." |
+| Implement (broadened) | "Thanks! Fixed in [SHA] — applied to [original location] + [N] other instances of the same pattern." | "Fixed in [SHA]: applied to [original location] + [N] other instances of the same pattern." |
 | Implement (WITH_CONCERNS) | "Thanks! Fixed in [SHA] — [description]. Please verify this matches your intent." | "Fixed in [SHA]: [description]. Verification requested." |
 | Reject | "Thanks for the note. Keeping current approach because [reason]." | "Keeping current approach: [reason]." |
 | Create Issue | "Good point — outside scope. Created #N to track it." | "Out of scope. Tracked in #N." |

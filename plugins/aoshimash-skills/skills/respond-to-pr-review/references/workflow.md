@@ -67,6 +67,19 @@ Assign a criticality tag to each group:
 
 Criticality determines verification routing in Phase 5 (Verification Gate).
 
+### 2-4: Tag comment type
+
+Assign a type tag to each group:
+
+| Tag | Condition |
+|---|---|
+| `rule-violation-instance` | Comment references a rule, convention, or policy that could apply to multiple locations; OR uses words like "rule", "convention", "pattern", "policy", "violates", "should always", "consistent"; OR similar instances are grep-findable in the changed files; OR the commenter is a bot |
+| `one-off-bug` | Specific defect at a specific location with no indication of a broader pattern |
+
+When in doubt, prefer `one-off-bug` — broadening only applies to `rule-violation-instance` groups.
+
+The type tag drives Pattern Broadening in Phase 4.5.
+
 ## Phase 3: Interactive Decision Loop
 
 ### 3-1: Present groups one at a time
@@ -106,3 +119,52 @@ Decisions summary:
 ```
 
 Proceed to Phase 4 with "Implement" groups, Phase 6 with "Create Issue" groups.
+
+## Phase 4.5: Pattern Broadening
+
+Runs after Phase 4 implementation, before Phase 5 verification. Applies only to groups tagged `rule-violation-instance` with an "Implement" decision.
+
+### 4.5-1: Search for additional instances
+
+For each `rule-violation-instance` group just implemented:
+
+1. Identify the pattern that was fixed (e.g., variable naming convention, error handling style, import ordering).
+2. Search the **changed files** (files in the current PR diff) for other instances of the same pattern that were not addressed in Phase 4.
+   - Use `grep` or structural search on the changed files only (not the whole repo).
+   - Default scope: files changed in this PR. If the reviewer specified a broader scope (e.g., "this directory"), use that.
+3. Exclude lines already fixed in Phase 4.
+
+### 4.5-2: Present findings to user
+
+If additional instances are found, present them via `AskUserQuestion`:
+
+```
+Pattern Broadening — Group N [rule-violation-instance]
+Rule: {short description of the pattern}
+
+Found {K} other instance(s) in the changed files:
+  • src/foo.ts:15  — {snippet}
+  • src/bar.ts:42  — {snippet}
+
+Apply pattern fix to:
+```
+
+Options:
+- **Apply all** — fix all found instances in the same commit
+- **Pick subset** — user selects which instances to fix (follow up with a list)
+- **Skip** — fix only the originally flagged location
+
+If no additional instances are found, skip to Phase 5 silently.
+
+### 4.5-3: Apply selected fixes
+
+For each selected instance:
+
+1. Apply the same fix that was applied in Phase 4 (adapted to the local context).
+2. Run project checks (formatter, linter, tests) until clean.
+3. Amend the Phase 4 commit if it has not been pushed, or create a new commit if it has.
+4. Record the broadened locations for use in the Phase 7 reply template.
+
+### 4.5-4: Mark broadened groups
+
+Tag the group as `broadened` with the count of additional instances fixed. The Phase 7 reply will use the `Implement (broadened)` template variant instead of plain `Implement`.

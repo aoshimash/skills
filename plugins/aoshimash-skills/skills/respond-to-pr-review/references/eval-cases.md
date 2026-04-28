@@ -171,6 +171,38 @@
 
 ---
 
+## Case 9: Pattern Broadening — drip-feed bot review
+
+**Setup**: PR modifying 4 files. A bot reviewer (e.g., DeepSource) posts one comment:
+- Bot (DeepSource): "Variable `data` in `src/utils.ts:12` does not follow the `camelCase` convention. Consider renaming to `userData`."
+- The same naming violation (`data` instead of a descriptive camelCase name) exists at 3 other locations in the changed files (`src/api.ts:34`, `src/handler.ts:8`, `src/handler.ts:27`).
+
+**Expected behavior**:
+- Phase 2: Group tagged `normal` (single bot commenter, no REQUEST_CHANGES). Type tagged `rule-violation-instance` (bot commenter, uses "convention", grep-findable pattern).
+- Phase 3: User decides Implement.
+- Phase 4: Fix `src/utils.ts:12` only (as specifically requested).
+- Phase 4.5:
+  - Skill searches changed files for similar naming violations.
+  - Finds 3 additional instances.
+  - Presents them to the user via `AskUserQuestion` with Apply all / Pick subset / Skip.
+  - User selects Apply all.
+  - All 3 additional locations fixed and included in the same commit (or a new commit if pushed).
+  - Group marked `broadened` (3 additional instances).
+- Phase 5: Scope Guard passes (`broadened` + `rule-violation-instance` + user approved).
+- Phase 7: Reply uses `Implement (broadened)` template — "Fixed in [SHA]: applied to `src/utils.ts:12` + 3 other instances of the same pattern."
+
+**Verification**:
+- [ ] Group type correctly classified as `rule-violation-instance`
+- [ ] Phase 4 fixes only the originally flagged location
+- [ ] Phase 4.5 finds exactly the 3 additional instances in changed files
+- [ ] `AskUserQuestion` presented with Apply all / Pick subset / Skip options
+- [ ] All 4 locations fixed after user chooses Apply all
+- [ ] Scope Guard criterion passes (not FAIL) in Phase 5 verification
+- [ ] Reply uses `Implement (broadened)` template with correct count and locations
+- [ ] A single bot reply posted (not 4 separate replies)
+
+---
+
 ## Evaluation Log
 
 | Date | Case | Result | Notes |
