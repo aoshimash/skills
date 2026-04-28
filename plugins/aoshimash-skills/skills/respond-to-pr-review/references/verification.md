@@ -44,7 +44,8 @@ Check these 3 criteria:
 
 2. **Scope Guard**: Does the diff contain changes NOT requested by the comment?
    - PASS: All changes are directly related to the comment
-   - FAIL: The diff includes unrelated refactoring, formatting, or feature changes
+   - PASS (broadened): The diff includes same-pattern fixes at additional locations, AND the group is tagged `rule-violation-instance`, AND the user approved the broadening in Phase 4.5
+   - FAIL: The diff includes unrelated refactoring, formatting, or feature changes not covered by the above PASS conditions
 
 3. **Side Effect**: Could the change break existing behavior?
    - PASS: The change is safe and localized
@@ -129,5 +130,5 @@ If "Re-implement": apply user guidance, re-verify once more (no round limit for 
 | Criterion | Checks | Common failures |
 |---|---|---|
 | Intent Match | Change addresses the reviewer's request | Partial fix, misinterpreted request, wrong file |
-| Scope Guard | No unrelated changes in the diff | Drive-by refactoring, formatting changes, bonus features |
+| Scope Guard | No unrelated changes in the diff (same-pattern expansion approved in Phase 4.5 is allowed for `rule-violation-instance` groups) | Drive-by refactoring, formatting changes, bonus features |
 | Side Effect | Change doesn't break existing behavior | Modified shared interface, removed used code, changed return type |

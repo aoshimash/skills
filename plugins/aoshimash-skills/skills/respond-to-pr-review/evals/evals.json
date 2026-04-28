@@ -14,6 +14,13 @@
       "prompt": "PRコメントに対応してください。現在のブランチは main です（オープンなPRはありません）。",
       "expected_output": "Skill detects no PR on current branch and asks the user to provide a PR number or URL before proceeding.",
       "files": []
+    },
+    {
+      "id": 9,
+      "name": "pattern-broadening-drip-feed",
+      "prompt": "PR のレビューコメントに対応してください。ボット (DeepSource) から1件のコメントがあります: 'Variable `data` in `src/utils.ts:12` does not follow the camelCase convention. Consider renaming to `userData`.' 変更ファイルには同じ命名違反が src/api.ts:34, src/handler.ts:8, src/handler.ts:27 にも存在します。",
+      "expected_output": "1) Group tagged as rule-violation-instance (bot commenter, uses 'convention', pattern grep-findable). 2) Phase 4 fixes only src/utils.ts:12. 3) Phase 4.5 finds 3 additional instances and presents AskUserQuestion with Apply all / Pick subset / Skip. 4) After user approves Apply all, all 4 locations fixed in same commit. 5) Scope Guard passes in verification. 6) Reply uses Implement (broadened) template: 'Fixed in [SHA]: applied to src/utils.ts:12 + 3 other instances of the same pattern.'",
+      "files": []
     }
   ]
 }
