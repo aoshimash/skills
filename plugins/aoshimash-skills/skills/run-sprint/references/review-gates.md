@@ -90,13 +90,13 @@ Dispatch a reviewer subagent with:
 Code Quality Review: <N> issue(s) found
 
 Critical:
-1. [file:line] <description>
+1. [file:line] <description> | Type: rule-violation-instance | one-off-bug
 
 Important:
-1. [file:line] <description>
+1. [file:line] <description> | Type: rule-violation-instance | one-off-bug
 
 Minor:
-1. [file:line] <description>
+1. [file:line] <description> | Type: rule-violation-instance | one-off-bug
 
 Verdict: PASS / NEEDS_FIXES
 ```
@@ -114,7 +114,7 @@ If code quality review finds Critical or Important issues:
 
 ### Trigger Condition
 
-Run Stage 2.5 when Stage 1 or Stage 2 finds a violation classified as `rule-violation-instance`.
+Run Stage 2.5 when Stage 2's output contains any issue with `Type: rule-violation-instance`.
 
 ### Classification Heuristic
 
