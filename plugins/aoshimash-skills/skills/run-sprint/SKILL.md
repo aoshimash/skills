@@ -17,7 +17,7 @@ Fetch a set of issues, resolve dependencies, implement them in parallel where po
 1. **Issues are the source of truth** — Each issue defines the scope. Do not add unrelated changes. Do not deviate from the issue's acceptance criteria.
 2. **Dependency-driven parallelism** — Issues with no unresolved dependencies run in parallel. Issues with dependencies wait. The dependency graph is the scheduler.
 3. **Worktree isolation** — Each issue gets its own git worktree. No cross-contamination between parallel implementations.
-4. **Two-stage review** — Every completed issue goes through spec compliance review (does the diff match the issue?) then code quality review. Both happen before marking complete.
+4. **Two-stage review with pattern propagation** — Every completed issue goes through spec compliance review (does the diff match the issue?) then code quality review. If a `rule-violation-instance` is found, other in-flight PRs are scanned for the same pattern and the user is offered a fix. All stages happen before marking complete.
 5. **Fail fast, report clearly** — If an issue fails after retries, mark it blocked and continue with independent issues. Never block the entire sprint on one failure.
 
 ## Workflow
@@ -77,6 +77,7 @@ Repeat until all issues are completed or all remaining issues are blocked:
 3. **Two-stage review** — After each issue's PR is created:
    - Stage 1: Dispatch a **spec compliance reviewer** subagent (see [references/review-gates.md](references/review-gates.md))
    - Stage 2: Dispatch a **code quality reviewer** subagent (see [references/review-gates.md](references/review-gates.md))
+   - Stage 2.5: **Pattern Propagation** — If a `rule-violation-instance` is found, scan other in-flight PRs for the same pattern and offer to propagate the fix (see [references/review-gates.md](references/review-gates.md))
    - If issues found → implementer subagent fixes → re-review (max 2 fix rounds)
 4. **Update DAG** — Mark completed issues. Check if new issues are now unblocked.
 5. **Handle failures** — If an issue fails after retries:
