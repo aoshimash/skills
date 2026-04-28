@@ -110,6 +110,36 @@ If code quality review finds Critical or Important issues:
 3. Re-run code quality review.
 4. Max 2 fix rounds. If Critical issues remain, mark issue as `DONE_WITH_CONCERNS`.
 
+## Stage 2.5: Pattern Propagation
+
+### Trigger Condition
+
+Run Stage 2.5 when Stage 1 or Stage 2 finds a violation classified as `rule-violation-instance`.
+
+### Classification Heuristic
+
+Classify a violation as `rule-violation-instance` (rather than a one-off bug) when **any** of the following apply:
+
+- The reviewer uses words like "rule", "convention", "pattern", "policy", "violates", "across", "consistently"
+- The same pattern is grep-findable in other in-flight issues' diffs
+- The severity is Important or Critical **and** the issue is structural (not a one-off typo)
+
+### Propagation Procedure
+
+1. For each other in-flight issue that has a PR branch, run:
+   ```
+   git diff origin/<default-branch>...<branch> | grep -n <pattern>
+   ```
+2. Collect all matches across in-flight branches.
+3. Present findings to the user via `AskUserQuestion`:
+   > "Pattern violation `<pattern>` found in N other in-flight PR(s): <list>. What would you like to do?"
+   > Options: Apply fix to all / Select which PRs / Skip propagation
+4. For each approved PR, dispatch a fix subagent to apply the same fix.
+
+### Non-Blocking Rule
+
+Failures in propagation fix subagents do **not** block the original issue from completing. If a propagation fix fails, record it in the sprint summary under the original issue.
+
 ## Review Flow Diagram
 
 ```
@@ -122,8 +152,14 @@ Stage 1: Spec Compliance
               └─ FAIL → DONE_WITH_CONCERNS
   ↓
 Stage 2: Code Quality
-  ├─ PASS (no Critical/Important) → DONE
+  ├─ PASS (no Critical/Important) → Stage 2.5 check
   └─ NEEDS_FIXES → Implementer fixes → Re-review (max 2 rounds)
-              ├─ PASS → DONE
+              ├─ PASS → Stage 2.5 check
               └─ Still Critical → DONE_WITH_CONCERNS
+  ↓
+Stage 2.5: Pattern Propagation (only if rule-violation-instance found)
+  ├─ No rule violations → DONE
+  └─ rule-violation-instance → Scan other in-flight PRs
+              ├─ No matches / user skips → DONE
+              └─ User approves → Dispatch fix subagents → DONE (failures non-blocking)
 ```
