@@ -70,7 +70,7 @@ For each PR, in order, run the full sequence below before starting the next. See
 6. **Present** a risk summary + required work + rollback plan. **Approval gate: never merge without explicit user approval.**
    - **Downtime is first-class.** If the change causes disruption (node reboot, single-replica restart, DB failover, control-plane disruption), require a **prominent, explicit confirmation** spelling out blast radius + expected downtime — even if the plan was batch-approved in Phase 1. Ask about maintenance-window timing.
 7. **Before any irreversible/disruptive apply, confirm a rollback path exists** (etcd snapshot, revert PR, A/B partition, `helm rollback`, DB backup). See [references/verification.md](references/verification.md).
-8. **Merge** using the repo's merge method. Resolve conflicting sibling PRs (close superseded ones, or let the bot rebase).
+8. **Approve, then merge** — submit a GitHub review approval (`gh pr review {pr} --approve`) before calling `gh pr merge`, so branch-protection rules requiring at least one approved review are satisfied. Resolve conflicting sibling PRs (close superseded ones, or let the bot rebase). See [references/platform-github.md](references/platform-github.md).
 9. **main divergence:** if a clean `gh pr update-branch` (merge commit, or `--rebase`) integrates `main` without conflicts, do it **without asking**; if manual conflict resolution is needed, **ask the user**.
 10. **Run/route the pre/post work** per its A/B/C class.
 11. **Document on the PR:** a comment with the manual steps (for humans too) and a closing "applied & verified" comment — only when real steps/risk exist (no spam), in English.
