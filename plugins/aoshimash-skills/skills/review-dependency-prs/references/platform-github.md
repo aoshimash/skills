@@ -93,6 +93,19 @@ Decision:
 - Any `FAILURE`/`TIMED_OUT`/`CANCELLED` → **do not merge**; investigate and present as a finding.
 - `PENDING`/`IN_PROGRESS` → wait, then re-check.
 
+## Approve before merge
+
+Submit a GitHub review approval after user approval (step 2-5) and before calling `gh pr merge`. This satisfies branch-protection rules requiring at least one approved review:
+
+```bash
+gh pr review {pr} --approve --body "Dependency update reviewed: release notes read, CI green, risk assessed."
+```
+
+Notes:
+- The `--body` is optional but leaves a human-readable audit trail on the PR.
+- GitHub prevents approving your own PRs — for bot-authored PRs (Renovate, Dependabot) this is never an issue.
+- If the repo requires CODEOWNERS or team-based required reviewers, an agent approval may not satisfy the requirement. Check `mergeStateStatus` after approving; if it still shows `BLOCKED`, surface the gap and ask the user to approve manually.
+
 ## Merge (respect the repo merge method)
 
 Phase 0 determined the merge method. Use the matching flag — do not assume squash:
