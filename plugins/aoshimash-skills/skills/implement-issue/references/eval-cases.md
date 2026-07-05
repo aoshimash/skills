@@ -22,8 +22,13 @@
 | 16 | "Other" free-text respected | When user selects "Other" with free-text, their text is treated as the chosen approach without re-presenting new options |
 | 17 | Auto-fix runs before check loop | Auto-fix commands (formatters, linters with --fix) run once before the check loop when defined in CLAUDE.md |
 | 18 | Post-PR CI monitored | CI checks monitored after PR creation; fixable failures result in a fix commit before returning the PR URL |
+| 19 | Parent-issue confirmation asked | When a single referenced issue has open sub-issues, the user is asked to choose batch / this-issue-only / pick-one before proceeding |
+| 20 | Review gates run in Single mode | Stage 1 (spec compliance) then Stage 2 (code quality) run after PR creation even for a single issue; Stage 2.5 is skipped |
+| 21 | Batch dependency graph correct | Dependencies parsed from issue bodies/platform links form a valid DAG; cycles are surfaced to the user; parallel groups are computed correctly |
+| 22 | Batch failure cascade works | A BLOCKED issue causes its transitive dependents to be marked SKIPPED; independent issues continue |
+| 23 | Stage 2.5 pattern propagation offered | When a `rule-violation-instance` is found in Batch mode, other in-flight PRs are scanned and the user is offered a fix, without blocking the original issue |
 
-## Test Cases
+## Single-Issue Test Cases
 
 ### Case 1: Simple bug fix issue
 
@@ -35,8 +40,9 @@
 - Fix is minimal and targeted
 - Checks and review pass quickly
 - PR references and closes the issue
+- Two-stage review gates run after PR creation (Stage 1 then Stage 2); Stage 2.5 is skipped since only one issue is in flight
 
-**Criteria to test**: 1, 2, 4, 5, 8, 10, 11, 14
+**Criteria to test**: 1, 2, 4, 5, 8, 10, 11, 14, 20
 
 ### Case 2: Feature request with multiple valid approaches
 
@@ -49,8 +55,9 @@
 - Checks loop runs; any test failures are fixed
 - AI review catches issues and fixes them
 - PR created after all checks and review pass
+- Two-stage review gates run after PR creation; Stage 2.5 is skipped
 
-**Criteria to test**: 3, 4, 6, 7, 10, 11, 12, 14
+**Criteria to test**: 3, 4, 6, 7, 10, 11, 12, 14, 20
 
 ### Case 3: Issue with vague acceptance criteria
 
@@ -210,6 +217,161 @@
 
 **Criteria to test**: 14, 18
 
+## Batch Mode Test Cases
+
+### Case 16: Simple linear batch
+
+**Input:** Parent issue #100 with 3 sub-issues (#101 → #102 → #103, linear dependencies)
+
+**Expected behavior:**
+1. Fetches sub-issues of #100
+2. Builds DAG: #101 → #102 → #103
+3. Executes sequentially: #101 first, then #102, then #103
+4. Each issue gets its own worktree
+5. Two-stage review after each
+6. Summary shows all 3 completed with PR links
+
+**Verification:**
+- [ ] Correct dependency graph displayed
+- [ ] Issues executed in correct order
+- [ ] Each PR references the correct issue
+- [ ] Two-stage review ran for each issue
+- [ ] Worktrees cleaned up after completion
+- [ ] Summary table accurate
+
+### Case 17: Parallel batch
+
+**Input:** Parent issue #200 with 4 sub-issues:
+- #201 (no deps), #202 (no deps) — parallel
+- #203 (depends on #201), #204 (depends on #202) — parallel after their deps
+
+**Expected behavior:**
+1. Builds DAG with 2 groups: {#201, #202} then {#203, #204}
+2. Group 1: #201 and #202 dispatched in parallel (separate worktrees)
+3. Group 2: #203 and #204 dispatched in parallel after Group 1 completes
+4. All 4 PRs created
+
+**Verification:**
+- [ ] #201 and #202 run in parallel (concurrent subagents)
+- [ ] #203 waits for #201 to complete
+- [ ] #204 waits for #202 to complete
+- [ ] No worktree conflicts between parallel issues
+
+### Case 18: Failure cascading
+
+**Input:** 4 issues: #301 (no deps), #302 (depends on #301), #303 (depends on #302), #304 (no deps)
+
+**Scenario:** #301 fails (tests don't pass after 3 attempts)
+
+**Expected behavior:**
+1. #301 and #304 start in parallel
+2. #301 fails → marked BLOCKED
+3. #302 marked SKIPPED (depends on #301)
+4. #303 marked SKIPPED (transitively depends on #301)
+5. #304 continues and completes normally
+6. Summary shows: 1 done, 1 blocked, 2 skipped
+
+**Verification:**
+- [ ] Batch does NOT stop when #301 fails
+- [ ] #304 completes independently
+- [ ] Transitive dependencies correctly identified
+- [ ] Failed worktree kept for debugging
+- [ ] Summary accurately reflects all statuses
+
+### Case 19: Two-stage review catches issues (batch)
+
+**Input:** Issue #401 with clear AC: "search returns paginated results"
+
+**Scenario:** Implementation doesn't include pagination
+
+**Expected behavior:**
+1. Issue implemented without pagination
+2. Spec compliance review (Stage 1): FAIL — AC "paginated results" not met
+3. Implementer subagent fixes: adds pagination
+4. Re-review: PASS
+5. Code quality review (Stage 2): runs on updated code
+6. Final status: DONE (after fix round)
+
+**Verification:**
+- [ ] Spec compliance correctly identifies missing AC
+- [ ] Fix round addresses the issue
+- [ ] Code quality review runs after spec compliance passes
+- [ ] Status reflects the fix round in summary
+
+### Case 20: Manual issue list (batch)
+
+**Input:** User provides "implement these issues #501, #502, #503" (no parent issue)
+
+**Expected behavior:**
+1. Fetches all 3 issues individually
+2. Parses dependencies from issue bodies
+3. Builds DAG from parsed dependencies
+4. Executes normally in Batch mode
+
+**Verification:**
+- [ ] Works without a parent issue
+- [ ] Dependencies parsed from issue body text
+- [ ] Same workflow as parent-based batch
+
+### Case 21: Cross-platform batch (Backlog issues + GitHub PRs)
+
+**Input:** Backlog project issues, code hosted on GitHub
+
+**Expected behavior:**
+1. Detects Backlog as issue tracker
+2. Fetches issues with `bee`
+3. Detects GitHub as code hosting from git remote
+4. Creates PRs with `gh`
+5. Comments on Backlog issues with PR links
+
+**Verification:**
+- [ ] Correct platform detection for both issue tracker and code hosting
+- [ ] Uses `bee` for issue operations
+- [ ] Uses `gh` for PR operations
+- [ ] Backlog issue gets comment with GitHub PR link
+
+## Mode-Routing Test Cases (new)
+
+### Case 22: Parent detection on plain "implement issue #N"
+
+**Scenario**: User says "implement issue #40" — #40 has 3 open sub-issues (#41, #42, #43) and no unresolved dependencies among them.
+
+**Expected behavior**:
+- Phase 0 detects that #40 has open sub-issues (via the platform guide's sub-issue/child detection)
+- Presents `AskUserQuestion`: "Implement all sub-issues (batch)" (Recommended, since 2+ children are open) / "Implement only this issue" / "Pick one sub-issue"
+- If the user picks batch: proceeds to Batch mode (Phase B1 dependency graph) using #41-#43 as the source set
+- If the user picks "only this issue": treats #40 as a normal single issue, does not touch #41-#43
+- If the user picks "pick one": lists #41-#43 and continues in Single mode with the selected child
+
+**Criteria to test**: 19, 21
+
+### Case 23: Single-mode spec-compliance catch
+
+**Scenario**: User says "implement issue #55" (a single, standalone issue with clear AC including "response is paginated"). Implementation is drafted without pagination.
+
+**Expected behavior**:
+- PR is created
+- Stage 1 spec compliance review (run by the main agent, not a subagent) finds AC "paginated" not met → FAIL
+- Main agent fixes and pushes directly (no orchestrator, no re-dispatch)
+- Re-review: PASS
+- Stage 2 code quality review runs next
+- Stage 2.5 pattern propagation is explicitly NOT run — only one issue is in flight
+- User sees the gate results in the final summary
+
+**Criteria to test**: 20
+
+### Case 24: Parent issue, user chooses "implement only this issue"
+
+**Scenario**: User says "implement issue #60" — #60 has 2 open sub-issues, but the user explicitly wants #60 itself implemented (e.g., #60 is a tracking issue with its own small piece of work).
+
+**Expected behavior**:
+- Phase 0 detects the open sub-issues and asks the batch/this-issue-only/pick-one question
+- User selects "Implement only this issue"
+- Flow proceeds as normal Single mode on #60 — plan, approval, implement, PR, review gates
+- The 2 sub-issues are not fetched, planned, or touched in any way
+
+**Criteria to test**: 19
+
 ---
 
 ## Evaluation Log
@@ -322,3 +484,7 @@ Added auto-fix step in §2-3 of workflow.md, regenerated-files guidance in §2-2
 | 15 | Pass (2/2) | New case: post-PR CI monitored, fixable failures addressed before returning PR URL |
 
 No issues found. Changes are additive and localized to §2-2, §2-3, and §3-x of workflow.md. Existing behavior unchanged for projects that don't define auto-fix commands or CI.
+
+### 2026-07-05 — Merged run-sprint into implement-issue
+
+Merged run-sprint's batch execution model (dependency graph, worktree-per-issue parallel dispatch, two-stage review with pattern propagation) into implement-issue as "Batch mode". Added criteria 19-23 and cases 16-24 (16-21 renumbered from run-sprint's 6 cases, 22-24 new for parent-issue detection and mode routing). Case numbering for 1-15 preserved from the original implement-issue log above.

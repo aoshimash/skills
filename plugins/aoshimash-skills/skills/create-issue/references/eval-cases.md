@@ -7,10 +7,11 @@ For each test case:
 2. Trigger the create-issue skill
 3. Provide the user input described in the test case
 4. Respond to follow-up questions as described in the persona
-5. Evaluate the generated issue draft against the 9 quality criteria in Step 6
-6. Record results in the Evaluation Log section at the bottom
+5. Evaluate the generated issue draft against the 9 quality criteria in Step L5 (Lightweight Flow) or the Split Proposal criteria (Design Flow)
+6. Record which flow (Lightweight/Design) was chosen and whether it matched the expectation
+7. Record results in the Evaluation Log section at the bottom
 
-## Test Cases
+## Lightweight Flow Cases
 
 ### Case 1: Vague bug report from non-engineer
 
@@ -20,6 +21,7 @@ For each test case:
   - Skill asks follow-up questions to clarify (which page? when? how slow?)
   - Does NOT proceed to draft with only "the app is slow"
   - Final issue has concrete reproduction steps
+  - Expected: stays in Lightweight flow (no escalation)
 - **Key criteria to watch**: #7 (Proposal unambiguous), #9 (Self-contained)
 
 ### Case 2: Detailed feature request from engineer
@@ -30,6 +32,7 @@ For each test case:
   - Skill still asks clarifying questions (which endpoints? what limits?)
   - Codebase analysis identifies relevant API files
   - Proposal does NOT prescribe specific implementation (e.g., "use Redis")
+  - Expected: stays in Lightweight flow (no escalation)
 - **Key criteria to watch**: #4 (No How), #5 (Non-obvious context)
 
 ### Case 3: Ambiguous scope
@@ -37,9 +40,9 @@ For each test case:
 - **Persona**: Product manager
 - **Initial input**: "We need to improve the user onboarding"
 - **Expected behavior**:
-  - Skill identifies that scope is too broad and asks to narrow down
+  - Skill identifies that scope is too broad and either narrows it down to a focused single issue OR proposes the Design Flow
   - Does NOT create a vague catch-all issue
-  - Results in a focused issue with clear boundaries
+  - A vague catch-all issue with no clear boundaries is a failure regardless of which flow was chosen
 - **Key criteria to watch**: #7 (Proposal unambiguous), #8 (Criteria independently verifiable)
 
 ### Case 4: Technical task with implicit How
@@ -60,6 +63,7 @@ For each test case:
   - Skill asks: which browser? what does "sometimes" mean? what happens when it fails?
   - Does NOT accept "sometimes" as a valid reproduction step
   - Final issue has specific, reproducible conditions
+  - Expected: stays in Lightweight flow (no escalation)
 - **Key criteria to watch**: #7 (Proposal unambiguous), #9 (Self-contained)
 
 ### Case 6: Non-technical feature request in Japanese
@@ -70,6 +74,7 @@ For each test case:
   - All interaction and the final issue are in Japanese
   - Skill clarifies what "もっと早く" means concretely
   - Acceptance criteria are measurable
+  - Expected: stays in Lightweight flow (no escalation)
 - **Key criteria to watch**: #8 (Criteria independently verifiable), language matching
 
 ### Case 7: Backlog issue creation with Operation type
@@ -82,6 +87,7 @@ For each test case:
   - Asks for priority confirmation (High / Normal / Low)
   - Uses Operation template with Procedure section
   - Creates issue via `bee issue create`
+  - Expected: stays in Lightweight flow (no escalation)
 - **Key criteria to watch**: Issue type confirmation, priority confirmation, Operation template usage
 
 ### Case 8: Cross-platform setup (Backlog issues + GitHub PRs)
@@ -93,7 +99,146 @@ For each test case:
   - Creates the issue on Backlog (not GitHub)
   - Issue type confirmation step is shown
   - Priority confirmation step is shown (Backlog-specific)
+  - Expected: stays in Lightweight flow (no escalation)
 - **Key criteria to watch**: Correct platform detection, Backlog-specific fields
+
+## Design Flow Cases
+
+### Case 9: Simple feature design
+
+- **Persona**: Engineer describing a new feature
+- **Initial input**: "ユーザー検索機能を設計してissueに分解して"
+- **Expected behavior**:
+  - Explicit request triggers escalation to Design Flow (Step 2 criterion 1)
+  - D1 Research: investigates existing user model, API patterns, search infrastructure. Writes research file.
+  - D2 Design: asks clarifying questions (search fields, pagination, performance). Proposes approaches. Writes plan with task breakdown and Split Proposal.
+  - D3 Annotation: prompts user to annotate plan. Addresses annotations. Each task passes boring implementation test.
+  - D4 Issue Creation: confirms the Split Proposal via `AskUserQuestion` BEFORE creating anything, then creates parent issue + sub-issues with dependencies. Cleans up local files.
+- **Verification**:
+  - [ ] Research file contains relevant file paths and architecture analysis
+  - [ ] Plan has concrete code examples, not placeholders
+  - [ ] Each sub-issue is independently implementable
+  - [ ] Dependencies form a valid DAG
+  - [ ] Split proposed via `AskUserQuestion` before any parent/sub-issue is created — never automatic
+  - [ ] Local plan/research files are deleted after issue creation
+
+### Case 10: Complex multi-component feature
+
+- **Persona**: Engineer planning a large migration
+- **Initial input**: "認証システムをOAuth2に移行したい"
+- **Expected behavior**:
+  - Multi-area change (auth + session + middleware + routes) triggers escalation to Design Flow (Step 2 criterion 2)
+  - D1 Research: investigates current auth, session management, middleware, all auth-dependent routes.
+  - D2 Design: multiple approach options (gradual migration vs big bang, library choices). Task breakdown includes migration steps, backward compatibility.
+  - D3 Annotation: multiple rounds expected for a complex feature.
+  - D4 Issue Creation: split confirmed via `AskUserQuestion`, then parent + sub-issues with careful dependency ordering (infra first, then migration, then cleanup).
+- **Verification**:
+  - [ ] Research identifies ALL files touching authentication
+  - [ ] Design presents migration strategy options with trade-offs
+  - [ ] Tasks have correct dependency ordering (no circular deps)
+  - [ ] Sub-issues include rollback considerations where appropriate
+  - [ ] No sub-issue requires design judgment to implement
+  - [ ] Split proposed via `AskUserQuestion` before any parent/sub-issue is created — never automatic
+
+### Case 11: Bug-driven design
+
+- **Persona**: Engineer investigating a performance issue
+- **Initial input**: "ログインが遅い。調査して改善計画を立てて"
+- **Expected behavior**:
+  - Explicit request for investigation + planning triggers escalation to Design Flow
+  - D1 Research: profiles login flow, identifies bottlenecks, checks monitoring/logging.
+  - D2 Design: based on findings, proposes performance improvements as tasks.
+  - D4 Issue Creation: each improvement is a separate sub-issue with measurable acceptance criteria.
+- **Verification**:
+  - [ ] Research includes profiling data or file-level analysis of the login flow
+  - [ ] Acceptance criteria include measurable performance targets
+  - [ ] Tasks are ordered by impact (highest impact first, lowest dependency first)
+
+### Case 12: Cross-platform Design Flow (Backlog + GitHub)
+
+- **Persona**: Engineer designing a feature in a Backlog-managed project
+- **Initial input**: "Backlogで管理しているプロジェクトで新機能を設計したい"
+- **Expected behavior**:
+  - Detects Backlog as issue tracker from CLAUDE.md or user input.
+  - Uses `bee` CLI for issue creation.
+  - Handles Backlog's parent-child issue structure.
+  - Mentions dependencies in issue body (Backlog lacks built-in blocking).
+- **Verification**:
+  - [ ] Correct platform detection
+  - [ ] Uses `bee issue create` with `--parent` flag
+  - [ ] Dependencies noted in issue body since Backlog lacks blocking feature
+  - [ ] Priority is confirmed with user (Backlog has built-in priority levels)
+
+### Case 13: Annotation cycle depth
+
+- **Persona**: Engineer refining a design after seeing the first draft
+- **Setup**: After plan is written, user annotates with `<!-- NOTE: completely different approach, use X instead of Y -->`
+- **Expected behavior**:
+  - Claude reads the annotation and rewrites the affected tasks.
+  - Code examples are updated to reflect the new approach.
+  - Dependencies are rechecked (approach change may alter dependency graph).
+  - Boring implementation test is re-run on all affected tasks.
+- **Verification**:
+  - [ ] Annotation is fully addressed (not partially)
+  - [ ] Code examples match the new approach
+  - [ ] Dependency graph is updated if needed
+  - [ ] No stale references to the old approach remain
+
+## Flow-Selection and Split-Proposal Cases (new)
+
+### Case 14: Borderline escalation
+
+- **Persona**: Backend engineer
+- **Initial input**: "Add rate limiting to the API and an admin toggle for it"
+- **Expected behavior**:
+  - Signals are weak/mixed (2 areas: API + admin UI, but modest scope) — the skill either justifies staying in the Lightweight Flow, justifies escalating with a clear reason, or asks the user directly via `AskUserQuestion`
+  - Silently guessing on weak signals without any justification or question is a failure
+- **Verification**:
+  - [ ] A flow decision is made with an explicit, stated reason, OR the user is asked
+  - [ ] No silent, unexplained flow choice on ambiguous input
+
+### Case 15: Mid-flight escalation
+
+- **Persona**: Engineer with a request that looks simple at first
+- **Initial input**: "Add validation to the signup form"
+- **Setup**: Codebase analysis (Step L3) reveals the change actually requires touching the frontend form, a new backend validation service, and a schema migration (3+ areas)
+- **Expected behavior**:
+  - Skill announces the findings from codebase analysis
+  - Proposes switching to the Design Flow via `AskUserQuestion` rather than continuing to draft an oversized single issue
+  - Does NOT silently continue in the Lightweight Flow once the escalation criteria are clearly met
+- **Verification**:
+  - [ ] Findings are stated before proposing escalation
+  - [ ] Escalation is proposed, not forced
+  - [ ] If the user declines, the skill continues in Lightweight Flow with the now-broader scope acknowledged
+
+### Case 16: Split declined
+
+- **Persona**: Engineer who wants one ticket to track everything
+- **Setup**: Design Flow (D1-D3) completes and yields 4 tasks; at the Step D4 Split Proposal gate, the user picks "Create a single issue"
+- **Expected behavior**:
+  - Skill creates ONE comprehensive issue containing the task breakdown as a `## Task Breakdown` section (not a parent/sub-issue hierarchy)
+  - No sub-issues or grandchild issues are created
+  - Plan and research files are still cleaned up
+- **Verification**:
+  - [ ] Exactly one issue is created on the tracker
+  - [ ] The issue body includes all 4 tasks as clearly delimited subsections
+  - [ ] No sub-issue API/CLI calls are made
+  - [ ] Local plan/research files are deleted
+
+### Case 17: Nested split (grandchild)
+
+- **Persona**: Engineer designing a feature on GitHub where one task is unusually large
+- **Setup**: Design Flow decomposition yields 3 tasks; after refinement, one task remains Large (~2+ hours) and cannot be shrunk further without becoming multiple deliverables
+- **Expected behavior**:
+  - Skill proposes a nested split for that task specifically (grandchild issues under it) as part of the Step D4 Split Proposal, shown in the ASCII tree with a 3rd level
+  - User confirms via `AskUserQuestion`
+  - GitHub nested sub-issue links are created (child issue linked to parent; grandchild issues linked to the child)
+  - Output hierarchy tree shows all 3 levels
+- **Verification**:
+  - [ ] Grandchild split is proposed only for the task that stayed Large, not applied to all tasks
+  - [ ] Maximum depth of 3 levels is respected
+  - [ ] `gh issue edit <child> --add-sub-issue <grandchild>` (or platform equivalent) is used to link grandchildren
+  - [ ] Final output tree correctly shows parent → child → grandchild
 
 ---
 
@@ -109,3 +254,4 @@ Record results here after each evaluation run.
 | 2026-03-05 | 4 | 1,2,3,4,5,6,7,8,9 | — | Clean pass. "Migrate to GraphQL" correctly reframed as "consolidate to single request". | No |
 | 2026-03-05 | 5 | 1,2,3,4,5,6,7,8,9 | — | Clean pass. "Sometimes" narrowed to "6+ items on Chrome" through 5 follow-up questions. | No |
 | 2026-03-05 | 6 | 1,2,3,4,5,6,7,9 | 8 | "Response within 24h" is an operational goal, not an implementation criterion. | Yes — added operational vs implementation criteria separation to Step 3 |
+| 2026-07-05 | — | — | — | Merged design-sprint into create-issue: added adaptive Lightweight/Design flow routing, Split Proposal gate, and cases 9-17 (9-13 renumbered from design-sprint, 14-17 new). Case numbering for 1-8 preserved from the original create-issue log above. | — |

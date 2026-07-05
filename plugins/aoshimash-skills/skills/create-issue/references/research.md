@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Deeply understand the codebase before any design work begins. The research artifact ensures:
+This procedure is used in the **Design Flow** (see SKILL.md Step 2) to deeply understand the codebase before any design work begins. The research artifact ensures:
 - Design decisions are grounded in reality (not assumptions)
 - Existing patterns, caching layers, and conventions are respected
 - No logic is duplicated unknowingly

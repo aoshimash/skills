@@ -6,6 +6,8 @@
 - [Feature Request](#feature-request)
 - [Technical Task](#technical-task)
 - [Operation](#operation)
+- [Parent Issue](#parent-issue)
+- [Sub-Issue](#sub-issue)
 
 ---
 
@@ -177,4 +179,98 @@
 ## References
 
 <!-- Related issues, runbooks, operational docs -->
+```
+
+---
+
+## Parent Issue
+
+Used in the Design Flow to represent an entire feature/initiative that has been decomposed into sub-issues.
+
+```markdown
+<!-- 1-2 sentence summary of the feature and its purpose -->
+
+## Motivation
+
+<!-- From the design discussion: why this feature matters -->
+
+## Background
+
+<!-- From research: non-obvious context, constraints, past decisions -->
+<!-- Do NOT include implementation details here -->
+
+### Related Code
+
+<!-- Key file paths from research that provide context -->
+
+## Proposal
+
+<!-- Desired end state from the plan's Goal section -->
+
+## Task Overview
+
+<!-- Ordered list of sub-issues with dependency relationships -->
+
+| # | Task | Dependencies | Size |
+|---|------|--------------|------|
+| 1 | <title> | — | Small |
+| 2 | <title> | #1 | Medium |
+| 3 | <title> | #1 | Small |
+| 4 | <title> | #2, #3 | Medium |
+
+## Design Decisions
+
+<!-- From the plan's Design Decisions table -->
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| ... | ... | ... |
+
+## References
+
+<!-- Links to related issues, docs, or external resources -->
+```
+
+---
+
+## Sub-Issue
+
+Used in the Design Flow for each task in the plan. A sub-issue may itself be a **parent** when a task was further split into grandchild issues (nested sub-issues) — in that case its body also includes a Task Overview table for its own children, following the Parent Issue template above.
+
+```markdown
+<!-- 1-2 sentence summary of what this task accomplishes -->
+
+Parent: #<parent-issue-number>
+
+## Motivation
+
+<!-- Why this task exists, in context of the parent feature -->
+
+## Background
+
+<!-- Task-specific context from the plan -->
+
+### Files
+
+<!-- Exact file paths to create or modify -->
+
+| File | Action | Changes |
+|------|--------|---------|
+| `path/to/file` | Create / Modify | What changes and why |
+
+## Implementation Approach
+
+<!-- From the plan: concrete approach with code examples -->
+<!-- This is NOT "how to implement" as imperative instructions -->
+<!-- It IS "what the implementation looks like" as reference code -->
+
+## Acceptance Criteria
+
+- [ ] <criterion 1>
+- [ ] <criterion 2>
+
+## Dependencies
+
+<!-- Link to blocking issues -->
+Blocked by: #<issue-number> <!-- if any -->
 ```

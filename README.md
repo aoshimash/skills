@@ -16,54 +16,51 @@ Personal Claude Code skills collection, packaged as a Plugin for easy installati
 /plugin install aoshimash-skills@aoshimash-skills
 ```
 
-## Sprint Workflow
+## Issue Workflow
 
-`design-sprint` and `run-sprint` work together for issue-driven development. Design produces issues; sprint consumes them. Either skill also works standalone — you can hand-write issues and run-sprint them, or design-sprint issues and implement them manually.
+`create-issue` and `implement-issue` cover the full issue lifecycle. Each adapts to scale: `create-issue` goes from a quick single issue to a researched, user-annotated design decomposed into an issue hierarchy; `implement-issue` goes from one interactive implementation to a dependency-ordered parallel batch. The issue tracker is the interface between them — either skill also works standalone, since a hand-written issue works with `implement-issue` and a `create-issue` issue can be implemented manually.
 
 ```
-design-sprint                              run-sprint
-┌────────────────────────────┐            ┌──────────────────────────────┐
-│ 1. Research                │            │ 1. Fetch issues              │
-│    Deep codebase analysis  │            │    Parent / milestone / label│
-│    → research.md           │            │                              │
-│                            │            │ 2. Dependency graph          │
-│ 2. Design                  │            │    Build DAG, detect cycles  │
-│    Brainstorm with user    │            │    Visualize execution order  │
-│    → plan.md               │            │                              │
-│                            │  Issues    │ 3. Parallel execution        │
-│ 3. Annotation cycle        │ ────────→  │    Worktree per issue        │
-│    User annotates plan.md  │  (tracker) │    Subagent per issue        │
-│    Claude addresses notes  │            │                              │
-│    Repeat 1-N rounds       │            │ 4. Two-stage review          │
-│                            │            │    Spec compliance → Quality │
-│ 4. Issue creation          │            │                              │
-│    Parent + sub-issues     │            │ 5. Summary                   │
-│    Dependencies linked     │            │    Status table + PR links   │
-│    Local files cleaned up  │            │                              │
-└────────────────────────────┘            └──────────────────────────────┘
+create-issue                               implement-issue
+┌─────────────────────────────┐            ┌──────────────────────────────┐
+│ Lightweight Flow (default)  │            │ Single Mode (default)        │
+│  Gather → Analyze → Draft   │            │  Plan → Approve → Implement  │
+│  → Self-eval → Create       │            │  → PR → Review gates         │
+│                             │            │                              │
+│ Design Flow (escalated)     │  Issues    │ Batch Mode (parent/milestone │
+│  Research → Design          │ ────────→  │  /label/list)                │
+│  → Annotation cycle         │  (tracker) │  Dependency graph            │
+│  → Split Proposal (asks)    │            │  → Parallel worktrees        │
+│  → Issue hierarchy          │            │  → Review gates + pattern    │
+│                             │            │    propagation → Summary     │
+└─────────────────────────────┘            └──────────────────────────────┘
 ```
 
 **Typical usage:**
 
 ```
-> /design-sprint
-# → Research → Design → Annotate plan → Create issue hierarchy
+> /create-issue
+# Simple request → gather info → analyze codebase → draft → self-eval → create
+# Complex request → research → design → annotate plan → propose a split → create issue(s)
 
-> /run-sprint
-# → Pick up those issues → Build dependency graph → Implement in parallel → Review → Done
+> /implement-issue
+# Single issue → plan → approve → implement → PR → two-stage review
+# Parent issue / milestone / label / list → confirm batch → dependency graph
+#   → parallel worktrees → review gates → summary
 ```
 
 **Key properties:**
 
 - **Issue tracker is the interface** — Both skills connect only through the issue tracker (GitHub, GitLab, Backlog). No skill-specific files persist after completion.
-- **Works with humans and AI** — Issues created by design-sprint are readable and implementable by anyone. Issues written by hand work with run-sprint.
-- **Annotation cycle** — Plans are refined through inline notes in a local markdown file. The file is deleted after issues are created.
-- **Parallel execution** — run-sprint resolves issue dependencies as a DAG and dispatches independent issues in parallel using git worktrees.
-- **Two-stage review** — Each issue's PR is reviewed for spec compliance (does it match the issue?) then code quality (is it well-written?).
+- **Works with humans and AI** — Issues created by `create-issue` are readable and implementable by anyone. Issues written by hand work with `implement-issue`.
+- **Splitting is always proposed, never automatic** — `create-issue` defaults to a single issue; a parent + sub-issue (or nested grandchild) hierarchy is only created after the user confirms a Split Proposal.
+- **Annotation cycle** — in the Design Flow, plans are refined through inline notes in a local markdown file. The file is deleted after issues are created.
+- **Parallel execution** — in Batch mode, `implement-issue` resolves issue dependencies as a DAG and dispatches independent issues in parallel using git worktrees.
+- **Two-stage review, always** — every PR (single or batch) is reviewed for spec compliance (does it match the issue?) then code quality (is it well-written?). Pattern propagation across in-flight PRs only applies in Batch mode.
 
 ### Design Philosophy
 
-The sprint workflow draws from two sources and combines them with an issue-centric approach:
+The issue workflow draws from two sources and combines them with an issue-centric approach:
 
 **From [superpowers](https://github.com/obra/superpowers):**
 - Staged workflow with hard gates (no implementation before design approval)
@@ -80,17 +77,15 @@ The sprint workflow draws from two sources and combines them with an issue-centr
 
 **Issue-centric design (original):**
 - superpowers stores specs and plans in `docs/superpowers/` files. This works for solo use but creates friction in team settings — not everyone uses the same tools, and tool-specific files clutter the repo
-- Instead, the issue tracker is the single shared artifact. design-sprint uses local files only temporarily during the annotation cycle, then converts everything to issues and deletes the files
+- Instead, the issue tracker is the single shared artifact. `create-issue`'s Design Flow uses local files only temporarily during the annotation cycle, then converts everything to issues and deletes the files
 - This means a team member who doesn't use these skills can still read the issues, pick one up, and implement it — the workflow degrades gracefully
 
 ## Skills
 
 | Skill | Description |
 |-------|-------------|
-| [design-sprint](plugins/aoshimash-skills/skills/design-sprint/) | Research codebase, design a feature via brainstorming and annotation cycles, and create an issue hierarchy (parent + sub-issues with dependencies) |
-| [run-sprint](plugins/aoshimash-skills/skills/run-sprint/) | Fetch a set of issues, build a dependency graph, implement them in parallel (worktrees + subagents) with two-stage review per issue |
-| [create-issue](plugins/aoshimash-skills/skills/create-issue/) | Create well-structured issues on any platform (GitHub, GitLab, etc.) with codebase analysis and self-evaluation |
-| [implement-issue](plugins/aoshimash-skills/skills/implement-issue/) | Read a platform issue, plan implementation, get approval, implement changes, and open a PR/MR |
+| [create-issue](plugins/aoshimash-skills/skills/create-issue/) | Create well-structured issues on any platform (GitHub, GitLab, Backlog) with codebase analysis — from a quick single issue to a designed issue hierarchy (research → design → annotation cycle → parent + sub-issues) |
+| [implement-issue](plugins/aoshimash-skills/skills/implement-issue/) | Read issues, plan, implement, and open PRs with two-stage review — single-issue interactive by default, with batch mode (dependency graph, worktrees, parallel subagents) for parent issues / milestones / labels / lists |
 | [analyze-sessions](plugins/aoshimash-skills/skills/analyze-sessions/) | Analyze Claude Code session history to detect recurring patterns and propose improvements to skills and settings.json |
 | [multi-agent-review](plugins/aoshimash-skills/skills/multi-agent-review/) | Run multiple AI CLIs (Claude, Codex, Gemini) in parallel for code review and produce a unified review output |
 | [respond-to-pr-review](plugins/aoshimash-skills/skills/respond-to-pr-review/) | Process PR review comments one by one — explain, confirm actions, implement fixes, and post reply comments |
