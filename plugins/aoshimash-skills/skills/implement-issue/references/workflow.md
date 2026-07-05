@@ -1,5 +1,24 @@
 # Workflow Detail
 
+## Execution Modes
+
+This pipeline runs in one of two modes:
+
+- **Interactive** (Single mode) — the main agent executes this workflow directly, with the user present. This is the default.
+- **Autonomous** (Batch mode) — an implementer subagent executes this workflow with no access to the user, dispatched by the orchestrator described in [batch.md](batch.md). Every point below that normally asks the user has an Autonomous-mode replacement instead.
+
+| Step | Interactive | Autonomous |
+|---|---|---|
+| 1-1 missing/vague issue fields | Ask the user, or propose criteria and confirm | Stop and report status `NEEDS_CONTEXT` with what is missing |
+| 1-3 design decisions | `AskUserQuestion` with numbered options | Use the issue's Implementation Approach section if present; otherwise choose the option most consistent with project conventions and note the choice in the PR body; if genuinely undecidable, stop and report `NEEDS_CONTEXT` |
+| 1-6 plan approval | Present as text + `AskUserQuestion` gate (Approve / Request changes / Abort) | No gate — the plan stays internal to the subagent and is not presented for approval |
+| 2-1 working environment | The choice made in Phase 0 Setup (Worktree / New branch / Current branch) | Always the worktree the orchestrator already created before dispatch |
+| 2-3 checks fail after 3 attempts | Escalate via `AskUserQuestion` (continue / skip / abandon) | Stop and report status `BLOCKED` with the error |
+| 2-4 self-review needs human judgment | Escalate via `AskUserQuestion` | Note the concern in the PR description, continue, and report status `DONE_WITH_CONCERNS` |
+| 3-2 unfixable CI failure | Note in the PR description, tell the user | Note in the PR description and report status `DONE_WITH_CONCERNS` |
+
+Every step below is written from the Interactive perspective by default; where behavior diverges, an "Autonomous mode" note follows the step, keyed to the table above.
+
 ## Phase 1: Plan
 
 ### 1-1. Parse the Issue
@@ -18,6 +37,8 @@ Extract and organize the following from the issue body:
 If any critical field is missing or ambiguous:
 - **Missing**: Ask the user to provide it.
 - **Vague** (e.g., "it should work well"): Propose 2–3 concrete, binary-testable criteria and ask the user to confirm or adjust. Do not proceed until acceptance criteria are specific enough to verify.
+
+**Autonomous mode**: do not ask the user. If a critical field is missing or too vague to act on, stop immediately and return status `NEEDS_CONTEXT` with a specific description of what is missing.
 
 ### 1-2. Analyze the Codebase
 
@@ -55,6 +76,8 @@ For each decision point, use `AskUserQuestion` with numbered options:
 When the user selects "Other" and provides free-text input, treat their text as the chosen approach. Incorporate it directly into the plan — do NOT re-present a new set of multiple-choice options. Only re-ask if the free-text is genuinely ambiguous (e.g., too vague to determine a concrete implementation direction, or contradicts constraints). If re-asking, quote the user's text and explain specifically what needs clarification.
 
 If no design decisions require human input, skip this step and proceed to 1-4.
+
+**Autonomous mode**: do not use `AskUserQuestion`. If the issue includes an Implementation Approach section, follow it. Otherwise choose the option most consistent with existing project conventions, and note the choice and its rationale in the PR body so a human reviewer can revisit it. If the decision is genuinely undecidable (no convention to lean on, and the outcome materially changes the result), stop and return status `NEEDS_CONTEXT`.
 
 ### 1-4. Draft Implementation Plan
 
@@ -129,11 +152,15 @@ Only re-ask for clarification if the feedback is genuinely ambiguous (e.g., cont
 
 **Important:** Do NOT use `EnterPlanMode`/`ExitPlanMode` for plan approval. The `ExitPlanMode` UI can cause accidental rejections with no way to provide feedback, leading to abandoned sessions.
 
+**Autonomous mode**: skip this step entirely. There is no user to present the plan to — the plan drafted in 1-4 is used directly as the internal basis for implementation, without a gate.
+
 ## Phase 2: Implement
 
 ### 2-1. Prepare Working Environment
 
 Use the implementation location chosen in Phase 0 Setup.
+
+**Autonomous mode**: the working environment is always the worktree the orchestrator created before dispatching this subagent — skip the branching below and `cd` into that worktree path.
 
 Branch naming convention (for new branch and worktree):
 
@@ -222,6 +249,8 @@ If a fix requires a design decision (e.g., how to handle an unexpected edge case
 - Which checks are still failing and what was tried
 - Options: continue trying, skip the failing check, or abandon the implementation
 
+**Autonomous mode**: do not use `AskUserQuestion`. Stop and return status `BLOCKED` with which checks are failing and what was tried.
+
 If the project has no defined checks, skip this step but note it when creating the PR.
 
 ### 2-4. AI Self-Review (loop until clean)
@@ -254,13 +283,15 @@ Check for:
 - Fix manually
 - Abandon the implementation
 
-**After self-review completes**, output a visible summary to the user before proceeding to commit:
+**Autonomous mode**: do not use `AskUserQuestion`. Note the remaining concerns in the PR description and continue — this issue will be reported as status `DONE_WITH_CONCERNS`.
+
+**After self-review completes**, output a visible summary before proceeding to commit:
 
 ```
 Self-review complete: N round(s), N issue(s) found, N fixed, N remaining
 ```
 
-This ensures the user can verify that self-review was performed and see the result at a glance.
+Interactive mode: this is shown to the user directly. Autonomous mode: this line is included in the subagent's final report to the orchestrator. This ensures self-review is verifiable and the result is visible at a glance either way.
 
 ### 2-5. Commit
 
@@ -320,6 +351,14 @@ Closes #<issue-number>
 - [ ] <any manual testing steps>
 ```
 
+### 3-1b. Review Gates
+
+After the PR/MR is created, every issue — Interactive or Autonomous — goes through the two-stage review described in [review-gates.md](review-gates.md): Stage 1 spec compliance, then Stage 2 code quality.
+
+**Interactive mode**: the main agent runs both stages itself and fixes/pushes directly; there is no separate reviewer subagent to dispatch. See review-gates.md's single-issue notes for the escalation path when fixes don't converge.
+
+**Autonomous mode**: this subagent does NOT run the review gates itself. Stop after 3-2 (CI monitoring) and report status back to the orchestrator, which dispatches the reviewer subagents and re-invokes this implementer for fix rounds if needed. Stage 2.5 (pattern propagation) only ever runs in Autonomous/batch mode, coordinated by the orchestrator across all in-flight issues — never in Interactive mode.
+
 ### 3-2. Monitor CI
 
 After the PR/MR is created, verify that CI passes. See the platform-specific guide for the exact command.
@@ -333,10 +372,18 @@ After the PR/MR is created, verify that CI passes. See the platform-specific gui
    - If fixable: push a fix commit and re-run CI monitoring.
    - If not fixable or CI is not configured: note the failure in the PR description and proceed.
 
+**Autonomous mode**: same investigate/fix loop, but if the failure is not fixable within the 1 retry, note it in the PR description and continue — this issue will be reported as status `DONE_WITH_CONCERNS` rather than proceeding silently as if nothing happened.
+
 ### 3-3. Comment on Issue
 
 If the issue tracker supports comments (e.g., Backlog), post a comment on the issue with the PR/MR link. This is especially useful for cross-platform setups where the PR is not automatically linked to the issue.
 
-### 3-4. Return Result
+### 3-4. Report Status
 
-Return the PR/MR URL to the user.
+**Interactive mode**: return the PR/MR URL to the user directly, along with a plain-language summary of the outcome (equivalent to one of the statuses below).
+
+**Autonomous mode**: return exactly one of the following statuses to the orchestrator, plus the PR/MR URL or failure details:
+- `DONE` — PR created, CI passing, review gates not yet run (orchestrator runs them next)
+- `DONE_WITH_CONCERNS` — PR created but with noted concerns (unfixable CI failure, unresolved self-review issue, or an undecidable design decision that was resolved by convention)
+- `NEEDS_CONTEXT` — missing or too-vague information, cannot proceed (see 1-1, 1-3)
+- `BLOCKED` — failed after retries, with error details (see 2-3)

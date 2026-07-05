@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Transform the research into a concrete, implementable design through structured brainstorming with the user. The output is a plan file with task breakdown.
+This procedure is used in the **Design Flow** (see SKILL.md Step 2) to transform research into a concrete, implementable design through structured brainstorming with the user. The output is a plan file with a task breakdown, and — if the user approves — a proposal to split the work into a parent + sub-issues.
 
 ## Procedure
 
@@ -33,7 +33,7 @@ When multiple valid approaches exist:
 
 ### 3. Task Decomposition
 
-Break the design into tasks where each task = one sub-issue. For each task:
+Break the design into tasks where each task = one potential sub-issue. For each task:
 
 | Field | Requirement |
 |-------|-------------|
@@ -44,6 +44,8 @@ Break the design into tasks where each task = one sub-issue. For each task:
 | **Acceptance Criteria** | Binary pass/fail conditions |
 | **Dependencies** | Which other tasks must complete first |
 | **Estimated size** | Small (< 30 min) / Medium (30-60 min) / Large (1-2 hours). If Large, consider splitting further |
+
+If decomposition yields **exactly one task** at Small or Medium size, do not force a hierarchy — note this to the user and fall back to a single issue: skip to the Split Proposal step, which will recommend a single issue in this case, then finish via the Lightweight Flow's draft/self-eval/create steps (SKILL.md Steps L4–L6) using that one task as the issue content.
 
 ### 4. The "Boring Implementation" Test
 
@@ -86,7 +88,7 @@ Status: Draft
 
 **Purpose:** <why this task>
 **Dependencies:** None | Task N
-**Size:** Small / Medium
+**Size:** Small / Medium / Large
 
 **Files:**
 - `path/to/file.ts` — Create / Modify: <what changes>
@@ -107,15 +109,27 @@ Status: Draft
 
 <ASCII visualization of task dependencies>
 
+## Split Proposal
+
+<See Split Proposal section below — filled in after task decomposition>
+
 ## Out of Scope
 
 - <explicitly excluded items>
 ```
 
-### 6. Present the Plan
+### 6. Split Proposal
+
+See the **Split Proposal** section in SKILL.md for the full decision criteria. Summary:
+
+1. Evaluate the task breakdown against the split criteria (independent tasks → parent + sub-issues; a task still Large after refinement → nested grandchild issues on platforms that support it).
+2. Fill in the plan's `## Split Proposal` section with the proposed hierarchy as an ASCII tree, sizes, and dependencies.
+3. Do NOT ask for approval yet — the proposal is presented to the user together with the rest of the plan in Step 7, and confirmed later at the Split Proposal gate (after the Annotation Cycle, before Issue Creation).
+
+### 7. Present the Plan
 
 Present the plan file path to the user:
 
-> "Plan is written to `<path>`. Please review it before we start the annotation cycle. You can open it in your editor and add inline notes (HTML comments like `<!-- NOTE: ... -->`) to any part you want to change."
+> "Plan is written to `<path>`. Please review it before we start the annotation cycle. You can open it in your editor and add inline notes (HTML comments like `<!-- NOTE: ... -->`) to any part you want to change, including the Split Proposal."
 
 Proceed to the Annotation Cycle phase.

@@ -2,22 +2,28 @@
 
 ## Purpose
 
-Every completed issue goes through two review stages before being marked as done. This mirrors superpowers' two-stage review pattern:
+Every PR/MR goes through two review stages before being marked as done — whether it came from Single mode (one issue, interactive) or Batch mode (many issues, orchestrated). This mirrors superpowers' two-stage review pattern:
 
 1. **Spec compliance** — Does the implementation match what the issue asked for?
 2. **Code quality** — Is the code well-written, safe, and maintainable?
 
 These are separate concerns. Spec compliance prevents over-building and under-building. Code quality catches bugs and style issues. Combining them into one review loses signal.
 
+**Single mode note**: with only one issue in flight, the main agent runs both stages itself (there is no separate orchestrator/subagent split). Stage 2.5 (pattern propagation) never runs in Single mode — there are no other in-flight PRs to scan.
+
+**Batch mode note**: the orchestrator dispatches a fresh reviewer subagent per stage per issue, and Stage 2.5 is active whenever a rule violation is found with 2+ issues in flight.
+
 ## Stage 1: Spec Compliance Review
 
-### Subagent Instructions
+### Reviewer Instructions
 
-Dispatch a reviewer subagent with:
+Review with:
 
 - The issue body (the "spec")
 - The PR diff (`git diff origin/<default-branch>...<branch-name>`)
 - Instructions below
+
+**Batch mode**: dispatch a dedicated reviewer subagent with the above context. **Single mode**: the main agent performs this review directly on the diff it just produced.
 
 ### Review Criteria
 
@@ -52,20 +58,23 @@ Issues:
 
 If spec compliance fails:
 
-1. Send the review output to the implementer subagent.
-2. Implementer fixes the issues.
-3. Re-run spec compliance review.
-4. Max 2 fix rounds. If still failing, mark issue as `DONE_WITH_CONCERNS` and include the review output in the sprint summary.
+1. Fix the issues found (in Batch mode: send the review output to the implementer subagent, which fixes and pushes; in Single mode: the main agent fixes and pushes directly).
+2. Re-run spec compliance review.
+3. Max 2 fix rounds. If still failing:
+   - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS` and include the review output in the batch summary.
+   - **Single mode**: present the remaining findings to the user via `AskUserQuestion` (Proceed as-is / Keep fixing / Abandon) instead of silently marking anything — there is a user present to decide.
 
 ## Stage 2: Code Quality Review
 
-### Subagent Instructions
+### Reviewer Instructions
 
-Dispatch a reviewer subagent with:
+Review with:
 
 - The PR diff
 - Project conventions (CLAUDE.md path)
 - Instructions below
+
+**Batch mode**: dispatch a dedicated reviewer subagent. **Single mode**: the main agent performs this review directly.
 
 ### Review Criteria
 
@@ -105,16 +114,15 @@ Verdict: PASS / NEEDS_FIXES
 
 If code quality review finds Critical or Important issues:
 
-1. Send the review output to the implementer subagent.
-2. Implementer fixes Critical and Important issues (Minor issues are optional).
-3. Re-run code quality review.
-4. Max 2 fix rounds. If Critical issues remain, mark issue as `DONE_WITH_CONCERNS`.
+1. Fix Critical and Important issues (Minor issues are optional). In Batch mode, send the review output to the implementer subagent; in Single mode, the main agent fixes directly.
+2. Re-run code quality review.
+3. Max 2 fix rounds. If Critical issues remain:
+   - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS`.
+   - **Single mode**: present the remaining Critical findings to the user via `AskUserQuestion` (Proceed as-is / Keep fixing / Abandon).
 
-## Stage 2.5: Pattern Propagation
+## Stage 2.5: Pattern Propagation (Batch Mode Only)
 
-### Trigger Condition
-
-Run Stage 2.5 when Stage 2's output contains any issue with `Type: rule-violation-instance`.
+**Precondition**: run Stage 2.5 only in Batch mode, with 2+ issues in flight, when Stage 2's output contains any issue with `Type: rule-violation-instance`. In Single mode, always skip this stage — there are no other in-flight PRs to propagate a fix to.
 
 ### Classification Heuristic
 
@@ -138,7 +146,7 @@ Classify a violation as `rule-violation-instance` (rather than a one-off bug) wh
 
 ### Non-Blocking Rule
 
-Failures in propagation fix subagents do **not** block the original issue from completing. If a propagation fix fails, record it in the sprint summary under the original issue.
+Failures in propagation fix subagents do **not** block the original issue from completing. If a propagation fix fails, record it in the batch summary under the original issue.
 
 ## Review Flow Diagram
 
@@ -147,19 +155,21 @@ PR Created
   ↓
 Stage 1: Spec Compliance
   ├─ PASS → Stage 2
-  └─ FAIL → Implementer fixes → Re-review (max 2 rounds)
+  └─ FAIL → Fix (subagent in Batch / main agent in Single) → Re-review (max 2 rounds)
               ├─ PASS → Stage 2
-              └─ FAIL → DONE_WITH_CONCERNS
+              └─ FAIL → Batch: DONE_WITH_CONCERNS | Single: ask user
   ↓
 Stage 2: Code Quality
-  ├─ PASS (no Critical/Important) → Stage 2.5 check
-  └─ NEEDS_FIXES → Implementer fixes → Re-review (max 2 rounds)
-              ├─ PASS → Stage 2.5 check
-              └─ Still Critical → DONE_WITH_CONCERNS
+  ├─ PASS (no Critical/Important) → Mode check
+  └─ NEEDS_FIXES → Fix → Re-review (max 2 rounds)
+              ├─ PASS → Mode check
+              └─ Still Critical → Batch: DONE_WITH_CONCERNS | Single: ask user
   ↓
-Stage 2.5: Pattern Propagation (only if rule-violation-instance found)
-  ├─ No rule violations → DONE
-  └─ rule-violation-instance → Scan other in-flight PRs
-              ├─ No matches / user skips → DONE
-              └─ User approves → Dispatch fix subagents → DONE (failures non-blocking)
+Mode check
+  ├─ Single mode → DONE (Stage 2.5 always skipped)
+  └─ Batch mode → Stage 2.5 check
+              ├─ No rule violations → DONE
+              └─ rule-violation-instance → Scan other in-flight PRs
+                          ├─ No matches / user skips → DONE
+                          └─ User approves → Dispatch fix subagents → DONE (failures non-blocking)
 ```

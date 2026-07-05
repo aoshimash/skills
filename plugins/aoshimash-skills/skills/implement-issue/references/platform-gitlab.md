@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- `glab` CLI installed and authenticated
+- `glab` CLI installed and authenticated (`glab auth status`)
 
 ## Detect Platform
 
@@ -16,16 +16,53 @@ Check in order:
 glab issue view <number>
 ```
 
-To get structured output:
+Structured JSON:
 ```bash
 glab issue view <number> --output json
 ```
 
+## Detect Child Items of a Parent
+
+Used in Phase 0 (Setup and Mode Selection) to check whether a single referenced issue is a parent with open children. GitLab Free has no native sub-issue API — check issue links and task lists:
+
+```bash
+glab api "projects/:id/issues/<iid>/links"
+```
+
+Also parse the issue body for a `## Tasks` task list (`- [ ] #N`) — this is how the create-issue skill's Design Flow represents children on GitLab.
+
+## List Issues by Milestone / by Label
+
+Used in Batch mode (Phase 0 source selection):
+
+```bash
+glab issue list --milestone "<milestone>" --output json
+glab issue list --label "<label>" --output json
+```
+
+## Check Dependency Links
+
+Check related issues and blocking relationships:
+```bash
+glab api "projects/:id/issues/<iid>/links"
+```
+
+Also parse the issue body for `Blocked by: #N` patterns.
+
 ## Create Branch
+
+**New branch or current-branch flows (Single mode):**
 
 ```bash
 git checkout main && git pull
 git checkout -b <branch-name>
+```
+
+**Worktree flow (Single mode default, and always in Batch mode):**
+
+```bash
+git fetch origin
+git worktree add .claude/worktrees/<branch-name> -b <branch-name> origin/<default-branch>
 ```
 
 ## Push Branch
@@ -59,8 +96,19 @@ Use `Relates to #<number>` if the MR only partially addresses the issue.
 
 ## Monitor CI
 
-After creating the MR, monitor CI and wait for all checks to complete:
-
 ```bash
 glab mr checks
+```
+
+## Comment on Issue
+
+```bash
+glab issue note <number> --message "<comment>"
+```
+
+## CLAUDE.md Config Example
+
+```markdown
+## Issue Tracker
+- platform: gitlab
 ```
