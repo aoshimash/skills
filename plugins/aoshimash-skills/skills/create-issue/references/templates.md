@@ -231,6 +231,8 @@ Used in the Design Flow to represent an entire feature/initiative that has been 
 <!-- Links to related issues, docs, or external resources -->
 ```
 
+> **Note**: The Task Overview table is written with plan-local numbers at creation time (`#1`, `#2`, etc. in the Dependencies column). Step 2.5 of [issue-creation.md](issue-creation.md) updates the table with real issue numbers after sub-issues are created.
+
 ---
 
 ## Sub-Issue
