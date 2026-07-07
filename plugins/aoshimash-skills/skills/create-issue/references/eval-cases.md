@@ -121,6 +121,8 @@ For each test case:
   - [ ] Dependencies form a valid DAG
   - [ ] Split proposed via `AskUserQuestion` before any parent/sub-issue is created — never automatic
   - [ ] Local plan/research files are deleted after issue creation
+  - [ ] Parent issue's Task Overview Dependencies column uses real sub-issue numbers (e.g., #259), not plan-local placeholders (e.g., #1)
+  - [ ] Parent issue's Task Overview Task column is updated to `#<number> — <title>` format
 
 ### Case 10: Complex multi-component feature
 
@@ -239,6 +241,8 @@ For each test case:
   - [ ] Maximum depth of 3 levels is respected
   - [ ] `gh issue edit <child> --add-sub-issue <grandchild>` (or platform equivalent) is used to link grandchildren
   - [ ] Final output tree correctly shows parent → child → grandchild
+  - [ ] Parent issue's Task Overview is updated with real child issue numbers after sub-issues are created
+  - [ ] Child issue's Task Overview is updated with real grandchild issue numbers after grandchildren are created
 
 ---
 
