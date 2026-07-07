@@ -65,9 +65,46 @@ For each task in the plan, create a sub-issue using the **Sub-Issue** template f
 - Acceptance Criteria — from the task
 - Dependencies — `Blocked by: #<issue-number>` for any blocking sub-issues
 
-Create each sub-issue using the platform CLI.
+Create each sub-issue using the platform CLI. As you create each sub-issue, record the mapping from its plan-local index (the `#` column value in the Task Overview table: 1 for the first task, 2 for the second, etc.) to the real issue number assigned by the platform. You will need this mapping in Step 3.5.
 
-**Grandchild issues**: if the user approved a nested split for a task in Step 1 (that task was itself decomposed further), treat that task as a **child that is also a parent**: create it using the Sub-Issue template (with `Parent: #<parent-issue-number>`) plus its own `## Task Overview` table for its grandchildren, then create each grandchild using the Sub-Issue template with `Parent: #<child-issue-number>`. Link grandchildren to the child the same way children are linked to the parent (see platform guide). Maximum depth is 3 levels (parent → child → grandchild) — if a grandchild would still be Large, return to Task Decomposition and redesign instead of nesting further.
+**Grandchild issues**: if the user approved a nested split for a task in Step 1 (that task was itself decomposed further), treat that task as a **child that is also a parent**: create it using the Sub-Issue template (with `Parent: #<parent-issue-number>`) plus its own `## Task Overview` table for its grandchildren, then create each grandchild using the Sub-Issue template with `Parent: #<child-issue-number>`. Link grandchildren to the child the same way children are linked to the parent (see platform guide). Maximum depth is 3 levels (parent → child → grandchild) — if a grandchild would still be Large, return to Task Decomposition and redesign instead of nesting further. For each child-that-is-also-a-parent, maintain a separate local-to-real mapping for its grandchildren, to be used in Step 3.5.
+
+### 3.5. Update Task Overview Tables
+
+After all sub-issues (and grandchild issues) are created, the plan-local placeholder references in Task Overview tables must be replaced with real issue numbers. Platforms like GitHub auto-link any `#N` in issue bodies — leaving plan-local numbers like `#1` causes them to link to unrelated issues that happen to hold those numbers in the repository.
+
+**Parent issue update:**
+
+Using the local-to-real mapping collected in Step 3:
+
+1. Fetch the current parent issue body (e.g., `gh issue view <number> --json body -q '.body'`).
+2. In the `## Task Overview` table:
+   - **Task column**: prepend the real issue reference to each title — change `<title>` to `#<real-number> — <title>`
+   - **Dependencies column**: replace each plan-local reference (`#1`, `#2`, etc.) with the corresponding real issue number (`#259`, `#260`, etc.)
+   - Replace only within the Task Overview table rows — do not modify other sections of the body (e.g., References, Background).
+3. Update the parent issue body using the platform CLI (e.g., `gh issue edit <parent-number> --body "$(updated body)"`).
+
+Example — before (plan-local numbers):
+
+| # | Task | Dependencies | Size |
+|---|------|--------------|------|
+| 1 | Add pg_trgm index | — | Small |
+| 2 | Create search endpoint | #1 | Medium |
+| 3 | Add search UI | #1 | Small |
+| 4 | Add integration tests | #2, #3 | Medium |
+
+Example — after (real issue numbers #259–#262):
+
+| # | Task | Dependencies | Size |
+|---|------|--------------|------|
+| 1 | #259 — Add pg_trgm index | — | Small |
+| 2 | #260 — Create search endpoint | #259 | Medium |
+| 3 | #261 — Add search UI | #259 | Small |
+| 4 | #262 — Add integration tests | #260, #261 | Medium |
+
+**Grandchild case:**
+
+If any child issue was itself decomposed into grandchild issues and has its own `## Task Overview` table, apply the same update to that child issue's body after all its grandchildren are created, using the grandchild local-to-real mapping collected for that child in Step 3.
 
 ### 4. Link Issues to Their Parent
 
