@@ -284,4 +284,4 @@ Record results here after each evaluation run.
 | 2026-03-05 | 5 | 1,2,3,4,5,6,7,8,9 | — | Clean pass. "Sometimes" narrowed to "6+ items on Chrome" through 5 follow-up questions. | No |
 | 2026-03-05 | 6 | 1,2,3,4,5,6,7,9 | 8 | "Response within 24h" is an operational goal, not an implementation criterion. | Yes — added operational vs implementation criteria separation to Step 3 |
 | 2026-07-05 | — | — | — | Merged design-sprint into create-issue: added adaptive Lightweight/Design flow routing, Split Proposal gate, and cases 9-17 (9-13 renumbered from design-sprint, 14-17 new). Case numbering for 1-8 preserved from the original create-issue log above. | — |
-| 2026-07-08 | — | — | — | Added criterion 10 (External facts verified) to Lightweight Flow L5 and a Fact-Check External Claims gate (D4 Step 0) to Design Flow, per issue #54 (real-world incident: aoshimash/homelab-k8s#258–260). Added Cases 18-19. | — |
+| 2026-07-08 | — | — | — | Added criterion 10 (External facts verified) to Lightweight Flow L5 and a Fact-Check External Claims gate (D4 Step 0) to Design Flow, per issue #54 (real-world incident: aoshimash/homelab-k8s#258–#260). Added Cases 18-19. | — |
