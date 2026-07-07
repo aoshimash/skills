@@ -143,6 +143,7 @@ Before showing the draft to the user, evaluate it against all criteria below.
 
 - If a criterion fails due to **missing information from the user** → return to Step L2 and ask a targeted follow-up question. Do not guess or fill in gaps.
 - If a criterion fails due to **draft wording or structure** → revise the draft silently and re-evaluate.
+- If a criterion fails due to an **unverified external-software claim** → fetch the primary source (official docs, or the actual source/config/values file) to verify or correct the claim; if it cannot be cheaply verified, mark it as an assumption (e.g., "TBD", "unverified") instead of stating it as fact. Then re-evaluate.
 - Only present the draft after all checks pass.
 
 | # | Criterion | Pass condition |
@@ -156,6 +157,7 @@ Before showing the draft to the user, evaluate it against all criteria below.
 | 7 | **Proposal is unambiguous** | Two different engineers reading the Proposal would agree on what the desired end state is. If multiple interpretations are possible, the information is insufficient |
 | 8 | **Criteria are independently verifiable** | Each acceptance criterion has a clear binary outcome: it either passes or fails. No criterion requires subjective judgment |
 | 9 | **Self-contained** | A person or AI with zero prior context can read the issue and begin implementation without asking any clarifying questions |
+| 10 | **External facts verified** | Every precise, actionable claim about external/third-party software in the draft (default value, version constraint, config key name, required component/extension, licensing) is either verified against a primary source fetched this session, or explicitly marked as an assumption. Claims already verified against a primary source fetched during this session (e.g., in codebase/dependency research) don't need re-verification |
 
 ### L6: Create the Issue
 
@@ -218,12 +220,13 @@ See [references/issue-creation.md](references/issue-creation.md) for the detaile
 
 **Summary:**
 
-1. Confirm the Split Proposal (see below) — this is a separate, explicit gate even after the plan itself is approved.
-2. Create the **parent issue** from the plan's goal and design decisions section (or a single issue, if the user declined the split).
-3. Create **sub-issues** (and grandchild issues, if a nested split was approved) from each task in the plan.
-4. Link issues to their parent and establish dependency links between siblings.
-5. Clean up: delete the plan file and research file. The issues now hold all information.
-6. Return the parent issue URL and the list of sub-issue (and grandchild) URLs, as an ASCII tree.
+1. Fact-check external-software claims that will appear in the issue bodies against primary sources (or mark unverifiable ones as assumptions) before creating anything.
+2. Confirm the Split Proposal (see below) — this is a separate, explicit gate even after the plan itself is approved.
+3. Create the **parent issue** from the plan's goal and design decisions section (or a single issue, if the user declined the split).
+4. Create **sub-issues** (and grandchild issues, if a nested split was approved) from each task in the plan.
+5. Link issues to their parent and establish dependency links between siblings.
+6. Clean up: delete the plan file and research file. The issues now hold all information.
+7. Return the parent issue URL and the list of sub-issue (and grandchild) URLs, as an ASCII tree.
 
 ## Split Proposal
 
