@@ -7,7 +7,7 @@ For each test case:
 2. Trigger the create-issue skill
 3. Provide the user input described in the test case
 4. Respond to follow-up questions as described in the persona
-5. Evaluate the generated issue draft against the 9 quality criteria in Step L5 (Lightweight Flow) or the Split Proposal criteria (Design Flow)
+5. Evaluate the generated issue draft against the 10 quality criteria in Step L5 (Lightweight Flow) or the Split Proposal criteria (Design Flow)
 6. Record which flow (Lightweight/Design) was chosen and whether it matched the expectation
 7. Record results in the Evaluation Log section at the bottom
 
@@ -240,6 +240,35 @@ For each test case:
   - [ ] `gh issue edit <child> --add-sub-issue <grandchild>` (or platform equivalent) is used to link grandchildren
   - [ ] Final output tree correctly shows parent → child → grandchild
 
+## External Fact Verification Cases (new)
+
+### Case 18: Plausible-but-wrong external default (Lightweight Flow)
+
+- **Persona**: DevOps engineer describing a Helm chart deployment
+- **Initial input**: "We want to enable the built-in cache that ships with the `example-chart` Helm chart — it should already be running by default, we just need to configure it."
+- **Setup**: The chart's actual `values.yaml` (available for the tester to check, e.g. a local `values.yaml` with `cache.enabled: false`) shows the cache is disabled by default — the opposite of what the user's phrasing implies.
+- **Expected behavior**:
+  - Skill does not restate "enabled by default" as fact in the Background/Proposal without checking a primary source
+  - Skill fetches/reads the actual `values.yaml` (or equivalent primary source) before finalizing the draft, or — if no primary source is reachable in the test — marks the default-enabled claim as "unverified" instead of asserting it
+  - Step L5 criterion 10 blocks presentation of a draft that states the wrong default as fact
+- **Key criteria to watch**: #10 (External facts verified), #5 (Non-obvious context — must be correct, not just present)
+
+### Case 19: Plan carries unverified facts into Design Flow issue creation
+
+- **Persona**: Platform engineer designing a self-hosted app deployment (mirrors a real incident: aoshimash/homelab-k8s#258–#260)
+- **Setup**: D1 Research and D2 Design produce a plan whose task Background/Approach sections state three external-software claims from memory/search snippets, not from a primary source read this session:
+  1. "The Helm chart bundles the cache dependency by default" (actually `false` in the chart's `values.yaml`)
+  2. An acceptance criterion requiring a component that no longer exists in the current version of the target software
+  3. A "required Postgres extensions" list that is missing one required extension
+- **Expected behavior**:
+  - At D4 Step 0 (Fact-Check External Claims), before any issue is created, the skill identifies these three claims as precise/actionable external-software facts
+  - For each, it fetches a primary source (official docs, actual chart `values.yaml`/source) this session and corrects the claim, or — if unable to verify — marks it explicitly as an assumption ("TBD"/"unverified") rather than stating it as fact
+  - No issue is created until the gate is resolved (verified or explicitly marked)
+- **Verification**:
+  - [ ] All three claims are either corrected against a primary source or marked as assumptions before `gh issue create` (or platform equivalent) runs
+  - [ ] The gate does not re-verify unrelated codebase facts already grounded via direct file reads in D1 Research
+  - [ ] No issue is created with a stated-as-fact external claim that wasn't verified this session
+
 ---
 
 ## Evaluation Log
@@ -255,3 +284,4 @@ Record results here after each evaluation run.
 | 2026-03-05 | 5 | 1,2,3,4,5,6,7,8,9 | — | Clean pass. "Sometimes" narrowed to "6+ items on Chrome" through 5 follow-up questions. | No |
 | 2026-03-05 | 6 | 1,2,3,4,5,6,7,9 | 8 | "Response within 24h" is an operational goal, not an implementation criterion. | Yes — added operational vs implementation criteria separation to Step 3 |
 | 2026-07-05 | — | — | — | Merged design-sprint into create-issue: added adaptive Lightweight/Design flow routing, Split Proposal gate, and cases 9-17 (9-13 renumbered from design-sprint, 14-17 new). Case numbering for 1-8 preserved from the original create-issue log above. | — |
+| 2026-07-08 | — | — | — | Added criterion 10 (External facts verified) to Lightweight Flow L5 and a Fact-Check External Claims gate (D4 Step 0) to Design Flow, per issue #54 (real-world incident: aoshimash/homelab-k8s#258–260). Added Cases 18-19. | — |
