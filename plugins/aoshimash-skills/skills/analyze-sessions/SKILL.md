@@ -6,9 +6,12 @@ description: >
   "analyze sessions", "improve skills", "analyze skill logs",
   "セッションを分析", "スキルを改善", "ログを分析", "設定を提案",
   or wants to review skill usage patterns and environment configuration.
+compatibility: Designed for Claude Code — reads ~/.claude/projects session JSONL and proposes Claude Code settings.json/hooks changes
 ---
 
 # Analyze Sessions
+
+This skill is Claude Code-specific by design (see `compatibility`); it deliberately uses Claude Code-native data and configuration to the fullest.
 
 Analyze Claude Code's built-in conversation history to detect recurring patterns in skill executions and propose concrete improvements to skill definitions and `settings.json` configuration.
 
