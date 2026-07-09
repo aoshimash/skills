@@ -1,6 +1,6 @@
 # aoshimash/skills
 
-Personal Claude Code skills collection, packaged as a Plugin for easy installation.
+Personal [Agent Skills](https://agentskills.io) collection. Distributed as a Claude Code plugin, but each skill under `plugins/aoshimash-skills/skills/` is a plain Agent Skills directory usable by any compliant agent.
 
 ## Installation
 
@@ -15,6 +15,10 @@ Personal Claude Code skills collection, packaged as a Plugin for easy installati
 ```
 /plugin install aoshimash-skills@aoshimash-skills
 ```
+
+### Using with other agents
+
+The plugin is only one distribution channel. Each skill under `plugins/aoshimash-skills/skills/` is a plain [Agent Skills](https://agentskills.io) directory (a `SKILL.md` plus optional `references/`, `scripts/`, `assets/`), so any agent implementing the Agent Skills spec can use one directly — point your agent at, or copy, the skill directory.
 
 ## Issue Workflow
 
