@@ -27,6 +27,16 @@ Process PR/MR review comments interactively: explain each one, confirm what to d
 6. **Scope guard** — Only implement what a specific comment requests.
 7. **Match the comment's language** — Reply in the same language as the comment. Japanese comment → Japanese reply. English comment → English reply. Mixed group → majority language.
 
+## Environment Adaptation
+
+This skill targets any agent implementing the Agent Skills spec. Instructions
+below use capability terms; map them to your environment as follows.
+
+| Capability | With native support (example) | Fallback |
+|---|---|---|
+| **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`) | Numbered options as plain text; wait for the user's reply |
+| **Separate agent instance** — run a task in a fresh context that has not seen this conversation | Subagent dispatch (e.g. Claude Code's Task tool) | Run sequentially in the current context; for verification, mark the result `SELF-REVIEWED` in the artifact it lands in (here, the reply comment the step produces) |
+
 ## Workflow
 
 ### Phase 0: Identify the PR
@@ -34,7 +44,7 @@ Process PR/MR review comments interactively: explain each one, confirm what to d
 1. Detect platform:
    - Check CLAUDE.md for `## Code Hosting` config
    - If not configured, detect from `git remote -v`: `github.com` → GitHub, `gitlab.com` → GitLab
-   - If ambiguous, ask user via `AskUserQuestion`
+   - If ambiguous, ask the user to choose (user choice — see [Environment Adaptation](#environment-adaptation))
 2. Load platform guide: [references/platform-github.md](references/platform-github.md) or [references/platform-gitlab.md](references/platform-gitlab.md)
 3. Get PR/MR info for current branch
 4. If no PR/MR found, ask user for number or URL
@@ -56,7 +66,7 @@ See [references/workflow.md](references/workflow.md) for detailed procedure.
 
 See [references/workflow.md](references/workflow.md) for detailed procedure.
 
-**Summary:** For each group: show comment, explain it, ask for decision via `AskUserQuestion`.
+**Summary:** For each group: show comment, explain it, ask for a decision via a user choice (see Environment Adaptation).
 
 **Hard Gate** per group — options:
 - **Implement** — address the feedback
@@ -77,7 +87,7 @@ For each "Implement" decision:
 
 See [references/workflow.md](references/workflow.md) for detailed procedure.
 
-**Summary:** For each `rule-violation-instance` group just implemented, search the changed files for other instances of the same pattern. Present found instances to the user via `AskUserQuestion` (Apply all / Skip / Pick subset). Apply selected fixes in the same commit, or create a new commit if the previous commit is already pushed.
+**Summary:** For each `rule-violation-instance` group just implemented, search the changed files for other instances of the same pattern. Present found instances to the user via a user choice (Apply all / Skip / Pick subset). Apply selected fixes in the same commit, or create a new commit if the previous commit is already pushed.
 
 ### Phase 5: Verification Gate
 
@@ -85,7 +95,7 @@ See [references/verification.md](references/verification.md) for detailed proced
 
 **Summary:** Verify that Phase 4 (and 4.5) changes match the reviewer's intent.
 
-- `critical` groups → subagent verification (3 criteria: Intent Match, Scope Guard, Side Effect)
+- `critical` groups → verification by a **separate agent instance** with fresh context (3 criteria: Intent Match, Scope Guard, Side Effect). If the environment cannot provide one, self-review against the same criteria and flag the verdict `SELF-REVIEWED` in the reply (see Environment Adaptation).
 - `normal` groups → self-review using the same 3 criteria
 - For `rule-violation-instance` groups, same-pattern expansion from Phase 4.5 is considered in-scope for the Scope Guard criterion.
 - NEEDS_FIX → fix loop (max 2 rounds)

@@ -4,7 +4,7 @@ Detailed procedure for Phase 5 of the respond-to-pr-review skill. Verifies that 
 
 ## Purpose
 
-Prevent replying "Fixed in abc1234" when the fix doesn't actually address the comment. Critical comments get third-party (subagent) verification; normal comments get self-review.
+Prevent replying "Fixed in abc1234" when the fix doesn't actually address the comment. Critical comments get third-party verification by a **separate agent instance** that has not seen the implementation; normal comments get self-review. When no separate agent instance is available, critical comments fall back to self-review with an explicit `SELF-REVIEWED` flag (see 5-2) so the missing guarantee stays visible.
 
 ## Procedure
 
@@ -14,7 +14,7 @@ Only groups with an "Implement" decision enter the Verification Gate. Skip group
 
 Within Implement groups, process `critical` first, then `normal`. Within each tier, process in the order they were implemented.
 
-### 5-2: Verify critical groups (subagent)
+### 5-2: Verify critical groups (separate agent instance)
 
 For each `critical` group with an "Implement" decision:
 
@@ -23,7 +23,7 @@ For each `critical` group with an "Implement" decision:
    - **Diff**: `git diff <commit-before>..<commit-after>` for the commit(s) that addressed this group
    - **Context**: 30 lines before and after the changed area in each modified file
 
-2. Dispatch a subagent with this prompt:
+2. Dispatch a **separate agent instance with fresh context** (see Environment Adaptation in SKILL.md) — the point is a verifier that has not seen the implementation. If the environment cannot provide one, verify against the same three criteria yourself and record the verdict as `SELF-REVIEWED (no independent verification available)`; critical comments verified this way MUST be flagged as such in the reply comment (see below). Use this prompt for the verifier (or as your own checklist when self-reviewing):
 
 ```
 Review Comment: "{comment body}"
@@ -57,7 +57,14 @@ Return one of:
 - UNCERTAIN — cannot determine (explain why — e.g., insufficient context, ambiguous comment)
 ```
 
-3. Record the subagent's verdict and reasoning.
+3. Record the verifier's verdict and reasoning.
+
+**`SELF-REVIEWED` reply flag.** When a critical group was verified via the self-review fallback (no separate agent instance available), its Phase 7 reply MUST carry a visible flag so the reviewer knows the independent-verification guarantee did not hold. Append to the reply draft for that group:
+
+- Human reviewer: "Note: verified by self-review only — no independent verification available in this environment."
+- Bot: "Self-reviewed; no independent verification available."
+
+This flag is independent of the DONE_WITH_CONCERNS caveat (5-6); a group can carry both.
 
 ### 5-3: Verify normal groups (self-review)
 
@@ -71,13 +78,13 @@ If any criterion fails, mark as NEEDS_FIX with explanation.
 
 ### 5-4: Handle UNCERTAIN
 
-When a subagent returns UNCERTAIN:
+When verification returns UNCERTAIN:
 
 1. Present to the user:
    - The original comment
    - The diff
-   - The subagent's reasoning for UNCERTAIN
-2. Use `AskUserQuestion` with options:
+   - The verifier's reasoning for UNCERTAIN
+2. Present a user choice (see Environment Adaptation in SKILL.md) with options:
    - Treat as PASS
    - Treat as NEEDS_FIX
    - Skip verification for this group
@@ -90,7 +97,7 @@ For each NEEDS_FIX result:
 2. Re-implement the change to address the failure
 3. Run project checks (formatter, linter, tests) until clean
 4. Amend or create a new commit
-5. Re-verify (subagent for critical, self-review for normal)
+5. Re-verify (separate agent instance for critical, self-review for normal)
 
 **Maximum 2 fix rounds.** If still NEEDS_FIX after round 2, proceed to 5-6.
 
@@ -108,7 +115,7 @@ When a group remains NEEDS_FIX after 2 fix rounds:
 
 **Only triggered if any group is DONE_WITH_CONCERNS.**
 
-Present verification results to the user via `AskUserQuestion`:
+Present verification results to the user via a user choice (see Environment Adaptation in SKILL.md):
 
 ```
 Verification complete. N groups with concerns:

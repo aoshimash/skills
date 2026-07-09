@@ -14,14 +14,14 @@
 - Phase 2: Comments 3a and 3b grouped (same issue). Group 3 tagged `critical` (2 reviewers)
 - Phase 3: User decides — Group 1: Reject, Group 2: Implement, Group 3: Implement
 - Phase 4: Two commits made (rename + error propagation)
-- Phase 5: Group 3 verified by subagent (critical), Group 2 self-reviewed (normal)
+- Phase 5: Group 3 verified by a separate agent instance (critical), Group 2 self-reviewed (normal)
 - Phase 7: Bot reply (no thanks, factual), Human replies (brief thanks + commit link)
 
 **Verification**:
 - [ ] Bot comment reply has no opening thanks and is factual
 - [ ] Human comment replies include brief thanks and commit SHA link
 - [ ] Group 3 (2 reviewers) presented as one group, tagged `critical`
-- [ ] Verification Gate executed: subagent for critical, self-review for normal
+- [ ] Verification Gate executed: separate agent instance for critical, self-review for normal (or SELF-REVIEWED flag if unavailable)
 - [ ] Reject group (Group 1) reply uses factual bot format ("Keeping current approach: [reason].")
 - [ ] Reply batch shown for approval before posting
 
@@ -70,11 +70,11 @@
 
 **Expected behavior**:
 - Skill detects no PR for current branch
-- Asks user for PR number or URL via `AskUserQuestion`
+- Asks user for PR number or URL via a user choice
 - Continues normally after user provides it
 
 **Verification**:
-- [ ] `AskUserQuestion` used (not just a text prompt)
+- [ ] User choice presented (not just a text prompt)
 - [ ] Workflow continues normally after user provides PR info
 
 ---
@@ -87,7 +87,7 @@
 
 **Expected behavior**:
 - Phase 2: Tagged `critical` (REQUEST_CHANGES)
-- Phase 5: Subagent verification detects:
+- Phase 5: Verification by a separate agent instance detects:
   - Intent Match: PASS (function renamed)
   - Scope Guard: FAIL (helper extraction not requested)
   - Side Effect: PASS
@@ -97,7 +97,7 @@
 - Reply includes only the rename commit
 
 **Verification**:
-- [ ] Subagent dispatched for this critical group
+- [ ] Separate agent instance dispatched for this critical group
 - [ ] Scope Guard failure correctly identified
 - [ ] Fix loop executed (max 1 round in this case)
 - [ ] Final diff contains only the rename, no extra refactoring
@@ -138,12 +138,12 @@
 **Expected behavior**:
 - Phase 2: Groups 1 and 2 tagged `critical`, Group 3 tagged `normal`
 - Phase 5:
-  - Groups 1 and 2: subagent verification (separate subagent per group)
+  - Groups 1 and 2: verification by a separate agent instance (one per group)
   - Group 3: self-review (3-criteria checklist)
 
 **Verification**:
 - [ ] Criticality tags correctly assigned based on REQUEST_CHANGES and multi-reviewer
-- [ ] Subagents dispatched for groups 1 and 2
+- [ ] Separate agent instances dispatched for groups 1 and 2
 - [ ] Self-review used for group 3
 - [ ] All 3 criteria checked for every group regardless of method
 
@@ -184,7 +184,7 @@
 - Phase 4.5:
   - Skill searches changed files for similar naming violations.
   - Finds 3 additional instances.
-  - Presents them to the user via `AskUserQuestion` with Apply all / Pick subset / Skip.
+  - Presents them to the user via a user choice with Apply all / Pick subset / Skip.
   - User selects Apply all.
   - All 3 additional locations fixed and included in the same commit (or a new commit if pushed).
   - Group marked `broadened` (3 additional instances).
@@ -195,7 +195,7 @@
 - [ ] Group type correctly classified as `rule-violation-instance`
 - [ ] Phase 4 fixes only the originally flagged location
 - [ ] Phase 4.5 finds exactly the 3 additional instances in changed files
-- [ ] `AskUserQuestion` presented with Apply all / Pick subset / Skip options
+- [ ] User choice presented with Apply all / Pick subset / Skip options
 - [ ] All 4 locations fixed after user chooses Apply all
 - [ ] Scope Guard criterion passes (not FAIL) in Phase 5 verification
 - [ ] Reply uses `Implement (broadened)` template with correct count and locations
