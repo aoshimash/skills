@@ -5,13 +5,13 @@
 This pipeline runs in one of two modes:
 
 - **Interactive** (Single mode) — the main agent executes this workflow directly, with the user present. This is the default.
-- **Autonomous** (Batch mode) — an implementer subagent executes this workflow with no access to the user, dispatched by the orchestrator described in [batch.md](batch.md). Every point below that normally asks the user has an Autonomous-mode replacement instead.
+- **Autonomous** (Batch mode) — the implementer executes this workflow with no access to the user, coordinated by the orchestrator described in [batch.md](batch.md). The orchestrator runs the implementer as a separate agent instance where the environment supports one, or in the current context sequentially where it does not; either way this workflow is identical. Every point below that normally asks the user has an Autonomous-mode replacement instead.
 
 | Step | Interactive | Autonomous |
 |---|---|---|
 | 1-1 missing/vague issue fields | Ask the user, or propose criteria and confirm | Stop and report status `NEEDS_CONTEXT` with what is missing |
 | 1-3 design decisions | User choice gate with numbered options | Use the issue's Implementation Approach section if present; otherwise choose the option most consistent with project conventions and note the choice in the PR body; if genuinely undecidable, stop and report `NEEDS_CONTEXT` |
-| 1-6 plan approval | Present as text + user choice gate (Approve / Request changes / Abort) | No gate — the plan stays internal to the subagent and is not presented for approval |
+| 1-6 plan approval | Present as text + user choice gate (Approve / Request changes / Abort) | No gate — the plan stays internal to the implementer and is not presented for approval |
 | 2-1 working environment | The choice made in Phase 0 Setup (Worktree / New branch / Current branch) | Always the worktree the orchestrator already created before dispatch |
 | 2-3 checks fail after 3 attempts | Escalate via user choice gate (continue / skip / abandon) | Stop and report status `BLOCKED` with the error |
 | 2-4 self-review needs human judgment | Escalate via user choice gate | Note the concern in the PR description, continue, and report status `DONE_WITH_CONCERNS` |
@@ -160,7 +160,7 @@ Only re-ask for clarification if the feedback is genuinely ambiguous (e.g., cont
 
 Use the implementation location chosen in Phase 0 Setup.
 
-**Autonomous mode**: the working environment is always the worktree the orchestrator created before dispatching this subagent — skip the branching below and `cd` into that worktree path.
+**Autonomous mode**: the working environment is always the worktree the orchestrator created before starting this implementer — skip the branching below and `cd` into that worktree path.
 
 Branch naming convention (for new branch and worktree):
 
@@ -178,11 +178,12 @@ Type is inferred from issue labels or content:
 - Feature → `feat/`
 - Technical task / refactor → `refactor/` or `chore/`
 
-**If "Worktree"** (default): Fetch latest, then create a worktree from the default branch:
+**If "Worktree"** (default): Fetch latest, then create a worktree from the default branch. Keep the worktree directory out of version control with a local git exclude (`.git/info/exclude` is per-clone, so it never appears in the PR the way editing `.gitignore` would):
 ```bash
 git fetch origin
-git worktree add .claude/worktrees/<branch-name> -b <branch-name> origin/<default-branch>
-cd .claude/worktrees/<branch-name>
+grep -qxF '.worktrees/' .git/info/exclude 2>/dev/null || echo '.worktrees/' >> .git/info/exclude
+git worktree add .worktrees/<branch-name> -b <branch-name> origin/<default-branch>
+cd .worktrees/<branch-name>
 ```
 
 **If "New branch"**: Fetch latest and create a branch from the default branch:
@@ -291,7 +292,7 @@ Check for:
 Self-review complete: N round(s), N issue(s) found, N fixed, N remaining
 ```
 
-Interactive mode: this is shown to the user directly. Autonomous mode: this line is included in the subagent's final report to the orchestrator. This ensures self-review is verifiable and the result is visible at a glance either way.
+Interactive mode: this is shown to the user directly. Autonomous mode: this line is included in the implementer's final report to the orchestrator. This ensures self-review is verifiable and the result is visible at a glance either way.
 
 ### 2-5. Commit
 
@@ -355,9 +356,9 @@ Closes #<issue-number>
 
 After the PR/MR is created, every issue — Interactive or Autonomous — goes through the two-stage review described in [review-gates.md](review-gates.md): Stage 1 spec compliance, then Stage 2 code quality.
 
-**Interactive mode**: the main agent runs both stages itself and fixes/pushes directly; there is no separate reviewer subagent to dispatch. See review-gates.md's single-issue notes for the escalation path when fixes don't converge.
+**Interactive mode**: the main agent runs both stages itself and fixes/pushes directly; there is no separate reviewer to dispatch. See review-gates.md's single-issue notes for the escalation path when fixes don't converge.
 
-**Autonomous mode**: this subagent does NOT run the review gates itself. Stop after 3-2 (CI monitoring) and report status back to the orchestrator, which dispatches the reviewer subagents and re-invokes this implementer for fix rounds if needed. Stage 2.5 (pattern propagation) only ever runs in Autonomous/batch mode, coordinated by the orchestrator across all in-flight issues — never in Interactive mode.
+**Autonomous mode**: the implementer does NOT run the review gates itself. Stop after 3-2 (CI monitoring) and report status back to the orchestrator, which runs the reviewer for each stage (as a separate agent instance where available, or self-review with a `SELF-REVIEWED` marker otherwise — see [review-gates.md](review-gates.md)) and re-invokes this implementer for fix rounds if needed. Stage 2.5 (pattern propagation) only ever runs in Autonomous/batch mode, coordinated by the orchestrator across all in-flight issues — never in Interactive mode.
 
 ### 3-2. Monitor CI
 

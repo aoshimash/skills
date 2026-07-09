@@ -1,8 +1,10 @@
-# Batch Mode: Dependency Graph and Parallel Execution
+# Batch Mode: Dependency Graph and Dependency-Ordered Execution
 
-This procedure is used in **Batch Mode** (see SKILL.md) to implement a set of issues — from a parent issue's sub-issues, a milestone, a label, or a manual list — in parallel where their dependencies allow, with worktree isolation and two-stage review per issue.
+This procedure is used in **Batch Mode** (see SKILL.md) to implement a set of issues — from a parent issue's sub-issues, a milestone, a label, or a manual list — in dependency order (in parallel where the environment allows), with worktree isolation and two-stage review per issue.
 
-The per-issue implementation itself is NOT duplicated here: each issue is implemented by a subagent executing [workflow.md](workflow.md) in **Autonomous mode** (see workflow.md's Execution Modes table). This file covers only the orchestration around that: building the dependency graph, dispatching subagents, running review gates, and handling failures.
+The per-issue implementation itself is NOT duplicated here: each issue is implemented by running [workflow.md](workflow.md) in **Autonomous mode** (see workflow.md's Execution Modes table). This file covers only the orchestration around that: building the dependency graph, running the implementer for each issue, running review gates, and handling failures.
+
+**Separate agent instances are an optimization, not a requirement.** Where the environment supports separate agent instances (see Environment Adaptation in SKILL.md), the orchestrator runs each issue's implementer and each review gate as its own instance, and dispatches an entire dependency group at once for wall-clock parallelism. Where it does not, the orchestrator runs the same steps sequentially in dependency order in the current context. The dependency DAG, review gates, and failure cascade below are identical either way — only wall-clock parallelism is lost in the sequential case.
 
 ## Phase B1: Dependency Graph
 
@@ -28,7 +30,7 @@ Build a mapping: `{ issueNumber → [blockedByIssueNumbers] }`
 1. Create a directed graph: edge from A → B means "A must complete before B can start".
 2. Detect cycles using topological sort. If a cycle is found:
    - Present the cycle to the user: "Circular dependency detected: #A → #B → #C → #A"
-   - Use `AskUserQuestion` with options:
+   - Ask the user to choose (see Environment Adaptation in SKILL.md) with options:
      - Break the dependency between #X and #Y (for each edge in the cycle)
      - Abort the batch
 3. Compute topological levels (groups of issues that can run in parallel):
@@ -55,47 +57,52 @@ Group 3 (sequential, after Group 2):
   #105 — Integration tests [Medium] ← depends on #103, #104
 ```
 
-Use `AskUserQuestion` — "Proceed with this execution plan?" with options: Approve / Reorder / Abort.
+Ask the user to choose (see Environment Adaptation in SKILL.md) — "Proceed with this execution plan?" with options: Approve / Reorder / Abort.
 
 ## Phase B2: Execution Loop
 
-Repeat until all issues are completed or all remaining issues are blocked:
+Repeat until all issues are completed or all remaining issues are blocked.
+
+**Execution model — parallel or sequential.** When the environment can run separate agent instances in parallel, dispatch a whole group's issues at once and wait for the group to finish before starting the next. When it cannot, implement each group's issues **sequentially in dependency order** in the current context, still using one worktree per issue. The DAG, review gates, and failure cascade are unchanged; only wall-clock parallelism is lost. The steps below are written for the parallel case; in the sequential case, "dispatch"/"run the implementer" means "execute those same instructions yourself, one issue at a time, in group-then-dependency order."
 
 ### B2-1. Per-Group Execution
 
-Process groups in order. Within each group, dispatch all issues in parallel.
+Process groups in dependency order. Within a group the issues are independent of each other, so run them in parallel where the environment supports it, otherwise one after another.
 
 For each issue in the current group:
 
-1. **Create worktree:**
+1. **Create worktree** (keep the worktree directory out of version control with a per-clone git exclude — `.git/info/exclude` is local to the clone, so it never appears in the PR the way editing `.gitignore` would):
    ```bash
    git fetch origin
-   git worktree add .claude/worktrees/<branch-name> -b <branch-name> origin/<default-branch>
+   grep -qxF '.worktrees/' .git/info/exclude 2>/dev/null || echo '.worktrees/' >> .git/info/exclude
+   git worktree add .worktrees/<branch-name> -b <branch-name> origin/<default-branch>
    ```
    Branch naming: `<type>/<issue-number>-<short-description>`
-2. **Dispatch an implementer subagent** using the prompt template below.
-3. **Wait for completion** of all issues in the group before proceeding to the next group.
+2. **Run the implementer** using the instruction template below — as a separate agent instance where available, otherwise by executing those same instructions yourself in the issue's worktree.
+3. **Wait for completion** of all issues in the current group before proceeding to the next group.
 
-### B2-2. Implementer Subagent Prompt Template
+### B2-2. Implementer Instruction Template
 
-Dispatch each implementer subagent with a prompt that includes:
+Run each issue's implementer with an instruction set that includes:
 
 1. The full issue body and issue number.
-2. The absolute path to the worktree already created for it (step B2-1) — the subagent works there, it does not create its own.
+2. The absolute path to the worktree already created for it (step B2-1) — the implementer works there, it does not create its own.
 3. The absolute paths to this skill's [workflow.md](workflow.md) and the relevant `platform-*.md` guide, with the instruction:
    > "Read these files, then execute workflow.md Phases 1–3 in **Autonomous mode** inside the given worktree. Stop after creating the PR/MR and monitoring CI (workflow.md step 3-2) — do not run the review gates yourself, the orchestrator runs them. Return exactly one status line (`DONE` / `DONE_WITH_CONCERNS` / `NEEDS_CONTEXT` / `BLOCKED`) plus the PR/MR URL or failure details, per workflow.md's Report Status step."
 4. The project's CLAUDE.md path.
 
-Resolve the absolute paths to `workflow.md` and the platform guide at dispatch time (they live alongside this file in the skill's `references/` directory) — do not rely on the subagent inferring them.
+Resolve the absolute paths to `workflow.md` and the platform guide before starting the implementer (they live alongside this file in the skill's `references/` directory) — do not rely on the implementer inferring them. When running as a separate agent instance, pass this as its dispatch prompt; when running in the current context, follow it directly.
 
 ### B2-3. Review Gates
 
-After each issue's PR/MR is created (and the subagent has reported):
+After each issue's PR/MR is created (and the implementer has reported):
 
-1. Stage 1: Dispatch a **spec compliance reviewer** subagent (see [review-gates.md](review-gates.md)).
-2. Stage 2: Dispatch a **code quality reviewer** subagent (see [review-gates.md](review-gates.md)).
+1. Stage 1: Run a **spec compliance reviewer** (see [review-gates.md](review-gates.md)).
+2. Stage 2: Run a **code quality reviewer** (see [review-gates.md](review-gates.md)).
 3. Stage 2.5: **Pattern Propagation** — if a `rule-violation-instance` is found, scan other in-flight PRs for the same pattern and offer to propagate the fix (see [review-gates.md](review-gates.md)). This stage only runs in Batch mode, when 2+ issues are in flight.
-4. If issues are found at Stage 1 or 2 → re-dispatch the implementer subagent to fix → re-review (max 2 fix rounds per stage).
+4. If issues are found at Stage 1 or 2 → re-run the implementer to fix → re-review (max 2 fix rounds per stage).
+
+Run each reviewer as a separate agent instance with fresh context where the environment supports one; otherwise self-review and mark the gate result `SELF-REVIEWED` — see review-gates.md's "Reviewer Dispatch" note for the exact procedure and marker semantics.
 
 ### B2-4. Failure Handling
 
@@ -121,7 +128,7 @@ After each issue completes (regardless of status):
 
 - If DONE or DONE_WITH_CONCERNS: worktree is no longer needed (branch is pushed). Remove it:
   ```bash
-  git worktree remove .claude/worktrees/<branch-name>
+  git worktree remove .worktrees/<branch-name>
   ```
 - If BLOCKED: keep the worktree for debugging. Inform the user of the path.
 

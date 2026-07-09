@@ -6,7 +6,8 @@ description: >
   compliance, then code quality). Implements a single issue interactively by
   default; when given a parent issue, a milestone, a label, or a list of
   issues, offers batch implementation with a dependency graph, git worktrees,
-  and parallel subagents. Use when the user says "implement issue",
+  and parallel agent instances where the environment supports them (sequential
+  otherwise). Use when the user says "implement issue",
   "issue を実装", "issue #N を対応", "この issue をやって", "implement #N",
   "fix issue #N", "work on issue", "run sprint", "スプリント実行",
   "これらの issue を実装", "implement these issues", "start the sprint",
@@ -16,7 +17,7 @@ description: >
 
 # Implement Issue
 
-Read an issue (or a set of issues), plan the implementation, get approval, implement, and create PR(s)/MR(s) with two-stage review. **Single mode** (one issue, interactive) is the default. **Batch mode** (many issues, dependency-ordered, parallel) is used for parent issues, milestones, labels, or explicit lists.
+Read an issue (or a set of issues), plan the implementation, get approval, implement, and create PR(s)/MR(s) with two-stage review. **Single mode** (one issue, interactive) is the default. **Batch mode** (many issues, dependency-ordered, parallel where the environment supports it) is used for parent issues, milestones, labels, or explicit lists.
 
 ## Core Principles
 
@@ -25,7 +26,7 @@ Read an issue (or a set of issues), plan the implementation, get approval, imple
 3. **Small, reviewable changes** — Prefer focused PRs. If an issue is large, suggest splitting (see the create-issue skill's Split Proposal). If the user insists on a single PR, implement incrementally with clear scope per commit.
 4. **Follow project conventions** — Read CLAUDE.md and existing code patterns before implementing.
 5. **Two-stage review on every PR** — Spec compliance, then code quality, in both modes (see [references/review-gates.md](references/review-gates.md)). They catch different classes of problems; combining them into one review loses signal.
-6. **Dependency-driven parallelism** (Batch mode) — Issues with no unresolved dependencies run in parallel. The dependency graph is the scheduler.
+6. **Dependency-driven parallelism** (Batch mode) — Issues with no unresolved dependencies can run in parallel where the environment supports it. The dependency graph is the scheduler; parallelism is an optimization on top of it, not a requirement (see [references/batch.md](references/batch.md)).
 7. **Worktree isolation** (Batch mode) — Each issue gets its own git worktree. No cross-contamination between parallel implementations.
 8. **Fail fast, report clearly** (Batch mode) — If an issue fails after retries, mark it blocked and continue with independent issues. Never block the entire batch on one failure.
 
@@ -38,7 +39,6 @@ below use capability terms; map them to your environment as follows.
 |---|---|---|
 | **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`) | Numbered options as plain text; wait for the user's reply |
 | **Separate agent instance** — run a task in a fresh context that has not seen this conversation | Subagent dispatch (e.g. Claude Code's Task tool) | Run sequentially in the current context; for verification, mark the result `SELF-REVIEWED` in the artifact it lands in (e.g. the PR body or reply comment the step produces) |
-| **Background execution** — run long commands without blocking | Background shell (e.g. Claude Code's background Bash) | Run commands sequentially |
 
 ## Phase 0: Setup and Mode Selection
 
@@ -117,13 +117,13 @@ Used for a parent issue's sub-issues, a milestone, a label, or a manual list of 
 **Summary:**
 
 1. **Dependency graph** — parse `Blocked by` / `Depends on` / `After` declarations and platform-specific links from each issue body; build a DAG; detect cycles and ask the user how to resolve them; compute parallel execution groups (topological levels); visualize the plan; get approval via a user choice (see Environment Adaptation) with options Approve / Reorder / Abort.
-2. **Execution loop** — for each group, dispatch one implementer subagent per issue in parallel, each working in its own git worktree and executing [references/workflow.md](references/workflow.md) in **Autonomous mode** (see that file's Execution Modes table). After each PR is created, the orchestrator runs the two-stage review gates ([references/review-gates.md](references/review-gates.md)), including **Stage 2.5 pattern propagation** across other in-flight PRs when a rule-violation is found. Update the DAG as issues complete; on failure, mark the issue `BLOCKED` and cascade `SKIPPED` to its transitive dependents, then continue with independent issues.
+2. **Execution loop** — for each group, implement its issues, each in its own git worktree and executing [references/workflow.md](references/workflow.md) in **Autonomous mode** (see that file's Execution Modes table). Where the environment supports separate agent instances, dispatch one implementer per issue in parallel; otherwise implement them sequentially in dependency order in the current context (see [references/batch.md](references/batch.md)) — the DAG, review gates, and failure cascade are identical either way, only wall-clock parallelism differs. After each PR is created, the orchestrator runs the two-stage review gates ([references/review-gates.md](references/review-gates.md)), including **Stage 2.5 pattern propagation** across other in-flight PRs when a rule-violation is found. Update the DAG as issues complete; on failure, mark the issue `BLOCKED` and cascade `SKIPPED` to its transitive dependents, then continue with independent issues.
 3. **Summary** — present a status table (issue, title, status, PR) covering DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED / SKIPPED, explain any blockers, and optionally post a summary comment on the parent issue.
 
 ## References
 
-- [references/workflow.md](references/workflow.md) — Canonical plan/implement/PR procedure, used by both Single mode (Interactive) and Batch mode's implementer subagents (Autonomous)
-- [references/batch.md](references/batch.md) — Batch mode dependency graph, parallel dispatch, and failure handling
+- [references/workflow.md](references/workflow.md) — Canonical plan/implement/PR procedure, used by both Single mode (Interactive) and Batch mode's implementer agent instances (Autonomous)
+- [references/batch.md](references/batch.md) — Batch mode dependency graph, dependency-ordered dispatch (parallel where supported), and failure handling
 - [references/review-gates.md](references/review-gates.md) — Two-stage review procedure (Stage 1 spec compliance, Stage 2 code quality, Stage 2.5 pattern propagation)
 - [references/platform-github.md](references/platform-github.md) — GitHub CLI commands
 - [references/platform-gitlab.md](references/platform-gitlab.md) — GitLab CLI commands
