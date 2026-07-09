@@ -23,7 +23,7 @@ For each `critical` group with an "Implement" decision:
    - **Diff**: `git diff <commit-before>..<commit-after>` for the commit(s) that addressed this group
    - **Context**: 30 lines before and after the changed area in each modified file
 
-2. Dispatch a **separate agent instance with fresh context** (see Environment Adaptation in SKILL.md) — the point is a verifier that has not seen the implementation. If the environment cannot provide one, verify against the same three criteria yourself and record the verdict as `SELF-REVIEWED (no independent verification available)`; critical comments verified this way MUST be flagged as such in the reply comment (see below). Use this prompt for the verifier (or as your own checklist when self-reviewing):
+2. Dispatch a **separate agent instance with fresh context** (see Environment Adaptation in SKILL.md) — the point is a verifier that has not seen the implementation. If the environment cannot provide one, verify against the same three criteria yourself, record the resulting verdict (PASS / NEEDS_FIX / UNCERTAIN), and mark it `SELF-REVIEWED (no independent verification available)` — the marker rides on the verdict so 5-4/5-5 routing still applies; critical comments verified this way MUST be flagged as such in the reply comment (see below). Use this prompt for the verifier (or as your own checklist when self-reviewing):
 
 ```
 Review Comment: "{comment body}"
@@ -59,10 +59,10 @@ Return one of:
 
 3. Record the verifier's verdict and reasoning.
 
-**`SELF-REVIEWED` reply flag.** When a critical group was verified via the self-review fallback (no separate agent instance available), its Phase 7 reply MUST carry a visible flag so the reviewer knows the independent-verification guarantee did not hold. Append to the reply draft for that group:
+**`SELF-REVIEWED` reply flag.** When a critical group was verified via the self-review fallback (no separate agent instance available), its Phase 7 reply MUST carry a visible flag containing the `SELF-REVIEWED` marker, so the reviewer knows the independent-verification guarantee did not hold. Append to the reply draft for that group:
 
-- Human reviewer: "Note: verified by self-review only — no independent verification available in this environment."
-- Bot: "Self-reviewed; no independent verification available."
+- Human reviewer: "Note: SELF-REVIEWED — verified by self-review only, no independent verification available in this environment."
+- Bot: "SELF-REVIEWED — no independent verification available."
 
 This flag is independent of the DONE_WITH_CONCERNS caveat (5-6); a group can carry both.
 

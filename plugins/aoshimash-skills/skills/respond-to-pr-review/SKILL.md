@@ -95,7 +95,7 @@ See [references/verification.md](references/verification.md) for detailed proced
 
 **Summary:** Verify that Phase 4 (and 4.5) changes match the reviewer's intent.
 
-- `critical` groups → verification by a **separate agent instance** with fresh context (3 criteria: Intent Match, Scope Guard, Side Effect). If the environment cannot provide one, self-review against the same criteria and flag the verdict `SELF-REVIEWED` in the reply (see Environment Adaptation).
+- `critical` groups → verification by a **separate agent instance** with fresh context (3 criteria: Intent Match, Scope Guard, Side Effect). If the environment cannot provide one, self-review against the same criteria, mark the resulting verdict `SELF-REVIEWED`, and carry that flag into the reply (see Environment Adaptation).
 - `normal` groups → self-review using the same 3 criteria
 - For `rule-violation-instance` groups, same-pattern expansion from Phase 4.5 is considered in-scope for the Scope Guard criterion.
 - NEEDS_FIX → fix loop (max 2 rounds)

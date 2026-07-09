@@ -21,7 +21,7 @@
 - [ ] Bot comment reply has no opening thanks and is factual
 - [ ] Human comment replies include brief thanks and commit SHA link
 - [ ] Group 3 (2 reviewers) presented as one group, tagged `critical`
-- [ ] Verification Gate executed: separate agent instance for critical, self-review for normal (or SELF-REVIEWED flag if unavailable)
+- [ ] Verification Gate executed: separate agent instance for critical (or SELF-REVIEWED flag if unavailable), self-review for normal
 - [ ] Reject group (Group 1) reply uses factual bot format ("Keeping current approach: [reason].")
 - [ ] Reply batch shown for approval before posting
 
@@ -70,11 +70,11 @@
 
 **Expected behavior**:
 - Skill detects no PR for current branch
-- Asks user for PR number or URL via a user choice
+- Asks user for PR number or URL (a plain question — free-form input, no enumerable options)
 - Continues normally after user provides it
 
 **Verification**:
-- [ ] User choice presented (not just a text prompt)
+- [ ] User is asked to provide a PR number or URL before proceeding
 - [ ] Workflow continues normally after user provides PR info
 
 ---
