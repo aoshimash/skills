@@ -9,9 +9,15 @@ Every PR/MR goes through two review stages before being marked as done — wheth
 
 These are separate concerns. Spec compliance prevents over-building and under-building. Code quality catches bugs and style issues. Combining them into one review loses signal.
 
-**Single mode note**: with only one issue in flight, the main agent runs both stages itself (there is no separate orchestrator/subagent split). Stage 2.5 (pattern propagation) never runs in Single mode — there are no other in-flight PRs to scan.
+**Single mode note**: with only one issue in flight, the main agent runs both stages itself (there is no separate orchestrator/reviewer split). Stage 2.5 (pattern propagation) never runs in Single mode — there are no other in-flight PRs to scan.
 
-**Batch mode note**: the orchestrator dispatches a fresh reviewer subagent per stage per issue, and Stage 2.5 is active whenever a rule violation is found with 2+ issues in flight.
+**Batch mode note**: the orchestrator runs a fresh reviewer per stage per issue, and Stage 2.5 is active whenever a rule violation is found with 2+ issues in flight.
+
+## Reviewer Dispatch
+
+A review is strongest when run by a **separate agent instance** (see Environment Adaptation in SKILL.md) with fresh context that has not seen the implementation — an independent reviewer is not anchored to the choices the implementer already made. Both stages below assume that ideal.
+
+**Fallback when no separate agent instance is available.** Run the stage's checklist yourself and produce the stage's real verdict exactly as defined below (Stage 1: PASS/FAIL with the issue list; Stage 2: severity-tagged issue counts and PASS/NEEDS_FIXES). Then mark that verdict `SELF-REVIEWED (no independent reviewer available)`. The marker **rides on** the real result — it does not replace it — so the On-Failure fix routing (max 2 rounds, then DONE_WITH_CONCERNS in Batch / escalate in Single) applies unchanged. Record the marker next to the gate outcome in the PR/MR body so a human can see the independent-review guarantee did not hold.
 
 ## Stage 1: Spec Compliance Review
 
@@ -23,7 +29,7 @@ Review with:
 - The PR diff (`git diff origin/<default-branch>...<branch-name>`)
 - Instructions below
 
-**Batch mode**: dispatch a dedicated reviewer subagent with the above context. **Single mode**: the main agent performs this review directly on the diff it just produced.
+**Batch mode**: run a dedicated reviewer with the above context — a separate agent instance where available, otherwise self-review with the `SELF-REVIEWED` marker (see Reviewer Dispatch above). **Single mode**: the main agent performs this review directly on the diff it just produced.
 
 ### Review Criteria
 
@@ -58,7 +64,7 @@ Issues:
 
 If spec compliance fails:
 
-1. Fix the issues found (in Batch mode: send the review output to the implementer subagent, which fixes and pushes; in Single mode: the main agent fixes and pushes directly).
+1. Fix the issues found (in Batch mode: send the review output to the implementer, which fixes and pushes; in Single mode: the main agent fixes and pushes directly).
 2. Re-run spec compliance review.
 3. Max 2 fix rounds. If still failing:
    - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS` and include the review output in the batch summary.
@@ -74,7 +80,7 @@ Review with:
 - Project conventions (CLAUDE.md path)
 - Instructions below
 
-**Batch mode**: dispatch a dedicated reviewer subagent. **Single mode**: the main agent performs this review directly.
+**Batch mode**: run a dedicated reviewer — a separate agent instance where available, otherwise self-review with the `SELF-REVIEWED` marker (see Reviewer Dispatch above). **Single mode**: the main agent performs this review directly.
 
 ### Review Criteria
 
@@ -114,7 +120,7 @@ Verdict: PASS / NEEDS_FIXES
 
 If code quality review finds Critical or Important issues:
 
-1. Fix Critical and Important issues (Minor issues are optional). In Batch mode, send the review output to the implementer subagent; in Single mode, the main agent fixes directly.
+1. Fix Critical and Important issues (Minor issues are optional). In Batch mode, send the review output to the implementer; in Single mode, the main agent fixes directly.
 2. Re-run code quality review.
 3. Max 2 fix rounds. If Critical issues remain:
    - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS`.
@@ -142,11 +148,11 @@ Classify a violation as `rule-violation-instance` (rather than a one-off bug) wh
 3. Present findings to the user via a user choice (see Environment Adaptation):
    > "Pattern violation `<pattern>` found in N other in-flight PR(s): <list>. What would you like to do?"
    > Options: Apply fix to all / Select which PRs / Skip propagation
-4. For each approved PR, dispatch a fix subagent to apply the same fix.
+4. For each approved PR, run a fix pass to apply the same fix — a separate agent instance where available, otherwise directly.
 
 ### Non-Blocking Rule
 
-Failures in propagation fix subagents do **not** block the original issue from completing. If a propagation fix fails, record it in the batch summary under the original issue.
+Failures in propagation fixes do **not** block the original issue from completing. If a propagation fix fails, record it in the batch summary under the original issue.
 
 ## Review Flow Diagram
 
@@ -155,7 +161,7 @@ PR Created
   ↓
 Stage 1: Spec Compliance
   ├─ PASS → Stage 2
-  └─ FAIL → Fix (subagent in Batch / main agent in Single) → Re-review (max 2 rounds)
+  └─ FAIL → Fix (implementer in Batch / main agent in Single) → Re-review (max 2 rounds)
               ├─ PASS → Stage 2
               └─ FAIL → Batch: DONE_WITH_CONCERNS | Single: ask user
   ↓
@@ -171,5 +177,5 @@ Mode check
               ├─ No rule violations → DONE
               └─ rule-violation-instance → Scan other in-flight PRs
                           ├─ No matches / user skips → DONE
-                          └─ User approves → Dispatch fix subagents → DONE (failures non-blocking)
+                          └─ User approves → Run fix passes → DONE (failures non-blocking)
 ```

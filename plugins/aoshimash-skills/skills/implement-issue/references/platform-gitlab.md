@@ -62,7 +62,8 @@ git checkout -b <branch-name>
 
 ```bash
 git fetch origin
-git worktree add .claude/worktrees/<branch-name> -b <branch-name> origin/<default-branch>
+grep -qxF '.worktrees/' .git/info/exclude 2>/dev/null || echo '.worktrees/' >> .git/info/exclude
+git worktree add .worktrees/<branch-name> -b <branch-name> origin/<default-branch>
 ```
 
 ## Push Branch

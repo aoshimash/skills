@@ -252,7 +252,7 @@
 4. All 4 PRs created
 
 **Verification:**
-- [ ] #201 and #202 run in parallel (concurrent subagents)
+- [ ] #201 and #202 run in parallel (concurrent agent instances, where the environment supports them)
 - [ ] #203 waits for #201 to complete
 - [ ] #204 waits for #202 to complete
 - [ ] No worktree conflicts between parallel issues
@@ -287,7 +287,7 @@
 **Expected behavior:**
 1. Issue implemented without pagination
 2. Spec compliance review (Stage 1): FAIL — AC "paginated results" not met
-3. Implementer subagent fixes: adds pagination
+3. Implementer fixes: adds pagination
 4. Re-review: PASS
 5. Code quality review (Stage 2): runs on updated code
 6. Final status: DONE (after fix round)
@@ -351,7 +351,7 @@
 
 **Expected behavior**:
 - PR is created
-- Stage 1 spec compliance review (run by the main agent, not a subagent) finds AC "paginated" not met → FAIL
+- Stage 1 spec compliance review (run by the main agent, not a separate agent instance) finds AC "paginated" not met → FAIL
 - Main agent fixes and pushes directly (no orchestrator, no re-dispatch)
 - Re-review: PASS
 - Stage 2 code quality review runs next
@@ -517,3 +517,41 @@ only the mechanism is now described as a capability. Verified by grep that no
 bare `AskUserQuestion`/`EnterPlanMode`/`ExitPlanMode` instruction remains in the
 four modified files outside the Environment Adaptation section, the "On Claude
 Code specifically" notes, and the historical Evaluation Log entries above.
+
+### 2026-07-10 — Agent-instance fallback and neutral worktree path (Refs #66)
+
+Made Batch mode and the review gates runnable — degraded but correct — on agents
+without separate-agent-instance support, and moved the worktree location off the
+product-specific `.claude` directory to a neutral `.worktrees/`:
+
+- `batch.md` states the execution model up front: dispatch a whole dependency group
+  as separate agent instances in parallel where supported, otherwise implement each
+  group's issues **sequentially in dependency order** in the current context. The DAG,
+  review gates, and failure cascade are unchanged; only wall-clock parallelism is lost.
+  The 2 deferred bare user-choice sites (cycle resolution in B1-2, plan approval in
+  B1-3) now reference the User choice capability, closing the gap left by #61.
+- `review-gates.md` adds a "Reviewer Dispatch" note: run each reviewer as a separate
+  agent instance where available, otherwise self-review and mark the gate's real
+  verdict `SELF-REVIEWED (no independent reviewer available)`. The marker rides on the
+  verdict — it does not replace it — so the fix routing is unchanged.
+- All `git worktree` commands (workflow.md, batch.md, platform-github/gitlab/backlog.md)
+  now use `.worktrees/` with a `.git/info/exclude` guard, so the ignore stays local to
+  the clone and never lands in a user PR.
+- Subagent/Task-tool vocabulary replaced with "separate agent instance" per AGENTS.md.
+  SKILL.md's unused **Background execution** capability row was removed (nothing in the
+  skill runs background commands).
+
+Consistency edits in this file, outside the historical log: Cases 17, 19, and 23 now use
+neutral "agent instance" wording instead of "subagent".
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 16 | Pass | Linear batch runs identically whether parallel or sequential; worktree path now `.worktrees/` |
+| 17 | Pass | Parallel path unchanged where separate agent instances are available; sequential fallback preserves group-then-dependency order |
+| 18 | Pass | Failure cascade (BLOCKED → SKIPPED dependents) is identical in both execution models |
+| 19 | Pass | Two-stage review runs per issue; reviewer falls back to the `SELF-REVIEWED` marker when no separate instance is available |
+
+No behavioral change for environments with separate agent instances (e.g. Claude Code):
+parallel dispatch, worktree isolation, and the review gates work exactly as before — only
+the worktree directory moved. Verified by grep that no product-specific `.claude` worktree
+path remains anywhere under the skill directory.
