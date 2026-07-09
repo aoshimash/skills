@@ -164,7 +164,7 @@
 **Expected behavior**:
 - Fetch the issue and detect that it is closed/merged in Phase 0 (before Phase 1)
 - Inform the user: "Issue #15 is already closed."
-- Present options via AskUserQuestion: "Reopen and implement" / "Pick another issue" / "Abort"
+- Present options via a user choice: "Reopen and implement" / "Pick another issue" / "Abort"
 - If "Reopen and implement": reopen the issue and proceed with normal flow
 - If "Pick another issue": return to issue selection
 - If "Abort": stop without entering Phase 1
@@ -338,7 +338,7 @@
 
 **Expected behavior**:
 - Phase 0 detects that #40 has open sub-issues (via the platform guide's sub-issue/child detection)
-- Presents `AskUserQuestion`: "Implement all sub-issues (batch)" (Recommended, since 2+ children are open) / "Implement only this issue" / "Pick one sub-issue"
+- Presents a user choice: "Implement all sub-issues (batch)" (Recommended, since 2+ children are open) / "Implement only this issue" / "Pick one sub-issue"
 - If the user picks batch: proceeds to Batch mode (Phase B1 dependency graph) using #41-#43 as the source set
 - If the user picks "only this issue": treats #40 as a normal single issue, does not touch #41-#43
 - If the user picks "pick one": lists #41-#43 and continues in Single mode with the selected child
@@ -488,3 +488,31 @@ No issues found. Changes are additive and localized to §2-2, §2-3, and §3-x o
 ### 2026-07-05 — Merged run-sprint into implement-issue
 
 Merged run-sprint's batch execution model (dependency graph, worktree-per-issue parallel dispatch, two-stage review with pattern propagation) into implement-issue as "Batch mode". Added criteria 19-23 and cases 16-24 (16-21 renumbered from run-sprint's 6 cases, 22-24 new for parent-issue detection and mode routing). Case numbering for 1-15 preserved from the original implement-issue log above.
+
+### 2026-07-10 — Capability-based gates and plan-mode notes (Refs #61)
+
+Converted the interactive surface to agent-neutral capability terms so any
+spec-compliant agent can follow it. Every `AskUserQuestion` gate site (Phase 0
+routing, design decisions, plan approval, check/self-review escalations, Single-
+mode review-gate escalations, the batch dependency-graph approval) now asks the
+user to choose via the **User choice** capability, referencing the new
+Environment Adaptation section in SKILL.md. Plan-mode instructions
+(`EnterPlanMode`/`ExitPlanMode`) became "On Claude Code specifically" conditional
+notes. The Execution Modes table's Interactive column now names a "user choice
+gate" instead of `AskUserQuestion`. Subagent/batch wording is intentionally
+unchanged (follow-up #66), so `references/batch.md` still has 2 bare user-choice
+sites. Earlier Evaluation Log entries keep their original tool names as a
+historical record, not as instructions.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 1 | Pass (9/9) | Location choice and plan approval now via the user-choice capability; questions and options unchanged |
+| 11 | Pass (1/1) | Closed-issue options presented via a user choice; wording aligned |
+| 22 | Pass (2/2) | Parent-issue routing question presented via a user choice; wording aligned |
+| 23 | Pass (1/1) | Single-mode gate escalations reference the user-choice capability |
+
+No behavioral change: each gate asks the same question with the same options;
+only the mechanism is now described as a capability. Verified by grep that no
+bare `AskUserQuestion`/`EnterPlanMode`/`ExitPlanMode` instruction remains in the
+four modified files outside the Environment Adaptation section, the "On Claude
+Code specifically" notes, and the historical Evaluation Log entries above.

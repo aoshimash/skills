@@ -10,11 +10,11 @@ This pipeline runs in one of two modes:
 | Step | Interactive | Autonomous |
 |---|---|---|
 | 1-1 missing/vague issue fields | Ask the user, or propose criteria and confirm | Stop and report status `NEEDS_CONTEXT` with what is missing |
-| 1-3 design decisions | `AskUserQuestion` with numbered options | Use the issue's Implementation Approach section if present; otherwise choose the option most consistent with project conventions and note the choice in the PR body; if genuinely undecidable, stop and report `NEEDS_CONTEXT` |
-| 1-6 plan approval | Present as text + `AskUserQuestion` gate (Approve / Request changes / Abort) | No gate — the plan stays internal to the subagent and is not presented for approval |
+| 1-3 design decisions | User choice gate with numbered options | Use the issue's Implementation Approach section if present; otherwise choose the option most consistent with project conventions and note the choice in the PR body; if genuinely undecidable, stop and report `NEEDS_CONTEXT` |
+| 1-6 plan approval | Present as text + user choice gate (Approve / Request changes / Abort) | No gate — the plan stays internal to the subagent and is not presented for approval |
 | 2-1 working environment | The choice made in Phase 0 Setup (Worktree / New branch / Current branch) | Always the worktree the orchestrator already created before dispatch |
-| 2-3 checks fail after 3 attempts | Escalate via `AskUserQuestion` (continue / skip / abandon) | Stop and report status `BLOCKED` with the error |
-| 2-4 self-review needs human judgment | Escalate via `AskUserQuestion` | Note the concern in the PR description, continue, and report status `DONE_WITH_CONCERNS` |
+| 2-3 checks fail after 3 attempts | Escalate via user choice gate (continue / skip / abandon) | Stop and report status `BLOCKED` with the error |
+| 2-4 self-review needs human judgment | Escalate via user choice gate | Note the concern in the PR description, continue, and report status `DONE_WITH_CONCERNS` |
 | 3-2 unfixable CI failure | Note in the PR description, tell the user | Note in the PR description and report status `DONE_WITH_CONCERNS` |
 
 Every step below is written from the Interactive perspective by default; where behavior diverges, an "Autonomous mode" note follows the step, keyed to the table above.
@@ -63,7 +63,7 @@ Before drafting the plan, identify any decisions that require human judgment. Ex
 - Technology or library choices not dictated by CLAUDE.md
 - Scope boundaries (what's "good enough" for this issue)
 
-For each decision point, use `AskUserQuestion` with numbered options:
+For each decision point, ask the user to choose (see Environment Adaptation) from numbered options:
 
 1. **Present options** (2–4 choices) with:
    - A short label for each option
@@ -77,7 +77,7 @@ When the user selects "Other" and provides free-text input, treat their text as 
 
 If no design decisions require human input, skip this step and proceed to 1-4.
 
-**Autonomous mode**: do not use `AskUserQuestion`. If the issue includes an Implementation Approach section, follow it. Otherwise choose the option most consistent with existing project conventions, and note the choice and its rationale in the PR body so a human reviewer can revisit it. If the decision is genuinely undecidable (no convention to lean on, and the outcome materially changes the result), stop and return status `NEEDS_CONTEXT`.
+**Autonomous mode**: do not present a user choice. If the issue includes an Implementation Approach section, follow it. Otherwise choose the option most consistent with existing project conventions, and note the choice and its rationale in the PR body so a human reviewer can revisit it. If the decision is genuinely undecidable (no convention to lean on, and the outcome materially changes the result), stop and return status `NEEDS_CONTEXT`.
 
 ### 1-4. Draft Implementation Plan
 
@@ -126,16 +126,16 @@ If any check fails, revise the plan before presenting.
 
 ### 1-6. Present and Get Approval
 
-Present the plan as **text output** (not via `EnterPlanMode`). Clearly state:
+Present the plan as regular **text output**. Clearly state:
 
 - What will change and why
 - Any assumptions or decisions made
 - Questions or trade-offs requiring user input
 
-Then use `AskUserQuestion` to request approval:
+Then collect approval via a user choice (see Environment Adaptation):
 
 ```
-AskUserQuestion with options:
+User choice with options:
 - "Approve" — Proceed with implementation.
 - "Request changes" — Revise the plan based on feedback.
 - "Abort" — Cancel the implementation.
@@ -145,12 +145,12 @@ AskUserQuestion with options:
 1. Read the user's feedback carefully.
 2. Treat the feedback as specific change requests — incorporate them directly into the revised plan. Do NOT re-present new multiple-choice options based on the feedback. If the user wrote "do X instead of Y", revise the plan to do X.
 3. Re-present the revised plan.
-4. Ask for approval again using `AskUserQuestion` with the same options.
+4. Ask for approval again via a user choice with the same options.
 5. Repeat until the user approves or aborts.
 
 Only re-ask for clarification if the feedback is genuinely ambiguous (e.g., contradicts other requirements, or is too vague to act on). If re-asking, quote the user's text and explain specifically what needs clarification.
 
-**Important:** Do NOT use `EnterPlanMode`/`ExitPlanMode` for plan approval. The `ExitPlanMode` UI can cause accidental rejections with no way to provide feedback, leading to abandoned sessions.
+**On Claude Code specifically:** do not use plan mode (`EnterPlanMode`/`ExitPlanMode`) for this approval — its approval UI can cause accidental rejections with no way to provide feedback, leading to abandoned sessions.
 
 **Autonomous mode**: skip this step entirely. There is no user to present the plan to — the plan drafted in 1-4 is used directly as the internal basis for implementation, without a gate.
 
@@ -243,13 +243,13 @@ Run whatever the project defines. **Loop (max 3 attempts):**
 2. If any fail, fix the issue and re-run all checks.
 3. Repeat until all checks pass or 3 attempts are reached.
 
-If a fix requires a design decision (e.g., how to handle an unexpected edge case), use `AskUserQuestion` to present numbered options with a recommendation and wait for the user's choice.
+If a fix requires a design decision (e.g., how to handle an unexpected edge case), ask the user to choose (see Environment Adaptation) from numbered options with a recommendation and wait for the user's choice.
 
-**If checks still fail after 3 attempts**: Stop and escalate to the user. Use `AskUserQuestion` to present:
+**If checks still fail after 3 attempts**: Stop and escalate to the user via a user choice (see Environment Adaptation) presenting:
 - Which checks are still failing and what was tried
 - Options: continue trying, skip the failing check, or abandon the implementation
 
-**Autonomous mode**: do not use `AskUserQuestion`. Stop and return status `BLOCKED` with which checks are failing and what was tried.
+**Autonomous mode**: do not present a user choice. Stop and return status `BLOCKED` with which checks are failing and what was tried.
 
 If the project has no defined checks, skip this step but note it when creating the PR.
 
@@ -273,17 +273,17 @@ Check for:
 1. Review the diff.
 2. If issues found:
    - Fix issues that have a clear correct solution.
-   - If a fix requires human judgment (e.g., ambiguous requirements, UX trade-offs, business logic), use `AskUserQuestion` to present the issue with numbered options and a recommendation. Wait for the user's choice.
+   - If a fix requires human judgment (e.g., ambiguous requirements, UX trade-offs, business logic), ask the user to choose (see Environment Adaptation) from numbered options with a recommendation. Wait for the user's choice.
 3. After fixes, re-run project checks (Step 2-3) to ensure fixes don't break anything.
 4. Re-review the diff.
 5. Repeat until no issues remain or 3 review rounds are reached.
 
-**If issues remain after 3 rounds**: Stop and use `AskUserQuestion` to present remaining issues. Let the user decide whether to:
+**If issues remain after 3 rounds**: Stop and ask the user to choose (see Environment Adaptation), presenting the remaining issues. Let the user decide whether to:
 - Proceed with known issues
 - Fix manually
 - Abandon the implementation
 
-**Autonomous mode**: do not use `AskUserQuestion`. Note the remaining concerns in the PR description and continue — this issue will be reported as status `DONE_WITH_CONCERNS`.
+**Autonomous mode**: do not present a user choice. Note the remaining concerns in the PR description and continue — this issue will be reported as status `DONE_WITH_CONCERNS`.
 
 **After self-review completes**, output a visible summary before proceeding to commit:
 
