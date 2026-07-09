@@ -62,7 +62,7 @@ If spec compliance fails:
 2. Re-run spec compliance review.
 3. Max 2 fix rounds. If still failing:
    - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS` and include the review output in the batch summary.
-   - **Single mode**: present the remaining findings to the user via `AskUserQuestion` (Proceed as-is / Keep fixing / Abandon) instead of silently marking anything — there is a user present to decide.
+   - **Single mode**: present the remaining findings to the user via a user choice (see Environment Adaptation) with options Proceed as-is / Keep fixing / Abandon instead of silently marking anything — there is a user present to decide.
 
 ## Stage 2: Code Quality Review
 
@@ -118,7 +118,7 @@ If code quality review finds Critical or Important issues:
 2. Re-run code quality review.
 3. Max 2 fix rounds. If Critical issues remain:
    - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS`.
-   - **Single mode**: present the remaining Critical findings to the user via `AskUserQuestion` (Proceed as-is / Keep fixing / Abandon).
+   - **Single mode**: present the remaining Critical findings to the user via a user choice (see Environment Adaptation) with options Proceed as-is / Keep fixing / Abandon.
 
 ## Stage 2.5: Pattern Propagation (Batch Mode Only)
 
@@ -139,7 +139,7 @@ Classify a violation as `rule-violation-instance` (rather than a one-off bug) wh
    git diff origin/<default-branch>...<branch> | grep -n <pattern>
    ```
 2. Collect all matches across in-flight branches.
-3. Present findings to the user via `AskUserQuestion`:
+3. Present findings to the user via a user choice (see Environment Adaptation):
    > "Pattern violation `<pattern>` found in N other in-flight PR(s): <list>. What would you like to do?"
    > Options: Apply fix to all / Select which PRs / Skip propagation
 4. For each approved PR, dispatch a fix subagent to apply the same fix.
