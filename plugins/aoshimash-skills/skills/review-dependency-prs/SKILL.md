@@ -30,6 +30,15 @@ The hard-won lesson behind the serial rule: on 2026-05-04 a homelab cluster bump
 5. **Minimal autonomy / surface-don't-fix.** Tangential improvements (doc fixes, cleanup, config tidy-ups) are surfaced as proposals, never done unprompted. Doc drift you notice is reported, not silently corrected.
 6. **Document on the PR.** Manual steps and a closing "applied & verified" result go on the PR itself so humans and future agents see them. Comment only when there are real steps or risk — no spam.
 
+## Environment Adaptation
+
+This skill targets any agent implementing the Agent Skills spec. Instructions
+below use capability terms; map them to your environment as follows.
+
+| Capability | With native support (example) | Fallback |
+|---|---|---|
+| **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`) | Numbered options as plain text; wait for the user's reply |
+
 ## Workflow
 
 ### Phase 0: Discover repo conventions (once per run)
