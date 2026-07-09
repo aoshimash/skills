@@ -113,13 +113,13 @@ For each test case:
   - D1 Research: investigates existing user model, API patterns, search infrastructure. Writes research file.
   - D2 Design: asks clarifying questions (search fields, pagination, performance). Proposes approaches. Writes plan with task breakdown and Split Proposal.
   - D3 Annotation: prompts user to annotate plan. Addresses annotations. Each task passes boring implementation test.
-  - D4 Issue Creation: confirms the Split Proposal via `AskUserQuestion` BEFORE creating anything, then creates parent issue + sub-issues with dependencies. Cleans up local files.
+  - D4 Issue Creation: confirms the Split Proposal as a user choice BEFORE creating anything, then creates parent issue + sub-issues with dependencies. Cleans up local files.
 - **Verification**:
   - [ ] Research file contains relevant file paths and architecture analysis
   - [ ] Plan has concrete code examples, not placeholders
   - [ ] Each sub-issue is independently implementable
   - [ ] Dependencies form a valid DAG
-  - [ ] Split proposed via `AskUserQuestion` before any parent/sub-issue is created — never automatic
+  - [ ] Split proposed as a user choice before any parent/sub-issue is created — never automatic
   - [ ] Local plan/research files are deleted after issue creation
   - [ ] Parent issue's Task Overview Dependencies column uses real sub-issue numbers (e.g., #259), not plan-local placeholders (e.g., #1)
   - [ ] Parent issue's Task Overview Task column is updated to `#<number> — <title>` format
@@ -133,14 +133,14 @@ For each test case:
   - D1 Research: investigates current auth, session management, middleware, all auth-dependent routes.
   - D2 Design: multiple approach options (gradual migration vs big bang, library choices). Task breakdown includes migration steps, backward compatibility.
   - D3 Annotation: multiple rounds expected for a complex feature.
-  - D4 Issue Creation: split confirmed via `AskUserQuestion`, then parent + sub-issues with careful dependency ordering (infra first, then migration, then cleanup).
+  - D4 Issue Creation: split confirmed as a user choice, then parent + sub-issues with careful dependency ordering (infra first, then migration, then cleanup).
 - **Verification**:
   - [ ] Research identifies ALL files touching authentication
   - [ ] Design presents migration strategy options with trade-offs
   - [ ] Tasks have correct dependency ordering (no circular deps)
   - [ ] Sub-issues include rollback considerations where appropriate
   - [ ] No sub-issue requires design judgment to implement
-  - [ ] Split proposed via `AskUserQuestion` before any parent/sub-issue is created — never automatic
+  - [ ] Split proposed as a user choice before any parent/sub-issue is created — never automatic
 
 ### Case 11: Bug-driven design
 
@@ -193,7 +193,7 @@ For each test case:
 - **Persona**: Backend engineer
 - **Initial input**: "Add rate limiting to the API and an admin toggle for it"
 - **Expected behavior**:
-  - Signals are weak/mixed (2 areas: API + admin UI, but modest scope) — the skill either justifies staying in the Lightweight Flow, justifies escalating with a clear reason, or asks the user directly via `AskUserQuestion`
+  - Signals are weak/mixed (2 areas: API + admin UI, but modest scope) — the skill either justifies staying in the Lightweight Flow, justifies escalating with a clear reason, or asks the user directly (user choice)
   - Silently guessing on weak signals without any justification or question is a failure
 - **Verification**:
   - [ ] A flow decision is made with an explicit, stated reason, OR the user is asked
@@ -206,7 +206,7 @@ For each test case:
 - **Setup**: Codebase analysis (Step L3) reveals the change actually requires touching the frontend form, a new backend validation service, and a schema migration (3+ areas)
 - **Expected behavior**:
   - Skill announces the findings from codebase analysis
-  - Proposes switching to the Design Flow via `AskUserQuestion` rather than continuing to draft an oversized single issue
+  - Proposes switching to the Design Flow as a user choice rather than continuing to draft an oversized single issue
   - Does NOT silently continue in the Lightweight Flow once the escalation criteria are clearly met
 - **Verification**:
   - [ ] Findings are stated before proposing escalation
@@ -233,7 +233,7 @@ For each test case:
 - **Setup**: Design Flow decomposition yields 3 tasks; after refinement, one task remains Large (~2+ hours) and cannot be shrunk further without becoming multiple deliverables
 - **Expected behavior**:
   - Skill proposes a nested split for that task specifically (grandchild issues under it) as part of the Step D4 Split Proposal, shown in the ASCII tree with a 3rd level
-  - User confirms via `AskUserQuestion`
+  - User confirms via a user choice
   - GitHub nested sub-issue links are created (child issue linked to parent; grandchild issues linked to the child)
   - Output hierarchy tree shows all 3 levels
 - **Verification**:

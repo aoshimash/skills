@@ -33,7 +33,7 @@ Proposed hierarchy:
   └─ Add search integration tests (Small, blocked by 2, 3)
 ```
 
-Then use `AskUserQuestion`:
+Then ask the user to choose (see Environment Adaptation in SKILL.md):
 - **Create parent + sub-issues** (mark "(Recommended)" when 2+ tasks are independently implementable and reviewable) — proceed to Step 2.
 - **Create a single issue** — skip the hierarchy. Compose ONE issue using the Feature Request or Technical Task template from [templates.md](templates.md), with the plan's Goal as Motivation/Proposal and the task breakdown included as a `## Task Breakdown` section (titles, files, approach, AC per task, as subsections). Then go directly to Step 5 (Clean Up).
 - **Adjust the breakdown** — return to the Design phase's Task Decomposition step with the user's feedback, then re-present this gate.
