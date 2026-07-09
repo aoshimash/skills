@@ -493,10 +493,11 @@ Merged run-sprint's batch execution model (dependency graph, worktree-per-issue 
 
 Converted the interactive surface to agent-neutral capability terms so any
 spec-compliant agent can follow it. Every `AskUserQuestion` gate site (Phase 0
-routing, design decisions, plan approval, check/self-review escalations, Single-
-mode review-gate escalations, the batch dependency-graph approval) now asks the
-user to choose via the **User choice** capability, referencing the new
-Environment Adaptation section in SKILL.md. Plan-mode instructions
+routing, design decisions, plan approval, check/self-review escalations,
+Single-mode review-gate escalations, the Stage 2.5 pattern-propagation prompt,
+and the batch dependency-graph approval) now asks the user to choose via the
+**User choice** capability, referencing the new Environment Adaptation section
+in SKILL.md. Plan-mode instructions
 (`EnterPlanMode`/`ExitPlanMode`) became "On Claude Code specifically" conditional
 notes. The Execution Modes table's Interactive column now names a "user choice
 gate" instead of `AskUserQuestion`. Subagent/batch wording is intentionally

@@ -84,7 +84,7 @@ See [references/workflow.md](references/workflow.md) (Interactive columns) for t
 5. Self-evaluate — verify plan addresses all acceptance criteria and stays in scope.
 6. Present the plan as text output, then ask the user to choose (see Environment Adaptation) for approval with options: Approve / Request changes / Abort. If the user requests changes, revise and re-present. Do not proceed without approval.
 
-**On Claude Code specifically:** do not use plan mode (`EnterPlanMode`/`ExitPlanMode`) for this approval — present the plan directly as text and collect approval via a user choice. Its approval UI can cause accidental rejections with no way to provide feedback.
+**On Claude Code specifically:** do not use plan mode (`EnterPlanMode`/`ExitPlanMode`) for this approval — present the plan directly as text and collect approval via a user choice. Plan mode's approval UI can cause accidental rejections with no way to provide feedback.
 
 ### Phase 2: Implement
 
