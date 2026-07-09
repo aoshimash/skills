@@ -71,7 +71,7 @@ Optionally offer to scope the set: security-only, skip majors, only a subset of 
 
 ### 1-4: Hard Gate — approve the plan
 
-Present the triaged plan + order and ask (via `AskUserQuestion`): **Approve / Reorder / Scope down / Abort**.
+Present the triaged plan + order and ask the user to choose (see Environment Adaptation in SKILL.md): **Approve / Reorder / Scope down / Abort**.
 
 Approving the *plan* is a batch approval of *what* will be processed and in *what order*. It does **not** authorize any merge — each PR still hits its own approval gate at step 2-5. This is how the skill honors minimal-autonomy without forcing a separate conversation for every trivial digest bump.
 
