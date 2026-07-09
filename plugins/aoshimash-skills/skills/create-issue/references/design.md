@@ -27,7 +27,7 @@ When multiple valid approaches exist:
    - How it works (1-2 sentences)
    - Pros and cons
    - Mark the recommended approach with "(Recommended)"
-2. Use `AskUserQuestion` with numbered options.
+2. Ask the user to choose (see Environment Adaptation in SKILL.md) with numbered options.
 3. Wait for the user's choice.
 4. If the user selects "Other" and provides free text, incorporate it directly — do NOT re-present new options.
 

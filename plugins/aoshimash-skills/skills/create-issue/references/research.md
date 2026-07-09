@@ -79,7 +79,7 @@ Present the research file path to the user:
 
 > "Research is written to `<path>`. Review it and let me know if it captures the relevant context, or if there are areas I should investigate further."
 
-Use `AskUserQuestion` with options:
+Ask the user to choose (see Environment Adaptation in SKILL.md):
 - **Approve** — Proceed to design.
 - **Add notes** — User will annotate the research file or provide verbal feedback. Address feedback, update the file, and re-present.
 - **Abort** — Stop.

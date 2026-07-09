@@ -30,6 +30,15 @@ Create issues on any issue tracking platform, always grounded in codebase analys
 - **Hard gates** (Design Flow): Do not proceed to the next phase without explicit user approval.
 - **Splitting is a proposal, never automatic**: Whether to create a parent + sub-issues (or nested grandchild issues) is always confirmed with the user. Default to a single issue when in doubt.
 
+## Environment Adaptation
+
+This skill targets any agent implementing the Agent Skills spec. Instructions
+below use capability terms; map them to your environment as follows.
+
+| Capability | With native support (example) | Fallback |
+|---|---|---|
+| **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`) | Numbered options as plain text; wait for the user's reply |
+
 ## Step 1: Detect Platform
 
 Determine the issue tracking platform in this order:
@@ -54,11 +63,11 @@ Default to the **Lightweight Flow**. Escalate to the **Design Flow** when ANY of
 4. **Not one-PR-sized** — the work clearly cannot land as a single reviewable PR (heuristic: multiple deliverables that could ship independently, or more than roughly 1-2 days of work).
 5. **Diverging scope** — during information gathering (Lightweight Step L2), scope questions keep multiplying instead of converging.
 
-If the signals are weak or conflicting, ask the user directly via `AskUserQuestion`:
+If the signals are weak or conflicting, ask the user to choose (see Environment Adaptation):
 - "Quick single issue" → Lightweight Flow
 - "Full design flow (research → design → annotation cycle → issue hierarchy)" → Design Flow
 
-**Mid-flight escalation**: if Lightweight Flow's codebase analysis (Step L3) reveals criteria 2-4, stop and state what was found, then propose switching to the Design Flow via `AskUserQuestion`. Never escalate silently.
+**Mid-flight escalation**: if Lightweight Flow's codebase analysis (Step L3) reveals criteria 2-4, stop and state what was found, then propose switching to the Design Flow as a user choice (see Environment Adaptation). Never escalate silently.
 
 **De-escalation**: if the Design Flow's research (Step D1) shows the work fits comfortably in one issue, say so and finish via the Lightweight Flow's draft/self-eval/create steps (L4-L6) instead of forcing a hierarchy. Never force a hierarchy the work doesn't need.
 
@@ -83,7 +92,7 @@ Include platform-specific types (e.g., Operation for Backlog) in the options whe
 
 ### L2: Gather Information
 
-Collect information through conversation using natural, plain-language questions. Use AskUserQuestion when presenting choices.
+Collect information through conversation using natural, plain-language questions. When presenting choices, ask the user to choose (see Environment Adaptation).
 
 **Fast path**: If the user's initial message already provides clear motivation, desired outcome, and enough detail to generate verifiable acceptance criteria, skip the step-by-step questions below and proceed directly to generating AC (without confirming it yet — see Step L3).
 
@@ -113,7 +122,7 @@ If, during this step, the scope keeps expanding rather than converging (criterio
 
 **Assignees**: Check CLAUDE.md for default assignee configuration (e.g., "always self-assign"). If defaults are configured, apply them without asking. If not, ask the user: assign to yourself, someone else, or no one. If someone else, fetch the available assignees (e.g., `gh api repos/{owner}/{repo}/assignees`) and let the user choose.
 
-When both labels and assignees need user input (no defaults configured for either), combine them into a single AskUserQuestion call instead of asking separately.
+When both labels and assignees need user input, present them as a single combined choice instead of asking separately.
 
 ### L3: Analyze Codebase
 
@@ -182,7 +191,7 @@ See [references/research.md](references/research.md) for the detailed procedure.
 1. Investigate the codebase deeply — related files, architecture patterns, conventions, dependencies, test patterns, CLAUDE.md rules, recent git history.
 2. Write findings to `<plan-dir>/research-<topic-slug>.md`. Include: relevant file paths, current architecture, conventions, constraints, dependencies, and potential risks.
 3. Present the research file to the user.
-4. **Hard Gate:** Use `AskUserQuestion` — "Review the research file and confirm it captures the relevant context" with options: Approve / Add notes / Abort. If the user adds notes, update the research file and re-present.
+4. **Hard Gate:** Ask the user to choose (see Environment Adaptation): "Review the research file and confirm it captures the relevant context" — Approve / Add notes / Abort. If the user adds notes, update the research file and re-present.
 
 If research reveals the work fits comfortably in one issue, apply the "De-escalation" rule from Step 2 and finish via the Lightweight Flow instead of continuing to D2.
 
@@ -193,7 +202,7 @@ See [references/design.md](references/design.md) for the detailed procedure.
 **Summary:**
 
 1. Ask clarifying questions **one at a time** to understand the feature's goals, constraints, and scope. Use the research findings to ask informed questions.
-2. When 2+ valid approaches exist, propose each with trade-offs and a recommendation. Use `AskUserQuestion` with numbered options. Wait for the user's choice.
+2. When 2+ valid approaches exist, propose each with trade-offs and a recommendation. Ask the user to choose (see Environment Adaptation) with numbered options. Wait for the user's choice.
 3. Break the work into tasks (title, purpose, files, approach with code examples, acceptance criteria, dependencies, estimated size).
 4. Each task must pass the **"boring implementation" test**: can someone implement it by following the instructions mechanically, with zero design judgment?
 5. Draft the Split Proposal (see below) into the plan's `## Split Proposal` section, and write the plan to `<plan-dir>/YYYY-MM-DD-<topic-slug>.md`.
@@ -212,7 +221,7 @@ See [references/annotation-cycle.md](references/annotation-cycle.md) for the det
 3. After addressing all notes, re-run the "boring implementation" test on each task.
 4. Write the updated plan and present changes.
 5. **Repeat** until the user approves with no remaining notes.
-6. **Hard Gate:** Use `AskUserQuestion` — "Is the plan ready to be converted to issues?" with options: Approve / Another annotation round / Abort.
+6. **Hard Gate:** Ask the user to choose (see Environment Adaptation): "Is the plan ready to be converted to issues?" — Approve / Another annotation round / Abort.
 
 ### D4: Issue Creation
 
@@ -234,7 +243,7 @@ Splitting is always a user-confirmed proposal, never automatic. After task decom
 
 - **Propose a parent + sub-issues** when the plan yields 2+ tasks that are independently implementable and reviewable.
 - **Propose a nested split (grandchild issues)** when a single task remains Large (roughly 2+ hours) after refinement — on platforms with nested sub-issues (GitHub), its parts become sub-issues of that child. Maximum depth is 3 levels (parent → child → grandchild); if a grandchild would still be Large, redesign the decomposition instead of nesting deeper.
-- Present the proposed hierarchy as an ASCII tree with sizes and dependencies, then confirm via `AskUserQuestion`:
+- Present the proposed hierarchy as an ASCII tree with sizes and dependencies, then ask the user to choose (see Environment Adaptation):
   - "Create parent + sub-issues" (mark "(Recommended)" when the criteria above are met)
   - "Create a single issue"
   - "Adjust the breakdown"

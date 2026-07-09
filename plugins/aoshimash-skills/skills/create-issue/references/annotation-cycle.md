@@ -60,7 +60,7 @@ When the user signals readiness:
    - **NOTE / correction**: Incorporate the change directly. Remove the annotation.
    - **REMOVE**: Delete the indicated section. Remove the annotation.
    - **TODO**: Flesh out the indicated section. Remove the annotation.
-   - **QUESTION**: Answer inline (briefly) or ask a clarifying question via `AskUserQuestion`. Remove the annotation after resolution.
+   - **QUESTION**: Answer inline (briefly) or ask a clarifying question (see Environment Adaptation in SKILL.md). Remove the annotation after resolution.
 4. After addressing all annotations, re-run the "boring implementation" test on all tasks.
 5. Update the plan file with changes.
 
@@ -77,7 +77,7 @@ Summarize what changed:
 
 ### 4. Gate
 
-Use `AskUserQuestion` with options:
+Ask the user to choose (see Environment Adaptation in SKILL.md):
 - **Approve** — Plan is ready to convert to issues.
 - **Another round** — User will add more annotations.
 - **Abort** — Stop.
