@@ -100,7 +100,7 @@ Describe what the reviewer is pointing out, why it might matter, and what the cu
 
 ### 3-3: Ask for a decision
 
-**Hard Gate:** Use `AskUserQuestion` with options:
+**Hard Gate:** Present a user choice (see Environment Adaptation in SKILL.md) with options:
 
 - **Implement** — address the feedback in this PR
 - **Reject** — decline with an explanation (when chosen, ask the user for the reason)
@@ -136,7 +136,7 @@ For each `rule-violation-instance` group just implemented:
 
 ### 4.5-2: Present findings to user
 
-If additional instances are found, present them via `AskUserQuestion`:
+If additional instances are found, present them via a user choice (see Environment Adaptation in SKILL.md):
 
 ```
 Pattern Broadening — Group N [rule-violation-instance]
