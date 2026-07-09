@@ -6,7 +6,8 @@ description: >
   compliance, then code quality). Implements a single issue interactively by
   default; when given a parent issue, a milestone, a label, or a list of
   issues, offers batch implementation with a dependency graph, git worktrees,
-  and parallel agent instances. Use when the user says "implement issue",
+  and parallel agent instances where the environment supports them (sequential
+  otherwise). Use when the user says "implement issue",
   "issue を実装", "issue #N を対応", "この issue をやって", "implement #N",
   "fix issue #N", "work on issue", "run sprint", "スプリント実行",
   "これらの issue を実装", "implement these issues", "start the sprint",
@@ -16,7 +17,7 @@ description: >
 
 # Implement Issue
 
-Read an issue (or a set of issues), plan the implementation, get approval, implement, and create PR(s)/MR(s) with two-stage review. **Single mode** (one issue, interactive) is the default. **Batch mode** (many issues, dependency-ordered, parallel) is used for parent issues, milestones, labels, or explicit lists.
+Read an issue (or a set of issues), plan the implementation, get approval, implement, and create PR(s)/MR(s) with two-stage review. **Single mode** (one issue, interactive) is the default. **Batch mode** (many issues, dependency-ordered, parallel where the environment supports it) is used for parent issues, milestones, labels, or explicit lists.
 
 ## Core Principles
 
@@ -122,7 +123,7 @@ Used for a parent issue's sub-issues, a milestone, a label, or a manual list of 
 ## References
 
 - [references/workflow.md](references/workflow.md) — Canonical plan/implement/PR procedure, used by both Single mode (Interactive) and Batch mode's implementer agent instances (Autonomous)
-- [references/batch.md](references/batch.md) — Batch mode dependency graph, parallel dispatch, and failure handling
+- [references/batch.md](references/batch.md) — Batch mode dependency graph, dependency-ordered dispatch (parallel where supported), and failure handling
 - [references/review-gates.md](references/review-gates.md) — Two-stage review procedure (Stage 1 spec compliance, Stage 2 code quality, Stage 2.5 pattern propagation)
 - [references/platform-github.md](references/platform-github.md) — GitHub CLI commands
 - [references/platform-gitlab.md](references/platform-gitlab.md) — GitLab CLI commands

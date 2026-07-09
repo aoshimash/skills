@@ -541,8 +541,9 @@ product-specific `.claude` directory to a neutral `.worktrees/`:
   SKILL.md's unused **Background execution** capability row was removed (nothing in the
   skill runs background commands).
 
-Consistency edits in this file, outside the historical log: Cases 17, 19, and 23 now use
-neutral "agent instance" wording instead of "subagent".
+Consistency edits in this file, outside the historical log: Cases 17 and 23 now use neutral
+"agent instance" wording, and Case 19 drops the stray "subagent" qualifier ("Implementer
+subagent fixes" → "Implementer fixes").
 
 | Case | Result | Notes |
 |------|--------|-------|
