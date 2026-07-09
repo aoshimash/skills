@@ -9,10 +9,10 @@ DIFF_FILE=$(mktemp /tmp/multi-review-XXXXXX)
 echo "$DIFF_FILE"
 ```
 
-**Important — Claude Code shell independence:**
-- Each Bash call runs in an independent shell. Shell variables (`$DIFF_FILE`) do not persist across calls.
-- Read the `mktemp` output, remember the actual file path, and embed it as a literal in subsequent commands.
-- Do not rely on `trap` for cleanup — it only works within the same shell. Clean up explicitly.
+**Important — Per-call shell isolation:**
+- Most agents run each shell command in an independent shell; variables (`$DIFF_FILE`) and `trap` do not persist across tool calls.
+- Read the `mktemp` output and embed the literal path in subsequent commands.
+- Because `trap` does not persist, do not rely on it for cleanup — clean up explicitly (see Cleanup).
 
 **Template suffix:** The `mktemp` template must end with `X` characters (macOS BSD `mktemp` constraint). Do not append extensions like `.diff` after the `X`s.
 
@@ -51,7 +51,7 @@ echo "Diff saved to <DIFF_FILE> ($(wc -l < <DIFF_FILE>) lines)"
 
 ## CLI Invocation
 
-All CLIs are run in **Background Bash** for parallel execution. Each CLI runs in read-only / prompt mode to prevent code changes.
+All CLIs are run with **background execution** (see the Environment Adaptation section in SKILL.md) for parallel execution; without it, invoke the CLIs sequentially — results are identical, total wall-clock time increases. Each CLI runs in read-only / prompt mode to prevent code changes.
 
 ### Installation Check
 

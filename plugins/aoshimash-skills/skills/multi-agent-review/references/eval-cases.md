@@ -8,7 +8,7 @@
 | 2 | CLI availability checked | Each agent's CLI verified with `command -v` before invocation |
 | 3 | Uninstalled CLIs skipped | Missing CLIs skipped gracefully, execution proceeds with available agents |
 | 4 | Diff obtained correctly | PR diff via `gh pr diff` or local diff via `git diff`, saved to temp file |
-| 5 | Agents run in parallel | All enabled agents invoked via Background Bash simultaneously |
+| 5 | Agents run in parallel | All enabled agents invoked via background execution simultaneously (or sequentially where background execution is unavailable) |
 | 6 | Perspectives applied | Default perspectives (or custom overrides) included in review prompt |
 | 7 | Results parsed | Agent outputs parsed into structured findings |
 | 8 | Deduplication applied | Same-issue findings from multiple agents merged |
@@ -23,12 +23,12 @@
 
 ### Case 1: First run — no configuration exists
 
-**Scenario**: User invokes `/multi-agent-review` for the first time. No `.claude/aoshimash-skills.local.md` exists. Claude and Gemini CLIs are installed, Codex is not.
+**Scenario**: User invokes `/multi-agent-review` for the first time. No `.aoshimash-skills.local.md` exists. Claude and Gemini CLIs are installed, Codex is not.
 
 **Expected behavior**:
 - Detect installed CLIs (Claude, Gemini found; Codex not found)
 - Present available CLIs and ask user which to enable
-- Save selection to `.claude/aoshimash-skills.local.md`
+- Save selection to `.aoshimash-skills.local.md`
 - Proceed with selected agents
 
 **Criteria to test**: 1, 2, 3
@@ -124,7 +124,7 @@
 
 ### Case 10: Internal use from another skill
 
-**Scenario**: `implement-issue` skill calls `multi-agent-review` as a subagent to review implementation before creating PR.
+**Scenario**: `implement-issue` skill invokes `multi-agent-review` internally (as a separate agent instance) to review implementation before creating PR.
 
 **Expected behavior**:
 - Skill loads config, gets local diff, runs agents, returns unified review

@@ -1,6 +1,6 @@
 # Default Review Perspectives
 
-These are language-agnostic review perspectives applied to all agents by default. Projects can override or extend these via `.claude/aoshimash-skills.local.md`.
+These are language-agnostic review perspectives applied to all agents by default. Projects can override or extend these via `.aoshimash-skills.local.md`.
 
 ## Perspectives
 
@@ -35,7 +35,7 @@ These are language-agnostic review perspectives applied to all agents by default
 
 ## Custom Perspectives
 
-Projects can define custom perspectives in `.claude/aoshimash-skills.local.md`:
+Projects can define custom perspectives in `.aoshimash-skills.local.md`:
 
 ```yaml
 multi-agent-review:

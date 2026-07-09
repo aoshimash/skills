@@ -2,7 +2,7 @@
 
 ## Overview
 
-The central agent (Claude Code itself) combines outputs from all AI CLIs into a single unified review.
+The orchestrating agent (the agent executing this skill) combines outputs from all AI CLIs into a single unified review.
 
 ## Step 1: Parse Agent Outputs
 

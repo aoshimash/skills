@@ -20,21 +20,31 @@ Run multiple AI CLIs in parallel for code review and produce a unified review ou
 3. **Unified output** — Deduplicate, resolve contradictions, and sort by severity into a single review.
 4. **Review only** — This skill produces review output in the conversation. Where to post it (PR comment, file, etc.) is the caller's responsibility.
 
+## Environment Adaptation
+
+This skill targets any agent implementing the Agent Skills spec. Instructions
+below use capability terms; map them to your environment as follows.
+
+| Capability | With native support (example) | Fallback |
+|---|---|---|
+| **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`) | Numbered options as plain text; wait for the user's reply |
+| **Background execution** — run long commands without blocking | Background shell (e.g. Claude Code's background Bash) | Run commands sequentially |
+
 ## Workflow
 
 ### Phase 0: Setup — Agent Configuration
 
-1. Check for existing configuration in `.claude/aoshimash-skills.local.md` (YAML frontmatter).
+1. Check for existing configuration in `.aoshimash-skills.local.md` (repo root, YAML frontmatter).
 2. If configuration exists, load it and proceed to Phase 1.
 3. If no configuration exists (first run):
    a. Check which CLIs are installed using `command -v claude`, `command -v codex`, `command -v gemini`.
-   b. Present the list of detected CLIs to the user and ask which ones to use.
-   c. Save the selection to `.claude/aoshimash-skills.local.md`.
+   b. Present the list of detected CLIs and ask which ones to use (user choice — see Environment Adaptation).
+   c. Save the selection to `.aoshimash-skills.local.md`.
 
 #### Configuration format
 
 ```yaml
-# .claude/aoshimash-skills.local.md frontmatter
+# .aoshimash-skills.local.md frontmatter
 multi-agent-review:
   agents:
     - name: claude
@@ -71,7 +81,7 @@ See [references/agent-cli.md](references/agent-cli.md) for diff preparation deta
 
 ### Phase 2: Execute — Parallel CLI Invocation
 
-Run all enabled agents in parallel using Background Bash.
+Run all enabled agents in parallel using background execution (see Environment Adaptation); without it, invoke the CLIs sequentially — results are identical, total wall-clock time increases.
 
 1. Load review perspectives: project custom perspectives (from settings) merged with defaults from [references/default-perspectives.md](references/default-perspectives.md).
 2. Build the review prompt incorporating all perspectives.
