@@ -124,7 +124,7 @@
 
 ### Case 10: Internal use from another skill
 
-**Scenario**: `implement-issue` skill calls `multi-agent-review` as a subagent to review implementation before creating PR.
+**Scenario**: `implement-issue` skill invokes `multi-agent-review` internally (as a separate agent instance) to review implementation before creating PR.
 
 **Expected behavior**:
 - Skill loads config, gets local diff, runs agents, returns unified review
