@@ -4,6 +4,8 @@
 
 This procedure is used in the **Design Flow** (see SKILL.md Step 2) to convert the approved plan into issues on the tracker. After this phase, the plan and research files are deleted — the issues hold all information needed for implementation.
 
+Every issue body created here (parent, sub, grandchild, or single) must satisfy the same quality criteria as Lightweight Flow issues (SKILL.md Step L5, adapted to each template's sections) — a good issue is the same regardless of flow or reader. In particular: no implementation steps, file-edit lists, or code examples in any issue body. Implementation is planned at implementation time by whoever picks up the issue.
+
 ## Procedure
 
 ### 0. Fact-Check External Claims
@@ -35,7 +37,7 @@ Proposed hierarchy:
 
 Then ask the user to choose (see Environment Adaptation in SKILL.md):
 - **Create parent + sub-issues** (mark "(Recommended)" when 2+ tasks are independently implementable and reviewable) — proceed to Step 2.
-- **Create a single issue** — skip the hierarchy. Compose ONE issue using the Feature Request or Technical Task template from [templates.md](templates.md), with the plan's Goal as Motivation/Proposal and the task breakdown included as a `## Task Breakdown` section (titles, files, approach, AC per task, as subsections). Then go directly to Step 5 (Clean Up).
+- **Create a single issue** — skip the hierarchy. Compose ONE issue using the Feature Request or Technical Task template from [templates.md](templates.md), with the plan's Goal as Motivation/Proposal and the task breakdown included as a `## Task Breakdown` section (title, purpose, scope, and AC per task, as subsections). Then go directly to Step 5 (Clean Up).
 - **Adjust the breakdown** — return to the Design phase's Task Decomposition step with the user's feedback, then re-present this gate.
 
 Do NOT create parent/sub-issues, or grandchild issues, without this explicit confirmation.
@@ -60,8 +62,8 @@ For each task in the plan, create a sub-issue using the **Sub-Issue** template f
 - Title — the task title (imperative form, under 70 chars)
 - `Parent: #<parent-issue-number>`
 - Motivation — why this task exists, in context of the parent feature
-- Background / Files — task-specific context and exact file paths
-- Implementation Approach — the plan's concrete approach with code examples
+- Background — task-specific context from the plan's Notes: non-obvious constraints, relevant design decisions, useful research findings; Related Code as factual current state
+- Proposal — the task's desired end state and boundaries, from the plan's Scope
 - Acceptance Criteria — from the task
 - Dependencies — `Blocked by: #<issue-number>` for any blocking sub-issues
 

@@ -56,7 +56,7 @@ create-issue                               implement-issue
 **Key properties:**
 
 - **Issue tracker is the interface** — Both skills connect only through the issue tracker (GitHub, GitLab, Backlog). No skill-specific files persist after completion.
-- **Works with humans and AI** — Issues created by `create-issue` are readable and implementable by anyone. Issues written by hand work with `implement-issue`.
+- **Works with humans and AI** — Issues created by `create-issue` are readable and implementable by anyone. Issues written by hand work with `implement-issue`. A good issue is the same for both readers: it explains why and what — never how.
 - **Splitting is always proposed, never automatic** — `create-issue` defaults to a single issue; a parent + sub-issue (or nested grandchild) hierarchy is only created after the user confirms a Split Proposal.
 - **Annotation cycle** — in the Design Flow, plans are refined through inline notes in a local markdown file. The file is deleted after issues are created.
 - **Parallel execution** — in Batch mode, `implement-issue` resolves issue dependencies as a DAG and dispatches independent issues in parallel using git worktrees.
@@ -83,6 +83,12 @@ The issue workflow draws from two sources and combines them with an issue-centri
 - superpowers stores specs and plans in `docs/superpowers/` files. This works for solo use but creates friction in team settings — not everyone uses the same tools, and tool-specific files clutter the repo
 - Instead, the issue tracker is the single shared artifact. `create-issue`'s Design Flow uses local files only temporarily during the annotation cycle, then converts everything to issues and deletes the files
 - This means a team member who doesn't use these skills can still read the issues, pick one up, and implement it — the workflow degrades gracefully
+
+**Reader-agnostic issues (original):**
+- An issue is read by humans and AI agents alike, and a good issue is the same for both: motivation (why), desired end state with binary acceptance criteria (what), and the design decisions and constraints behind them — never implementation steps, file-edit lists, or code examples (how)
+- Time passes between issue creation and implementation. Implementation detail rots in that gap — other changes land, files move, approaches get invalidated; design decisions and constraints do not. Issues record decisions, never steps
+- This deliberately departs from superpowers' "boring implementation" (mechanical instructions with code examples in the plan): here the boringness comes from tight scope, recorded decisions, and binary acceptance criteria — the "boring scope" test. The implementer (human or `implement-issue`) plans the how at implementation time, against the codebase as it exists then
+- Findings from research that will help at implementation time (current state, gotchas, related code) still belong in the issue as supplementary background — they help humans and AI alike
 
 ## Skills
 

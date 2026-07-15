@@ -237,7 +237,7 @@ Used in the Design Flow to represent an entire feature/initiative that has been 
 
 ## Sub-Issue
 
-Used in the Design Flow for each task in the plan. A sub-issue may itself be a **parent** when a task was further split into grandchild issues (nested sub-issues) — in that case its body also includes a Task Overview table for its own children, following the Parent Issue template above.
+Used in the Design Flow for each task in the plan. Sub-issues follow the same reader-agnostic structure as every other issue this skill creates: motivation, background, proposal, acceptance criteria — never implementation steps, file-edit lists, or code examples. A sub-issue may itself be a **parent** when a task was further split into grandchild issues (nested sub-issues) — in that case its body also includes a Task Overview table for its own children, following the Parent Issue template above.
 
 ```markdown
 <!-- 1-2 sentence summary of what this task accomplishes -->
@@ -250,21 +250,17 @@ Parent: #<parent-issue-number>
 
 ## Background
 
-<!-- Task-specific context from the plan -->
+<!-- Task-specific context from the plan: non-obvious constraints, -->
+<!-- relevant design decisions, useful findings from research -->
 
-### Files
+### Related Code
 
-<!-- Exact file paths to create or modify -->
+<!-- File paths as factual current state, not a list of files to edit -->
 
-| File | Action | Changes |
-|------|--------|---------|
-| `path/to/file` | Create / Modify | What changes and why |
+## Proposal
 
-## Implementation Approach
-
-<!-- From the plan: concrete approach with code examples -->
-<!-- This is NOT "how to implement" as imperative instructions -->
-<!-- It IS "what the implementation looks like" as reference code -->
+<!-- The task's desired end state and explicit scope boundaries -->
+<!-- WHAT the result should be, never HOW to implement it -->
 
 ## Acceptance Criteria
 

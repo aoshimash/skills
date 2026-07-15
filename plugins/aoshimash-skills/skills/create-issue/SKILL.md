@@ -15,18 +15,19 @@ description: >
 
 # Create Issue
 
-Create issues on any issue tracking platform, always grounded in codebase analysis. This skill has two flows: a **Lightweight Flow** for a single, well-scoped issue, and a **Design Flow** for research-driven decomposition into an issue hierarchy. Every issue is structured to be solvable by both humans and AI agents with zero prior context.
+Create issues on any issue tracking platform, always grounded in codebase analysis. This skill has two flows: a **Lightweight Flow** for a single, well-scoped issue, and a **Design Flow** for research-driven decomposition into an issue hierarchy. Every issue is structured to be solvable by both humans and AI agents with zero prior context. A good issue is the same regardless of who implements it — it explains why and what, and leaves how to implementation time.
 
 ## Principles
 
-- **Motivation & Proposal, never How**: Describe why it matters and what the desired outcome is. Never prescribe implementation.
-- **Background from code**: Always analyze the codebase to ground the issue in reality. Include file paths and current state as background, not as implementation guidance. Background should capture what is NOT obvious from reading the code: decisions, constraints, business rules.
+- **Motivation & Proposal, never How**: Describe why it matters and what the desired outcome is. Never prescribe implementation — no implementation steps, no lists of files to edit, no code examples. Whoever picks up the issue (human or AI) plans the implementation at implementation time.
+- **No perishable detail**: Time passes between issue creation and implementation. File lists, code snippets, and step-by-step approaches rot in that gap; design decisions and constraints do not. Record decisions, never steps.
+- **Background from code**: Always analyze the codebase to ground the issue in reality. Include file paths and current state as background, not as implementation guidance. Background should capture what is NOT obvious from reading the code: decisions, constraints, business rules. Findings from analysis that will help at implementation time (current state, gotchas, related modules) are welcome as supplementary background — they help humans and AI alike. Known pitfalls are not optional context: if analysis reveals a trap an implementer could plausibly fall into (hidden coupling, caching, ordering requirements, API quirks), record it as a constraint — never as code.
 - **Actionable by anyone**: Include enough information for a human or AI agent with no prior context to understand and resolve the issue. An incomplete issue creates back-and-forth communication that costs more than asking thorough questions upfront.
 - **Accessible to everyone**: Use plain language in all interactions. Avoid jargon. The skill should be equally usable by engineers and non-engineers.
 - **Never settle for vague**: If the user's response is ambiguous, incomplete, or leaves room for multiple interpretations, ask follow-up questions until the intent is clear. It is better to ask too many questions than to create an issue that requires clarification later.
 - **Research before design** (Design Flow): Never design without deeply understanding the codebase first. Produce a written research artifact, not a verbal summary.
 - **Plan as shared mutable state** (Design Flow): The plan lives in a local markdown file that the user can annotate inline. Chat-based steering is imprecise; document-based iteration is not.
-- **Implementation must be boring** (Design Flow): Each task must be implementable without creative decisions. If a task requires design judgment, it is not decomposed enough.
+- **Tasks must be boringly scoped** (Design Flow): Each task must be scoped so narrowly and unambiguously that the implementer — human or AI — faces no open design decisions. Achieve this through precise scope, recorded design decisions, and binary acceptance criteria, not by prescribing the implementation. If a task requires design judgment, decompose further or record the decision.
 - **Hard gates** (Design Flow): Do not proceed to the next phase without explicit user approval.
 - **Splitting is a proposal, never automatic**: Whether to create a parent + sub-issues (or nested grandchild issues) is always confirmed with the user. Default to a single issue when in doubt.
 
@@ -203,8 +204,8 @@ See [references/design.md](references/design.md) for the detailed procedure.
 
 1. Ask clarifying questions **one at a time** to understand the feature's goals, constraints, and scope. Use the research findings to ask informed questions.
 2. When 2+ valid approaches exist, propose each with trade-offs and a recommendation. Ask the user to choose (see Environment Adaptation) with numbered options. Wait for the user's choice.
-3. Break the work into tasks (title, purpose, files, approach with code examples, acceptance criteria, dependencies, estimated size).
-4. Each task must pass the **"boring implementation" test**: can someone implement it by following the instructions mechanically, with zero design judgment?
+3. Break the work into tasks (title, purpose, scope, acceptance criteria, dependencies, estimated size).
+4. Each task must pass the **"boring scope" test**: is the task scoped so tightly — with every design decision recorded — that implementing it requires zero design judgment?
 5. Draft the Split Proposal (see below) into the plan's `## Split Proposal` section, and write the plan to `<plan-dir>/YYYY-MM-DD-<topic-slug>.md`.
 
 ### D3: Annotation Cycle
@@ -218,7 +219,7 @@ See [references/annotation-cycle.md](references/annotation-cycle.md) for the det
    - If a note rejects an approach → replace with the user's direction
    - If a note adds a constraint → incorporate it
    - If a note asks a question → answer inline or ask a clarifying question
-3. After addressing all notes, re-run the "boring implementation" test on each task.
+3. After addressing all notes, re-run the "boring scope" test on each task.
 4. Write the updated plan and present changes.
 5. **Repeat** until the user approves with no remaining notes.
 6. **Hard Gate:** Ask the user to choose (see Environment Adaptation): "Is the plan ready to be converted to issues?" — Approve / Another annotation round / Abort.

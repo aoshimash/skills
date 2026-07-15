@@ -17,6 +17,8 @@ These are separate concerns. Spec compliance prevents over-building and under-bu
 
 A review is strongest when run by a **separate agent instance** (see Environment Adaptation in SKILL.md) with fresh context that has not seen the implementation — an independent reviewer is not anchored to the choices the implementer already made. Both stages below assume that ideal.
 
+**Reviewer model.** Where the environment supports **model selection** (see Environment Adaptation in SKILL.md), run each reviewer on a model at least as capable as — ideally more capable than — the implementer's. Well-formed issues deliberately carry no implementation detail (they record decisions and constraints, never steps), so the implementer derives the implementation plan itself; a stronger reviewer is the cheapest guard against derivation errors, especially when implementers run on a faster/cheaper model. On Claude Code, pass a `model` override when dispatching the reviewer as a subagent (e.g. an `opus`-class reviewer over `sonnet`-class implementers). Where model selection is unavailable, run reviewers on the default model — the two-stage structure and fix routing are unchanged.
+
 **Fallback when no separate agent instance is available.** Run the stage's checklist yourself and produce the stage's real verdict exactly as defined below (Stage 1: PASS/FAIL with the issue list; Stage 2: severity-tagged issue counts and PASS/NEEDS_FIXES). Then mark that verdict `SELF-REVIEWED (no independent reviewer available)`. The marker **rides on** the real result — it does not replace it — so the On-Failure fix routing (max 2 rounds, then DONE_WITH_CONCERNS in Batch / escalate in Single) applies unchanged. Record the marker next to the gate outcome in the PR/MR body so a human can see the independent-review guarantee did not hold.
 
 ## Stage 1: Spec Compliance Review
@@ -25,7 +27,7 @@ A review is strongest when run by a **separate agent instance** (see Environment
 
 Review with:
 
-- The issue body (the "spec")
+- The issue body (the "spec"), plus the parent issue's body when the issue has one (its Design Decisions and Background apply to the sub-issue)
 - The PR diff (`git diff origin/<default-branch>...<branch-name>`)
 - Instructions below
 
@@ -39,7 +41,7 @@ Review with:
 | 2 | No scope creep | No changes unrelated to the issue's scope |
 | 3 | Files match | Files changed match those listed in the issue (if specified) |
 | 4 | No missing pieces | No acceptance criterion is only partially addressed |
-| 5 | Approach matches | If the issue specifies an implementation approach, the code follows it |
+| 5 | Decisions honored | If the issue (or its parent) records design decisions or constraints, the implementation follows them |
 
 ### Output Format
 

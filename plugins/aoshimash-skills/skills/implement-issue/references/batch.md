@@ -85,7 +85,7 @@ For each issue in the current group:
 
 Run each issue's implementer with an instruction set that includes:
 
-1. The full issue body and issue number.
+1. The full issue body and issue number. When the batch source is a parent issue, also include the parent issue's body — its Background, Design Decisions, and Task Overview are shared context for every sub-issue.
 2. The absolute path to the worktree already created for it (step B2-1) — the implementer works there, it does not create its own.
 3. The absolute paths to this skill's [workflow.md](workflow.md) and the relevant `platform-*.md` guide, with the instruction:
    > "Read these files, then execute workflow.md Phases 1–3 in **Autonomous mode** inside the given worktree. Stop after creating the PR/MR and monitoring CI (workflow.md step 3-2) — do not run the review gates yourself, the orchestrator runs them. Return exactly one status line (`DONE` / `DONE_WITH_CONCERNS` / `NEEDS_CONTEXT` / `BLOCKED`) plus the PR/MR URL or failure details, per workflow.md's Report Status step."
@@ -99,6 +99,8 @@ After each issue's PR/MR is created (and the implementer has reported):
 
 1. Stage 1: Run a **spec compliance reviewer** (see [review-gates.md](review-gates.md)).
 2. Stage 2: Run a **code quality reviewer** (see [review-gates.md](review-gates.md)).
+
+   Where the environment supports model selection, run reviewers on a model at least as capable as the implementer's — see review-gates.md "Reviewer model".
 3. Stage 2.5: **Pattern Propagation** — if a `rule-violation-instance` is found, scan other in-flight PRs for the same pattern and offer to propagate the fix (see [review-gates.md](review-gates.md)). This stage only runs in Batch mode, when 2+ issues are in flight.
 4. If issues are found at Stage 1 or 2 → re-run the implementer to fix → re-review (max 2 fix rounds per stage).
 
