@@ -22,6 +22,16 @@ Skills follow the [skill-creator](https://github.com/anthropics/skills) best pra
 - Keep SKILL.md under 500 lines. Split detailed content into `references/` files.
 - Each skill should have eval test cases in `references/eval-cases.md`. Run them after changes and record results in the evaluation log.
 
+## Issue Skill Design Axis
+
+The issue-lifecycle skills (`create-issue`, `implement-issue`) share one non-negotiable design axis. Changes to either skill must preserve it:
+
+- **Issues are reader-agnostic.** Humans and AI agents read the same issue, and a good issue is the same for both: why (motivation), what (desired end state, binary acceptance criteria), and the design decisions and constraints behind them — never how.
+- **No perishable detail in issues.** Implementation steps, file-edit lists, and code examples rot between issue creation and implementation; design decisions and constraints do not. Issues record decisions, never steps.
+- **Implementation planning happens at implementation time.** Deriving the how is the implementer's job (`implement-issue` or a human), against the codebase as it exists then. Supplementary research findings that help at implementation time (current state, gotchas, related code) belong in the issue's Background.
+
+Rationale and provenance: README.md "Design Philosophy".
+
 ## Agent Portability
 
 Skills in this repository target any agent implementing the [Agent Skills spec](https://agentskills.io/specification), not only Claude Code.

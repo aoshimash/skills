@@ -10,7 +10,7 @@ This pipeline runs in one of two modes:
 | Step | Interactive | Autonomous |
 |---|---|---|
 | 1-1 missing/vague issue fields | Ask the user, or propose criteria and confirm | Stop and report status `NEEDS_CONTEXT` with what is missing |
-| 1-3 design decisions | User choice gate with numbered options | Use the issue's Implementation Approach section if present; otherwise choose the option most consistent with project conventions and note the choice in the PR body; if genuinely undecidable, stop and report `NEEDS_CONTEXT` |
+| 1-3 design decisions | User choice gate with numbered options (decisions already recorded in the issue or its parent are settled — do not re-ask) | Follow design decisions recorded in the issue or its parent (Background, Design Decisions); for decisions not recorded, choose the option most consistent with project conventions and note the choice in the PR body; if genuinely undecidable, stop and report `NEEDS_CONTEXT` |
 | 1-6 plan approval | Present as text + user choice gate (Approve / Request changes / Abort) | No gate — the plan stays internal to the implementer and is not presented for approval |
 | 2-1 working environment | The choice made in Phase 0 Setup (Worktree / New branch / Current branch) | Always the worktree the orchestrator already created before dispatch |
 | 2-3 checks fail after 3 attempts | Escalate via user choice gate (continue / skip / abandon) | Stop and report status `BLOCKED` with the error |
@@ -34,6 +34,8 @@ Extract and organize the following from the issue body:
 | **Acceptance Criteria** | Binary pass/fail conditions for completion |
 | **References** | Links, screenshots, related issues |
 
+**Parent context**: If the issue references a parent (a `Parent: #N` line in the body, or a platform-level parent link), fetch the parent issue and read its Background, Design Decisions, and Task Overview — they are shared context for every sub-issue. Design decisions recorded there apply to this task.
+
 If any critical field is missing or ambiguous:
 - **Missing**: Ask the user to provide it.
 - **Vague** (e.g., "it should work well"): Propose 2–3 concrete, binary-testable criteria and ask the user to confirm or adjust. Do not proceed until acceptance criteria are specific enough to verify.
@@ -55,7 +57,9 @@ Record findings as structured notes for use in the plan.
 
 ### 1-3. Resolve Design Decisions
 
-Before drafting the plan, identify any decisions that require human judgment. Examples:
+Decisions already recorded in the issue or its parent (e.g., a Design Decisions table, constraints in Background) are settled — follow them, do not re-ask. They were typically resolved with the user when the issue was designed.
+
+Before drafting the plan, identify any remaining decisions that require human judgment. Examples:
 
 - Multiple valid architectural approaches (e.g., REST vs GraphQL, new table vs extend existing)
 - Trade-offs between simplicity and extensibility
@@ -77,7 +81,7 @@ When the user selects "Other" and provides free-text input, treat their text as 
 
 If no design decisions require human input, skip this step and proceed to 1-4.
 
-**Autonomous mode**: do not present a user choice. If the issue includes an Implementation Approach section, follow it. Otherwise choose the option most consistent with existing project conventions, and note the choice and its rationale in the PR body so a human reviewer can revisit it. If the decision is genuinely undecidable (no convention to lean on, and the outcome materially changes the result), stop and return status `NEEDS_CONTEXT`.
+**Autonomous mode**: do not present a user choice. Follow design decisions recorded in the issue or its parent (Background, Design Decisions). For decisions not recorded there, choose the option most consistent with existing project conventions, and note the choice and its rationale in the PR body so a human reviewer can revisit it. If the decision is genuinely undecidable (no recorded decision, no convention to lean on, and the outcome materially changes the result), stop and return status `NEEDS_CONTEXT`.
 
 ### 1-4. Draft Implementation Plan
 

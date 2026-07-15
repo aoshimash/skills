@@ -27,13 +27,13 @@ The user adds HTML comments anywhere in the plan file:
 ```markdown
 ### Task 3: Add search endpoint
 
-**Approach:**
-Use a full-text search query against the users table.
-<!-- NOTE: use pg_trgm index, not full-text search. We already have it set up. -->
+**Scope:**
+Users can be searched by name and email via a new API endpoint.
+<!-- NOTE: search by name only for now — email search has privacy implications, keep it out of scope. -->
 
-**Files:**
-- `src/api/users.ts` — Modify: add search handler
-<!-- NOTE: this should be in src/api/routes/users.ts, not src/api/users.ts -->
+**Acceptance Criteria:**
+- [ ] Search results return within 500ms
+<!-- NOTE: 500ms is unrealistic for the current dataset; make it 1s -->
 ```
 
 Annotations may also appear as:
@@ -61,7 +61,7 @@ When the user signals readiness:
    - **REMOVE**: Delete the indicated section. Remove the annotation.
    - **TODO**: Flesh out the indicated section. Remove the annotation.
    - **QUESTION**: Answer inline (briefly) or ask a clarifying question (see Environment Adaptation in SKILL.md). Remove the annotation after resolution.
-4. After addressing all annotations, re-run the "boring implementation" test on all tasks.
+4. After addressing all annotations, re-run the "boring scope" test on all tasks.
 5. Update the plan file with changes.
 
 ### 3. Present Changes
@@ -69,8 +69,8 @@ When the user signals readiness:
 Summarize what changed:
 
 > "Addressed N annotations:
-> - Task 3: switched to pg_trgm index per your note
-> - Task 3: corrected file path to src/api/routes/users.ts
+> - Task 3: narrowed scope to name-only search per your note
+> - Task 3: relaxed the response-time criterion to 1s
 > - Task 5: removed caching section as requested
 >
 > Updated plan is at `<path>`. Review and add more notes if needed, or approve to proceed."
@@ -93,9 +93,9 @@ Before presenting the final gate, verify:
 | # | Check | Pass condition |
 |---|-------|----------------|
 | 1 | All annotations resolved | No `<!-- ... -->` notes remain in the file |
-| 2 | Boring implementation test | Every task passes all 6 criteria from the design phase |
+| 2 | Boring scope test | Every task passes all 6 criteria from the design phase |
 | 3 | Dependency graph consistent | All referenced task dependencies exist and form a DAG |
 | 4 | No scope creep | Tasks match the agreed design decisions |
-| 5 | Code examples up to date | Annotations that changed approach are reflected in code examples |
+| 5 | Design Decisions up to date | Annotations that changed an approach or constraint are reflected in the Design Decisions table and affected task scopes |
 
 If any check fails, fix it before presenting the gate.

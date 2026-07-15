@@ -556,3 +556,41 @@ No behavioral change for environments with separate agent instances (e.g. Claude
 parallel dispatch, worktree isolation, and the review gates work exactly as before — only
 the worktree directory moved. Verified by grep that no product-specific `.claude` worktree
 path remains anywhere under the skill directory.
+
+### 2026-07-16 — Align with the reader-agnostic issue axis (AGENTS.md "Issue Skill Design Axis")
+
+create-issue no longer emits Implementation Approach sections or Files tables in
+issue bodies — issues now carry why/what plus recorded design decisions, and
+implementation planning is this skill's job at implementation time. Aligned the
+references that assumed the old sub-issue format:
+
+- `workflow.md` 1-1 adds a **Parent context** step: when the issue references a
+  parent (`Parent: #N` or platform link), fetch the parent and read its
+  Background, Design Decisions, and Task Overview as shared context. Under the
+  old format each sub-issue was self-contained via Implementation Approach;
+  under the new one, shared decisions live in the parent.
+- `workflow.md` 1-3 (both modes): decisions already recorded in the issue or its
+  parent are settled — Interactive mode does not re-ask the user; Autonomous
+  mode follows them and only falls back to project conventions for decisions
+  not recorded. The "Implementation Approach section if present" fallback is
+  replaced accordingly (Execution Modes table row 1-3 and the 1-3 Autonomous
+  note).
+- `batch.md` B2-2: the implementer instruction set now includes the parent
+  issue's body when the batch source is a parent issue.
+- `review-gates.md` Stage 1: reviewer context includes the parent issue's body
+  when one exists; criterion 5 reworded from "Approach matches" to "Decisions
+  honored" (recorded design decisions/constraints are followed).
+
+No changes to the plan/implement/PR pipeline itself — drafting the
+implementation plan (Files to Change, approach, edge cases) at implementation
+time is exactly the division of responsibility the axis prescribes.
+
+Also added a **Model selection** capability (SKILL.md Environment Adaptation)
+and a "Reviewer model" recommendation (review-gates.md Reviewer Dispatch,
+referenced from batch.md B2-3): where the environment supports per-instance
+model selection, run reviewers on a model at least as capable as — ideally more
+capable than — the implementer's. Since issues carry no implementation detail,
+the implementer derives the plan itself; a stronger reviewer is the cheapest
+guard against derivation errors when implementers run on a faster model. The
+fallback (no model selection) runs everything on the session default with the
+workflow unchanged. Full eval re-run pending.

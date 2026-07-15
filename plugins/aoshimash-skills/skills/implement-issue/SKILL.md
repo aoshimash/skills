@@ -39,6 +39,7 @@ below use capability terms; map them to your environment as follows.
 |---|---|---|
 | **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`) | Numbered options as plain text; wait for the user's reply |
 | **Separate agent instance** — run a task in a fresh context that has not seen this conversation | Subagent dispatch (e.g. Claude Code's Task tool) | Run sequentially in the current context; for verification, mark the result `SELF-REVIEWED` in the artifact it lands in (e.g. the PR body or reply comment the step produces) |
+| **Model selection** — run a separate agent instance on a chosen model | Per-instance model override (e.g. Claude Code's Task tool `model` parameter, or an agent definition's `model` frontmatter) | Run every instance on the session's default model — the workflow is unchanged, only the reviewer-stronger-than-implementer recommendation (see [references/review-gates.md](references/review-gates.md)) is unavailable |
 
 ## Phase 0: Setup and Mode Selection
 

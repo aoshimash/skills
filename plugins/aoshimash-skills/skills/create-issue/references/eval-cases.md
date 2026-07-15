@@ -7,7 +7,7 @@ For each test case:
 2. Trigger the create-issue skill
 3. Provide the user input described in the test case
 4. Respond to follow-up questions as described in the persona
-5. Evaluate the generated issue draft against the 10 quality criteria in Step L5 (Lightweight Flow) or the Split Proposal criteria (Design Flow)
+5. Evaluate the generated issue draft against the 10 quality criteria in Step L5 (these apply to every issue, in both flows; for Design Flow also check the Split Proposal criteria)
 6. Record which flow (Lightweight/Design) was chosen and whether it matched the expectation
 7. Record results in the Evaluation Log section at the bottom
 
@@ -112,11 +112,12 @@ For each test case:
   - Explicit request triggers escalation to Design Flow (Step 2 criterion 1)
   - D1 Research: investigates existing user model, API patterns, search infrastructure. Writes research file.
   - D2 Design: asks clarifying questions (search fields, pagination, performance). Proposes approaches. Writes plan with task breakdown and Split Proposal.
-  - D3 Annotation: prompts user to annotate plan. Addresses annotations. Each task passes boring implementation test.
+  - D3 Annotation: prompts user to annotate plan. Addresses annotations. Each task passes the boring scope test.
   - D4 Issue Creation: confirms the Split Proposal as a user choice BEFORE creating anything, then creates parent issue + sub-issues with dependencies. Cleans up local files.
 - **Verification**:
   - [ ] Research file contains relevant file paths and architecture analysis
-  - [ ] Plan has concrete code examples, not placeholders
+  - [ ] Plan tasks have unambiguous scope and binary acceptance criteria; open design decisions are recorded in Design Decisions
+  - [ ] No issue body contains implementation steps, file-edit lists, or code examples
   - [ ] Each sub-issue is independently implementable
   - [ ] Dependencies form a valid DAG
   - [ ] Split proposed as a user choice before any parent/sub-issue is created — never automatic
@@ -177,12 +178,12 @@ For each test case:
 - **Setup**: After plan is written, user annotates with `<!-- NOTE: completely different approach, use X instead of Y -->`
 - **Expected behavior**:
   - Claude reads the annotation and rewrites the affected tasks.
-  - Code examples are updated to reflect the new approach.
+  - The Design Decisions table and affected task scopes are updated to reflect the new approach.
   - Dependencies are rechecked (approach change may alter dependency graph).
-  - Boring implementation test is re-run on all affected tasks.
+  - Boring scope test is re-run on all affected tasks.
 - **Verification**:
   - [ ] Annotation is fully addressed (not partially)
-  - [ ] Code examples match the new approach
+  - [ ] Design Decisions and task scopes match the new approach
   - [ ] Dependency graph is updated if needed
   - [ ] No stale references to the old approach remain
 
@@ -289,3 +290,4 @@ Record results here after each evaluation run.
 | 2026-03-05 | 6 | 1,2,3,4,5,6,7,9 | 8 | "Response within 24h" is an operational goal, not an implementation criterion. | Yes — added operational vs implementation criteria separation to Step 3 |
 | 2026-07-05 | — | — | — | Merged design-sprint into create-issue: added adaptive Lightweight/Design flow routing, Split Proposal gate, and cases 9-17 (9-13 renumbered from design-sprint, 14-17 new). Case numbering for 1-8 preserved from the original create-issue log above. | — |
 | 2026-07-08 | — | — | — | Added criterion 10 (External facts verified) to Lightweight Flow L5 and a Fact-Check External Claims gate (D4 Step 0) to Design Flow, per issue #54 (real-world incident: aoshimash/homelab-k8s#258–#260). Added Cases 18-19. | — |
+| 2026-07-16 | — | — | — | Unified design philosophy: issues are reader-agnostic (human or AI) and never contain perishable implementation detail (implementation steps, file-edit lists, code examples) — implementation is planned at implementation time. Sub-Issue template rewritten (Files table and Implementation Approach removed; Proposal and Related Code added); "boring implementation" test reframed as "boring scope" test; plan task fields changed (Files/Approach → Scope/Notes). Pitfall recording made mandatory: traps discovered during research MUST land in task Notes / issue Background as constraints (SKILL.md Background principle, design.md Task Decomposition) — with implementation detail excluded from issues, recorded constraints are the channel that carries design-time knowledge to implementation time. Cases 9 and 13 updated. Full eval re-run pending. | — |

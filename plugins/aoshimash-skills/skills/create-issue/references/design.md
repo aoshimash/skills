@@ -39,28 +39,30 @@ Break the design into tasks where each task = one potential sub-issue. For each 
 |-------|-------------|
 | **Title** | Imperative form, concise (e.g., "Add user search endpoint") |
 | **Purpose** | Why this task exists, in context of the whole feature |
-| **Files** | Exact file paths to create or modify |
-| **Approach** | Concrete implementation with code examples. No placeholders, no "add validation here" |
+| **Scope** | The desired end state and explicit boundaries (what is NOT included). Two engineers reading it would agree on what to build |
+| **Notes** | Optional: non-obvious constraints, relevant design decisions, useful findings from research (current state, gotchas). No implementation steps, file-edit lists, or code examples |
 | **Acceptance Criteria** | Binary pass/fail conditions |
 | **Dependencies** | Which other tasks must complete first |
 | **Estimated size** | Small (< 30 min) / Medium (30-60 min) / Large (1-2 hours). If Large, consider splitting further |
 
+**Notes is optional in form but mandatory in substance**: any pitfall discovered during research that an implementer could plausibly fall into (hidden coupling, caching behavior, ordering requirements, API quirks) MUST be recorded there — as a constraint, never as implementation code. With implementation detail excluded from issues, recorded constraints are the channel that carries design-time knowledge to implementation time; an unrecorded pitfall is a trap left armed for whoever implements the task.
+
 If decomposition yields **exactly one task** at Small or Medium size, do not force a hierarchy — note this to the user and fall back to a single issue: skip to the Split Proposal step, which will recommend a single issue in this case, then finish via the Lightweight Flow's draft/self-eval/create steps (SKILL.md Steps L4–L6) using that one task as the issue content.
 
-### 4. The "Boring Implementation" Test
+### 4. The "Boring Scope" Test
 
-Before writing the plan, verify each task against:
+Implementation must be boring — but the boringness comes from tight scope and recorded decisions, not from prescribing the implementation. Before writing the plan, verify each task against:
 
 | # | Check | Pass condition |
 |---|-------|----------------|
-| 1 | No design decisions | Someone can implement by following instructions mechanically |
-| 2 | Code examples present | Key implementation shown with actual code, not descriptions |
-| 3 | Files are specific | Exact paths listed, not "relevant files" |
+| 1 | No open design decisions | Every choice the task depends on is recorded in Design Decisions — nothing is left to the implementer's judgment |
+| 2 | Scope is unambiguous | Two engineers reading the task would agree on what to build and what not to build |
+| 3 | No implementation prescription | The task contains no implementation steps, file-edit lists, or code examples — the implementer plans those at implementation time |
 | 4 | AC is testable | Each criterion has a clear binary outcome |
 | 5 | Dependencies are explicit | Blocking relationships are stated, not implied |
 | 6 | Size is appropriate | No task is larger than ~2 hours of work |
 
-If any task fails, split or refine it until it passes.
+If any task fails, split it, tighten its scope, or record the missing decision until it passes.
 
 ### 5. Write the Plan File
 
@@ -90,11 +92,11 @@ Status: Draft
 **Dependencies:** None | Task N
 **Size:** Small / Medium / Large
 
-**Files:**
-- `path/to/file.ts` — Create / Modify: <what changes>
+**Scope:**
+<desired end state and explicit boundaries — what is included and what is not>
 
-**Approach:**
-<concrete implementation with code examples>
+**Notes:** (optional)
+<non-obvious constraints, relevant design decisions, useful findings from research>
 
 **Acceptance Criteria:**
 - [ ] <criterion 1>
