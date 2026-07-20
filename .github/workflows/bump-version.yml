@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
+  id-token: write
 
 jobs:
   bump-version:
@@ -18,13 +20,108 @@ jobs:
         with:
           ref: main
 
-      - name: Bump patch version
+      # Fail-safe: every step between here and "Bump version" is allowed to
+      # fail without blocking the release — "Resolve bump level" falls back to
+      # a patch bump whenever the determination could not be made.
+      - name: Check whether plugin files changed
+        id: gate
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          CHANGED=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" --paginate --jq '.[].filename')
+          echo "Changed files:"
+          echo "$CHANGED"
+          if echo "$CHANGED" | grep -q '^plugins/'; then
+            echo "plugin_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "plugin_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch PR diff
+        id: diff
+        if: steps.gate.outputs.plugin_changed == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr diff "$PR_NUMBER" > pr.diff
+
+      - name: Classify bump level from diff
+        id: classify
+        if: steps.gate.outputs.plugin_changed == 'true' && steps.diff.outcome == 'success'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            This repository distributes Agent Skills as a Claude Code plugin.
+            Shipped plugin behavior lives in the files under plugins/aoshimash-skills/
+            (SKILL.md instructions, references/, scripts/, assets/, plugin manifest).
+
+            Read the file pr.diff in the repository root. It is the diff of a PR
+            just merged to main. Decide the release bump level:
+            - "minor" if the diff changes shipped plugin behavior — anything that
+              alters what an agent following the skills would do (instructions,
+              workflow steps, decision rules, frontmatter such as the skill
+              description, scripts).
+            - "patch" if the plugin-file changes cannot alter agent behavior:
+              typo or grammar fixes, formatting, link corrections that keep the
+              same target, comments.
+            Changes outside plugins/ (README, CI, repo meta) never count toward
+            "minor". If you are uncertain whether behavior changes, choose
+            "minor" — an oversized release needs no correction, an undersized
+            one does. Put a one-sentence justification in "reason".
+          claude_args: |
+            --allowedTools Read
+            --json-schema '{"type":"object","properties":{"bump":{"type":"string","enum":["minor","patch"]},"reason":{"type":"string"}},"required":["bump","reason"]}'
+
+      - name: Resolve bump level
+        id: resolve
+        env:
+          PLUGIN_CHANGED: ${{ steps.gate.outputs.plugin_changed }}
+          CLASSIFY_OUTCOME: ${{ steps.classify.outcome }}
+          STRUCTURED_OUTPUT: ${{ steps.classify.outputs.structured_output }}
+        run: |
+          LEVEL="patch"
+          case "$PLUGIN_CHANGED" in
+            false)
+              REASON="no plugin files changed"
+              ;;
+            true)
+              REASON="fallback: diff classification unavailable (outcome: ${CLASSIFY_OUTCOME})"
+              BUMP=$(printf '%s' "$STRUCTURED_OUTPUT" | jq -er '.bump' 2>/dev/null) || BUMP=""
+              case "$BUMP" in
+                minor|patch)
+                  LEVEL="$BUMP"
+                  REASON=$(printf '%s' "$STRUCTURED_OUTPUT" | jq -er '.reason | gsub("\\s+"; " ")' 2>/dev/null) \
+                    || REASON="diff classification returned ${BUMP} without a reason"
+                  ;;
+              esac
+              ;;
+            *)
+              REASON="fallback: could not list the PR's changed files"
+              ;;
+          esac
+          echo "level=$LEVEL" >> "$GITHUB_OUTPUT"
+          echo "reason=$REASON" >> "$GITHUB_OUTPUT"
+          echo "Bump level: $LEVEL — $REASON"
+
+      - name: Bump version
+        env:
+          LEVEL: ${{ steps.resolve.outputs.level }}
+          REASON: ${{ steps.resolve.outputs.reason }}
         run: |
           CURRENT=$(jq -r '.metadata.version' .claude-plugin/marketplace.json)
           MAJOR=$(echo "$CURRENT" | cut -d. -f1)
           MINOR=$(echo "$CURRENT" | cut -d. -f2)
           PATCH=$(echo "$CURRENT" | cut -d. -f3)
-          NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+          if [ "$LEVEL" = "minor" ]; then
+            NEW_VERSION="${MAJOR}.$((MINOR + 1)).0"
+          else
+            NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+          fi
 
           jq --indent 2 \
             --arg v "$NEW_VERSION" \
@@ -34,13 +131,26 @@ jobs:
 
           echo "NEW_VERSION=$NEW_VERSION" >> "$GITHUB_ENV"
 
+          {
+            echo "## Version bump"
+            echo "- New version: ${NEW_VERSION}"
+            echo "- Bump level: ${LEVEL}"
+            echo "- Reason: ${REASON}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Commit and push
+        env:
+          LEVEL: ${{ steps.resolve.outputs.level }}
+          REASON: ${{ steps.resolve.outputs.reason }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           git diff --quiet .claude-plugin/marketplace.json && exit 0
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .claude-plugin/marketplace.json
-          git commit -m "chore: bump plugin version to $NEW_VERSION"
+          git commit \
+            -m "chore: bump plugin version to $NEW_VERSION" \
+            -m "Bump level: ${LEVEL} — ${REASON} (PR #${PR_NUMBER})"
           git pull --rebase
           git push
