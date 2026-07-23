@@ -99,7 +99,7 @@ The issue workflow draws from two sources and combines them with an issue-centri
 | [analyze-sessions](plugins/aoshimash-skills/skills/analyze-sessions/) | Analyze Claude Code session history to detect recurring patterns and propose improvements to skills and settings.json |
 | [multi-agent-review](plugins/aoshimash-skills/skills/multi-agent-review/) | Run multiple AI CLIs (Claude, Codex, Gemini) in parallel for code review and produce a unified review output |
 | [respond-to-pr-review](plugins/aoshimash-skills/skills/respond-to-pr-review/) | Process PR review comments one by one — explain, confirm actions, implement fixes, and post reply comments |
-| [review-dependency-prs](plugins/aoshimash-skills/skills/review-dependency-prs/) | Review and merge dependency-bot PRs (Renovate, Dependabot) one at a time — triage, read release notes, summarize risk, gate on user approval, and verify changes are working |
+| [merge-renovate-prs](plugins/aoshimash-skills/skills/merge-renovate-prs/) | Merge Renovate PRs one at a time, autonomously by default — verify monitoring/revert preconditions, LLM pre-check, merge, post-merge verification, and auto-revert on failure; interactive per-PR-approval mode available |
 
 ## Structure
 

@@ -1,14 +1,15 @@
-# GitHub CLI / API Commands for Dependency PRs
+# GitHub CLI / API Commands for Renovate PRs
 
 GitHub-only for v1. All commands use the `gh` CLI; replace `{owner}`, `{repo}`, `{pr}` as needed.
 
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
-- [List and filter dependency-bot PRs](#list-and-filter-dependency-bot-prs)
+- [List and filter Renovate PRs](#list-and-filter-renovate-prs)
 - [Read a PR: diff, files, body, branch, labels](#read-a-pr-diff-files-body-branch-labels)
 - [CI status (the merge gate)](#ci-status-the-merge-gate)
 - [Merge (respect the repo merge method)](#merge-respect-the-repo-merge-method)
+- [Create and merge a revert PR (auto-revert)](#create-and-merge-a-revert-pr-auto-revert)
 - [Resolve sibling / superseded PRs](#resolve-sibling--superseded-prs)
 - [main divergence: update branch](#main-divergence-update-branch)
 - [Comment on the PR](#comment-on-the-pr)
@@ -19,7 +20,7 @@ GitHub-only for v1. All commands use the `gh` CLI; replace `{owner}`, `{repo}`, 
 - `gh` CLI installed and authenticated (`gh auth status`).
 - The current directory is the target repo, or pass `-R {owner}/{repo}`.
 
-## List and filter dependency-bot PRs
+## List and filter Renovate PRs
 
 List open PRs with the fields needed for composite detection (author, branch, labels):
 
@@ -29,11 +30,10 @@ gh pr list --state open --limit 100 \
   --jq '.[] | {number, title, author: .author.login, isBot: .author.is_bot, branch: .headRefName, labels: [.labels[].name]}'
 ```
 
-Filter directly by known bot authors (fast path for the common case):
+Filter directly by the known bot author (fast path for the common case):
 
 ```bash
 gh pr list --state open --author "app/renovate" --json number,title,headRefName
-gh pr list --state open --author "app/dependabot" --json number,title,headRefName
 ```
 
 Filter by branch prefix or label when the author is a self-hosted/custom account
@@ -41,12 +41,12 @@ Filter by branch prefix or label when the author is a self-hosted/custom account
 
 ```bash
 gh pr list --state open --json number,title,headRefName,labels \
-  --jq '.[] | select(.headRefName | startswith("renovate/") or startswith("dependabot/"))'
+  --jq '.[] | select(.headRefName | startswith("renovate/"))'
 
 gh pr list --state open --label dependencies --json number,title
 ```
 
-Read the PR body to check for bot signatures (Mend footer, `<!--renovate-debug-->`, Dependabot markers):
+Read the PR body to check for Renovate signatures (Mend footer, `<!--renovate-debug-->`):
 
 ```bash
 gh pr view {pr} --json body --jq '.body'
@@ -95,7 +95,7 @@ Decision:
 
 ## Approve before merge
 
-Submit a GitHub review approval after user approval (step 2-5) and before calling `gh pr merge`. This satisfies branch-protection rules requiring at least one approved review:
+Submit a GitHub review approval after the go decision (autonomous) or user approval (interactive) at step 2-5, and before calling `gh pr merge`. This satisfies branch-protection rules requiring at least one approved review:
 
 ```bash
 gh pr review {pr} --approve --body "Dependency update reviewed: release notes read, CI green, risk assessed."
@@ -103,8 +103,8 @@ gh pr review {pr} --approve --body "Dependency update reviewed: release notes re
 
 Notes:
 - The `--body` is optional but leaves a human-readable audit trail on the PR.
-- GitHub prevents approving your own PRs — for bot-authored PRs (Renovate, Dependabot) this is never an issue.
-- If the repo requires CODEOWNERS or team-based required reviewers, an agent approval may not satisfy the requirement. Check `mergeStateStatus` after approving; if it still shows `BLOCKED`, surface the gap and ask the user to approve manually.
+- GitHub prevents approving your own PRs — for Renovate-authored PRs this is never an issue.
+- If the repo requires CODEOWNERS or team-based required reviewers, an agent approval may not satisfy the requirement. Check `mergeStateStatus` after approving; if it still shows `BLOCKED`, never bypass it — autonomous: defer the PR; interactive: surface the gap and ask the user to approve manually.
 
 ## Merge (respect the repo merge method)
 
@@ -121,6 +121,41 @@ the method. Add `--delete-branch` only if the repo convention deletes merged bra
 
 Never use `--admin` to bypass a failing required check; a red check is a signal,
 not an obstacle.
+
+## Create and merge a revert PR (auto-revert)
+
+Used by the autonomous auto-revert procedure (verification.md). Identify the
+commit the merge produced on the default branch, revert it on a branch, then
+open, approve, and merge the revert PR:
+
+```bash
+# The commit the merge created on the default branch (merge/squash methods)
+gh pr view {pr} --json mergeCommit --jq '.mergeCommit.oid'
+
+git fetch origin
+git checkout -b revert-pr-{pr} origin/{default_branch}
+
+# Merge-commit method — revert the merge commit against its first parent:
+git revert -m 1 {merge_commit_sha} --no-edit
+# Squash method — the squash produced an ordinary commit; no -m:
+git revert {merge_commit_sha} --no-edit
+# Rebase method — the PR's commits landed individually; identify them on the
+# default branch (git log) and revert each, newest first.
+
+git push -u origin revert-pr-{pr}
+gh pr create --title "Revert: {original PR title}" \
+  --body "Auto-revert of #{pr}: post-merge verification failed — {one-line cause}. Details on #{pr}."
+gh pr review {revert_pr} --approve --body "Auto-revert of a failed dependency update."
+gh pr merge {revert_pr} --<method>
+```
+
+Notes:
+
+- The revert PR goes through the normal merge path (approval + required checks) —
+  never `--admin`. If the revert itself is blocked (CI red on the revert, required
+  reviewers), **escalate to the human** (verification.md); do not force it.
+- Revert Git **before** undoing any B-class apply, so a GitOps controller does not
+  re-apply the bad version over the rollback.
 
 ## Resolve sibling / superseded PRs
 
@@ -173,10 +208,9 @@ gh pr comment {pr} --body "Applied & verified.
 For Phase 0 / detection refinement:
 
 ```bash
-# Show whichever config files exist
+# Show whichever config file exists
 gh api repos/{owner}/{repo}/contents/renovate.json5 -H "Accept: application/vnd.github.raw" 2>/dev/null
 gh api repos/{owner}/{repo}/contents/.github/renovate.json -H "Accept: application/vnd.github.raw" 2>/dev/null
-gh api repos/{owner}/{repo}/contents/.github/dependabot.yml -H "Accept: application/vnd.github.raw" 2>/dev/null
 ```
 
 (Reading the files locally from the checked-out repo is equally fine and usually
