@@ -60,13 +60,24 @@ Look for changes already merged but **not yet applied** to the live environment 
 - **Autonomous:** do not try to resolve the drift (its failure would not map to a change made this run). **Exclude PRs touching the drifted component** from this run — defer them to the human queue with the drift as the reason — and report the drift prominently. PRs unrelated to the drifted component may proceed.
 - **Interactive:** flag it prominently and ask the user whether to resolve it first.
 
-### 0-4: Verify autonomous preconditions (autonomous mode only)
+### 0-4: Assemble the verification plan & verify autonomous preconditions (autonomous mode only)
 
-Autonomous mode replaces human approval with machine-checkable safety. Before entering the loop, verify the machinery actually exists — by probing, not by assuming:
+Autonomous mode replaces human approval with machine-checkable safety. The split of responsibility: **what to check comes from humans; whether it can be checked is machine-verified; running the checks is the skill's job.** The agent never invents "sufficiency" — it executes checks humans defined.
 
-1. **Observability.** The agent must be able to *observe* whether the system is healthy after a merge. Run the read-only probes that Phase 2's verification will use and confirm they return data:
+**First, assemble the verification plan** — for each deploy target the run will touch, the concrete V-3 functioning checks — from human-authored sources, in priority order:
+
+1. **The user's request** — checks stated at invocation ("after each merge confirm the ingress answers on :443").
+2. **Repo docs** — runbooks, upgrade guides, `AGENTS.md`/`CLAUDE.md`, monitoring docs already read in 0-1. Health-check procedures written there *are* the human-given answer to "what would a human check".
+3. **Repo-type baseline** — the three-state defaults from [verification.md](verification.md) (GitOps: workloads Ready + endpoints + version; CI-deploy: pipeline + smoke; library: post-merge default-branch CI).
+
+**Knowledge-gap rule:** the baseline is sufficient on its own for low-blast-radius targets. For a **high-blast-radius target** (control plane, CNI, database, node OS, single-replica services) with **no human-defined checks** beyond the baseline: if the user is present at run start, ask once (user choice) to supply checks or accept the baseline; in a fully unattended launch, **defer that target's PRs** to the human queue. This is a knowledge gate, not an approval gate — the question is "how do I know it's broken?", never "may I?".
+
+**Then verify the preconditions** — by probing, not by assuming:
+
+1. **Observability.** Run the read-only probes the verification plan needs and confirm they return data:
    - GitOps repo: controller status (e.g. Flux/Argo CLI or `kubectl` reads succeed), workload health is readable.
    - CI-deploy or library repo: post-merge workflow runs on the default branch are readable (e.g. `gh run list --branch main`).
+   - Any check in the plan whose probe fails (a dashboard the agent cannot read, a command that errors) is a failed precondition for the targets that depend on it.
 2. **Revert path.** Merging a revert PR must actually restore the running system under this repo's deploy mechanism. GitOps reconcile and CI-deploy-from-main both qualify. If the *repo-level* mechanism does not propagate a revert (e.g. deploys are manual-only), autonomous merging has no safety net.
    - Changes that a revert PR alone cannot undo (a node OS already upgraded, an irreversible DB migration) are handled **per-PR** in 2-5 — they defer unless an alternative rollback path is verified — not here.
 
@@ -101,7 +112,7 @@ Interactive mode may additionally offer to scope the set: security-only, skip ma
 
 ### 1-4: Plan gate (interactive) / plan report (autonomous)
 
-- **Autonomous:** report the plan — the PR set, the order, the constraint edges, and anything excluded (ambiguous candidates, drift-blocked PRs) — then **proceed immediately**. The report is for the record, not a question.
+- **Autonomous:** report the plan — the PR set, the order, the constraint edges, **the verification plan per target (which checks, from which source — user request / repo docs / baseline)**, and anything excluded (ambiguous candidates, drift-blocked PRs) — then **proceed immediately**. The report is for the record, not a question; it lets the human see *what will be checked* before the unattended stretch and interrupt if the checks look wrong.
 - **Interactive:** Hard Gate — present the triaged plan + order and ask the user to choose (see Environment Adaptation in SKILL.md): **Approve / Reorder / Scope down / Abort**. Approving the *plan* is a batch approval of *what* will be processed and in *what order*; it does **not** authorize any merge — each PR still hits its own approval gate at step 2-5.
 
 ## Phase 2: Per-PR loop (strictly serial)
@@ -233,4 +244,5 @@ Present what happened across the run:
 ### 3-2: Surface improvements (do not auto-fix)
 
 - **Doc drift** noticed during the run → list it as a proposal.
+- **Run-supplied verification checks** → if the user supplied checks at invocation or via the 0-4 knowledge-gap question, **propose** persisting them into the repo's docs/runbooks so future runs (and humans) find them in Phase 0 without asking again. Offer to open that change; do not make it unprompted.
 - **Repeatedly-manual packages** → if a package needed the same manual B/C apply again, **propose** adding a Renovate `prBodyNotes` entry for it so the manual-step note appears automatically on every future PR for that package. Offer to open that change; do not make it unprompted.

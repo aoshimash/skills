@@ -35,7 +35,7 @@ The hard-won lesson behind the serial rule: on 2026-05-04 a homelab cluster bump
 
 ## Core Principles
 
-1. **Safety by verification, not by prior approval (autonomous default).** In autonomous mode the gates are machine-checkable: Phase 0 verifies the agent can actually observe system health and that a revert path exists; every merge is followed by three-state verification; failed verification triggers an automatic revert. Anything the machine checks cannot cover — human-only steps, missing revert paths, undecidable risk — is **deferred to a human queue, never merged on hope**. In interactive mode, explicit user approval before every merge and every mutating apply, as before.
+1. **Safety by verification, not by prior approval (autonomous default).** In autonomous mode the gates are machine-checkable: Phase 0 verifies the agent can actually observe system health and that a revert path exists; every merge is followed by three-state verification; failed verification triggers an automatic revert. **What to verify is human-supplied, not agent-invented:** the functioning checks come from the user's request and the repo's runbooks/docs, on top of a repo-type baseline — the agent executes that plan, it does not judge sufficiency on its own. Anything the machine checks cannot cover — human-only steps, missing revert paths, undecidable risk, a high-blast-radius target with no human-defined checks — is **deferred to a human queue, never merged on hope**. In interactive mode, explicit user approval before every merge and every mutating apply, as before.
 2. **Strictly serial execution.** One change in flight, full working-verification between merges. Never start PR N+1 until PR N is verified functioning (or cleanly deferred without merging). A failure must be isolated to a single change so the revert is unambiguous.
 3. **Primary-source, read-the-diff.** The bot's PR body is a convenience, not the truth. Renovate sometimes omits inline release notes. Fetch the upstream GitHub Release / CHANGELOG and read the **actual diff/config**, not just the changelog prose.
 4. **Merge ≠ deployed ≠ working.** In GitOps repos merging only updates Git. Classify each PR's apply path and verify all three states — merged, applied/reconciled, functioning — before calling it done.
@@ -51,7 +51,7 @@ below use capability terms; map them to your environment as follows.
 |---|---|---|
 | **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`) | Numbered options as plain text; wait for the user's reply |
 
-(User choice is used by interactive mode's gates and by autonomous mode's escalation path — a failed revert always comes back to the human.)
+(User choice is used by interactive mode's gates, by autonomous mode's escalation path — a failed revert always comes back to the human — and by the Phase 0 knowledge-gap question when a high-blast-radius target has no human-defined verification checks.)
 
 ## Workflow
 
@@ -64,7 +64,7 @@ Establish how this repo ships code, and whether autonomous mode is safe here, be
 1. Read `AGENTS.md` / `CLAUDE.md` / `README` / `docs/` and CI config to learn the **deploy mechanism** (GitOps Flux/Argo vs. CI pipeline vs. manual), the **merge method** (merge / squash / rebase), and any **upgrade runbooks** or known "merge ≠ apply" cases (e.g. a `talosctl upgrade-k8s` step, a console-only Terraform runtime bump).
 2. Read the Renovate config — `renovate.json5` or `.github/renovate.json` — to learn configured `branchPrefix`, labels, and bot identity. This feeds detection in Phase 1.
 3. Detect **start-of-run drift**: PRs already merged but not yet applied to the live environment. Autonomous: exclude PRs touching the drifted component from this run (defer to the human queue); interactive: ask whether to resolve the drift first.
-4. **Verify autonomous preconditions** (autonomous mode only): (a) **observability** — the agent can actually read the signals verification needs (run the read-only probes: cluster/controller status, or post-merge CI on the default branch); (b) **revert path** — merging a revert PR actually restores the running system under this repo's deploy mechanism. If either fails, **fall back to interactive mode and say why**.
+4. **Assemble the verification plan & verify autonomous preconditions** (autonomous mode only): build the per-target functioning checks from **human-authored sources** — the user's request, then repo runbooks/docs, then the repo-type baseline. A high-blast-radius target with no human-defined checks: ask once at run start (user choice), or defer in an unattended launch — a knowledge gate, not an approval gate. Then verify by probing: (a) **observability** — the planned checks are actually readable (cluster/controller status, or post-merge CI on the default branch); (b) **revert path** — merging a revert PR actually restores the running system under this repo's deploy mechanism. If either fails, **fall back to interactive mode and say why**.
 
 ### Phase 1: Enumerate & triage
 
@@ -75,7 +75,7 @@ Find the Renovate PRs, understand how they relate, and propose an order. See [re
 1. Detect Renovate PRs via **composite signals** (author + branch prefix + PR-body signature + labels), refined against the Renovate config from Phase 0. Assume multiple Renovate instances (Cloud + self-hosted) may coexist; dedupe. Other bots' PRs (e.g. Dependabot) are out of scope — note them in the report, do not process them.
 2. Detect inter-PR **conflicts** (same file/line — e.g. a digest-bump PR superseded by a major-bump PR) and **compatibility/ordering** constraints (e.g. a Kubernetes ↔ CNI support matrix; a CRD before its controller).
 3. Propose a processing order, **low → high blast radius**.
-4. **Autonomous:** report the plan (set, order, constraints) and proceed immediately — no gate. Ambiguous candidates are excluded and listed in the report rather than blocking the run. **Interactive:** Hard Gate — present the plan → Approve / Reorder / Scope down / Abort; ambiguous candidates are confirmed with the user.
+4. **Autonomous:** report the plan (set, order, constraints, and the per-target verification plan with its sources) and proceed immediately — no gate. Ambiguous candidates are excluded and listed in the report rather than blocking the run. **Interactive:** Hard Gate — present the plan → Approve / Reorder / Scope down / Abort; ambiguous candidates are confirmed with the user.
 
 ### Phase 2: Per-PR loop (STRICTLY SERIAL — one change in flight)
 

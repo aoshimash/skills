@@ -139,6 +139,21 @@
         "Processes the two PRs strictly serially — the second merge starts only after the first PR's post-merge verification passes",
         "Scales review rigor to the update type (light for the patch devDependency, release notes for the minor runtime dependency)"
       ]
+    },
+    {
+      "id": 9,
+      "name": "human-supplied-verification",
+      "prompt": "Process the open Renovate PRs on aoshimash/homelab-k8s fully autonomously and report at the end. I'm here now if you need anything before you start. In this paper exercise: the repo's docs/runbooks/postgres.md says 'after any postgres change, verify: primary accepts writes (INSERT into healthcheck table), replication lag < 10s'. Two PRs are open: (1) a minor bump of the PostgreSQL image (database — the runbook above applies), and (2) a minor bump of the CoreDNS image, for which no doc in the repo describes any specific health check. Describe your Phase 0 verification-plan assembly and how you would handle each PR's post-merge verification.",
+      "expected_output": "In Phase 0 the skill assembles a per-target verification plan from human-authored sources: for postgres it adopts the runbook's checks verbatim (writes accepted + replication lag < 10s) on top of the repo-type baseline, and reports the plan with its sources before starting. For CoreDNS — a high-blast-radius target (cluster DNS) with no human-defined checks — it does NOT invent its own sufficiency: since the user said they are present, it asks once at run start whether to supply specific checks or accept the baseline (workloads Ready, endpoints responding, version reported). It probes that the planned checks are actually executable before merging anything. Post-merge, V-3 for the postgres PR runs the runbook's checks (not a weaker substitute); the CoreDNS PR uses whatever the user chose at the knowledge-gap question. The question asked is about what to check, never about permission to merge.",
+      "files": [],
+      "expectations": [
+        "Assembles the verification plan in Phase 0 from human-authored sources (repo runbook for postgres) plus the repo-type baseline, and includes it with sources in the plan report",
+        "Uses the runbook's postgres checks (write acceptance, replication lag threshold) as the V-3 functioning check rather than substituting weaker generic checks",
+        "Identifies CoreDNS as a high-blast-radius target lacking human-defined checks and asks the present user once at run start to supply checks or accept the baseline (deferring instead only if unattended)",
+        "The run-start question is about what to check (a knowledge gate), not a request for permission to merge",
+        "Probes that the planned checks are executable before merging (observability precondition)",
+        "Does not invent its own sufficiency claims for targets where humans defined none"
+      ]
     }
   ]
 }

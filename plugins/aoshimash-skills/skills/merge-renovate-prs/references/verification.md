@@ -42,7 +42,7 @@ Confirm the change reached the environment. This depends on the deploy mechanism
 
 Confirm the system is healthy *because of and despite* the change:
 
-- Run the relevant health checks (pods Ready at expected replica count, endpoints responding, the upgraded component reporting the new version, etc.).
+- Run the checks from the **verification plan** assembled in Phase 0-4 — the human-supplied checks (user request, repo runbooks/docs) plus the repo-type baseline (pods Ready at expected replica count, endpoints responding, the upgraded component reporting the new version, etc.). Do not substitute weaker checks for ones a human defined, and do not invent sufficiency the plan does not claim.
 - **Regression check:** confirm nothing that worked before is now broken — not just that the upgraded component is up. An upgrade can be "applied successfully" and still break a dependent service.
 - Wait for transient states to settle (rolling restarts, leader elections) before judging health. For changes classified **disruptive** (see below), use an extended settle window.
 

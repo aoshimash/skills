@@ -35,7 +35,7 @@ Phrases that **should** invoke `merge-renovate-prs` (a backlog of Renovate PRs t
 
 Each maps to an entry in `evals/evals.json` with objective expectations.
 
-The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 pin interactive mode** (their prompts explicitly ask to confirm each step) and exercise the approval-gate discipline. **Cases 5–8 exercise autonomous mode**: zero gates, precondition verification, defer-don't-block, auto-revert, and repo-type-adapted verification.
+The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 pin interactive mode** (their prompts explicitly ask to confirm each step) and exercise the approval-gate discipline. **Cases 5–9 exercise autonomous mode**: zero gates, precondition verification, defer-don't-block, auto-revert, repo-type-adapted verification, and human-supplied verification checks.
 
 ### Case 1: Manual-apply routing (`manual-apply-routing`) — interactive
 
@@ -125,9 +125,20 @@ The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 
 - Merges without approval; strictly serial (second merge only after the first PR's post-merge verification passes).
 - Scales rigor to semver (patch light; minor with release notes).
 
+### Case 9: Human-supplied verification checks (`human-supplied-verification`) — autonomous
+
+**Setup**: Autonomous run, user present at start. A runbook defines postgres health checks (write acceptance, replication lag < 10s). Two PRs: a postgres image bump (runbook applies) and a CoreDNS image bump (no documented checks).
+
+**Expected behavior**:
+- Phase 0 assembles the per-target verification plan from **human-authored sources** (the runbook) plus the repo-type baseline, and reports it with sources.
+- Postgres V-3 runs the **runbook's checks verbatim** — no weaker substitutes.
+- CoreDNS (high blast radius, no human-defined checks): asks the present user **once at run start** to supply checks or accept the baseline — a **knowledge gate**, not an approval gate; in an unattended launch it would defer instead.
+- Probes that planned checks are executable before merging.
+- Never invents its own sufficiency claims.
+
 ## Evaluation Log
 
-> Note: the 2026-06-21 results below predate the 2026-07-23 autonomous redesign; they were run against the interactive-only version of the skill (Cases 1–4). Cases 5–8 have not been benchmarked yet.
+> Note: the 2026-06-21 results below predate the 2026-07-23 autonomous redesign; they were run against the interactive-only version of the skill (Cases 1–4). Cases 5–9 have not been benchmarked yet.
 
 ### 2026-06-21 — Iteration 1 (run-sprint, issue #50)
 
