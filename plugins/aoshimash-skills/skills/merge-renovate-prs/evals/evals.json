@@ -1,5 +1,5 @@
 {
-  "skill_name": "review-dependency-prs",
+  "skill_name": "merge-renovate-prs",
   "trigger_evals": [
     { "query": "ok renovate has piled up like 6 PRs on aoshimash/homelab-k8s, can you go through the dependency update PRs and merge the safe ones", "should_trigger": true },
     { "query": "review the dependency PRs on this repo one by one before merging anything", "should_trigger": true },

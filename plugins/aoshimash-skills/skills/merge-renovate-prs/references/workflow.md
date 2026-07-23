@@ -1,6 +1,6 @@
 # Workflow: Modes, Discovery, Triage, and the Serial Per-PR Loop
 
-Detailed procedures for Phases 0–3 of the review-dependency-prs skill.
+Detailed procedures for Phases 0–3 of the merge-renovate-prs skill.
 
 ## Table of Contents
 

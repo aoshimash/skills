@@ -1,5 +1,5 @@
 ---
-name: review-dependency-prs
+name: merge-renovate-prs
 description: >
   Review and merge Renovate dependency PRs one at a time — discover repo
   conventions, verify that monitoring and a revert path exist, triage open

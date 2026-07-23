@@ -4,7 +4,7 @@ Human-readable index of the eval scenarios. The runnable source of truth is [../
 
 ## Trigger Evals
 
-Phrases that **should** invoke `review-dependency-prs` (a backlog of Renovate PRs to review and merge), and genuinely-tricky near-misses that should **not**. Full set in `evals.json` under `trigger_evals`.
+Phrases that **should** invoke `merge-renovate-prs` (a backlog of Renovate PRs to review and merge), and genuinely-tricky near-misses that should **not**. Full set in `evals.json` under `trigger_evals`.
 
 ### Should trigger (EN + JA)
 
