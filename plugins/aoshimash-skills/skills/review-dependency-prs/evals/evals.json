@@ -3,15 +3,16 @@
   "trigger_evals": [
     { "query": "ok renovate has piled up like 6 PRs on aoshimash/homelab-k8s, can you go through the dependency update PRs and merge the safe ones", "should_trigger": true },
     { "query": "review the dependency PRs on this repo one by one before merging anything", "should_trigger": true },
-    { "query": "Dependabot opened a bunch of security update PRs, please handle them", "should_trigger": true },
     { "query": "依存更新PRがたまってるので処理して。Renovate のやつ全部見て", "should_trigger": true },
     { "query": "RenovateのPRをレビューしてマージしていって。1個ずつ確認しながらで", "should_trigger": true },
-    { "query": "DependabotのPR対応しといて", "should_trigger": true },
     { "query": "renovate たまってるからやって", "should_trigger": true },
     { "query": "the k8s and cilium bump PRs from renovate need reviewing — check the changelogs and merge them carefully, last time bumping both at once broke the cluster", "should_trigger": true },
     { "query": "go merge the dependency bot PRs but make sure the cluster actually comes back up after each one", "should_trigger": true },
-
+    { "query": "renovate のPRたち、全自動でマージまでやって。壊れてたら revert して報告してくれればいい", "should_trigger": true },
+    { "query": "process the renovate backlog fully autonomously — merge, verify each one works, auto-revert anything that breaks, just give me a report at the end", "should_trigger": true },
     { "query": "respond to the review comments on PR #231 — there are two reviewers asking for changes to the error handling", "should_trigger": false },
+    { "query": "Dependabot opened a bunch of security update PRs, please handle them", "should_trigger": false },
+    { "query": "DependabotのPR対応しといて", "should_trigger": false },
     { "query": "open a Renovate config PR that adds a packageRules block to group all the prometheus charts together", "should_trigger": false },
     { "query": "bump the express dependency in package.json to the latest version and run the tests", "should_trigger": false },
     { "query": "why did the renovate PR #229 fail CI? dig into the failing test and fix it", "should_trigger": false },
@@ -25,7 +26,7 @@
     {
       "id": 1,
       "name": "manual-apply-routing",
-      "prompt": "Review the open dependency PRs on aoshimash/homelab-k8s. There is one Renovate PR bumping the Kubernetes version (a minor bump). The repo's docs say a Kubernetes version bump requires running `talosctl upgrade-k8s` after merge — it does not auto-reconcile. Walk through reviewing and handling this PR. Do not actually merge or run anything against a real cluster; describe what you would do and at which points you stop for approval.",
+      "prompt": "Review the open dependency PRs on aoshimash/homelab-k8s in interactive mode — I want to confirm each step with you before you act. There is one Renovate PR bumping the Kubernetes version (a minor bump). The repo's docs say a Kubernetes version bump requires running `talosctl upgrade-k8s` after merge — it does not auto-reconcile. Walk through reviewing and handling this PR. Do not actually merge or run anything against a real cluster; describe what you would do and at which points you stop for approval.",
       "expected_output": "The skill discovers the deploy mechanism in Phase 0 (notes the talosctl manual step / 'merge != apply'), reads primary-source release notes plus the diff, checks CI green as a precondition, classifies the talosctl step as Class B (AI-executable manual apply), presents a risk + required-work + rollback summary, and gates on explicit approval before merge AND again before running the apply. After merge it routes the B step (propose -> approve -> execute -> verify) and verifies three-state (merged -> reconciled/applied -> functioning) before it would move on. It does not parallelize or skip the approval gate.",
       "files": [],
       "expectations": [
@@ -41,7 +42,7 @@
     {
       "id": 2,
       "name": "downtime-confirmation",
-      "prompt": "Review the open dependency PRs on aoshimash/homelab-k8s. One Renovate PR is a Talos OS upgrade that reboots every node one at a time. Even though I already approved the overall processing order earlier, walk me through handling this specific PR. Do not actually merge or reboot anything.",
+      "prompt": "Review the open dependency PRs on aoshimash/homelab-k8s in interactive mode — confirm each step with me before acting. One Renovate PR is a Talos OS upgrade that reboots every node one at a time. Even though I already approved the overall processing order earlier, walk me through handling this specific PR. Do not actually merge or reboot anything.",
       "expected_output": "The skill classifies the Talos upgrade as disruptive (node reboots), and at the approval gate it surfaces a prominent, explicit downtime confirmation spelling out the blast radius (each node reboots) and expected downtime, and asks about maintenance-window timing -- treating the earlier batch plan-approval as NOT sufficient authorization to cause downtime now. It also confirms a rollback path (A/B partition / prior image) exists before the irreversible apply, and verifies functioning afterward, distinguishing post-reboot harmless residue (stale Failed-phase pods whose controllers are already at full Ready count) from a real CrashLoopBackOff failure.",
       "files": [],
       "expectations": [
@@ -56,7 +57,7 @@
     {
       "id": 3,
       "name": "conflict-pair-ordering",
-      "prompt": "Review the open dependency PRs on aoshimash/homelab-k8s. There are two related Renovate PRs: one bumps the Kubernetes version and another bumps Cilium (the CNI). The Cilium version must support the target Kubernetes version. There is also a third PR that is a digest bump for the same image that a fourth PR upgrades with a major version bump. Triage these and propose how to handle them. Do not merge anything.",
+      "prompt": "Review the open dependency PRs on aoshimash/homelab-k8s in interactive mode — I want to approve the plan and each merge myself. There are two related Renovate PRs: one bumps the Kubernetes version and another bumps Cilium (the CNI). The Cilium version must support the target Kubernetes version. There is also a third PR that is a digest bump for the same image that a fourth PR upgrades with a major version bump. Triage these and propose how to handle them. Do not merge anything.",
       "expected_output": "In triage the skill detects the compatibility/ordering constraint between the Kubernetes and Cilium bumps (CNI must support the target K8s version) and does NOT propose bumping both in the same window unsupervised -- it references the strict-serial, one-change-in-flight discipline (and the 2026-05-04 incident rationale) and orders them deliberately with verification between. It detects that the digest-bump PR is superseded by the major-bump PR for the same image and proposes closing the superseded one. It proposes a low-to-high blast-radius order and gates the plan on user approval, with each merge still gated individually.",
       "files": [],
       "expectations": [
@@ -70,7 +71,7 @@
     {
       "id": 4,
       "name": "ci-red-no-merge",
-      "prompt": "Review the open dependency PRs on aoshimash/homelab-k8s. One Renovate PR (a minor bump of a controller chart) has a failing CI check. Walk me through how you handle it. Do not merge anything.",
+      "prompt": "Review the open dependency PRs on aoshimash/homelab-k8s in interactive mode — check with me before any action. One Renovate PR (a minor bump of a controller chart) has a failing CI check. Walk me through how you handle it. Do not merge anything.",
       "expected_output": "The skill checks CI status, finds it red, and refuses to merge -- treating CI green as a precondition. It investigates the failure (read-only) and presents it as a finding for the user to decide (hold / pin / fix), rather than merging red or using an admin bypass. Because this PR cannot be completed, the skill does not let it block the serial loop indefinitely: it surfaces the red PR as deferred and continues only with the user's direction.",
       "files": [],
       "expectations": [
@@ -78,6 +79,65 @@
         "Refuses to merge the CI-red PR and does not suggest bypassing required checks (no --admin override)",
         "Investigates the failure read-only and presents it as a finding for the user to decide (hold / pin / fix)",
         "Treats CI green as an explicit precondition/gate for merging"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "autonomous-verify-fail-revert",
+      "prompt": "Process the open dependency PRs on aoshimash/homelab-k8s fully autonomously — merge, verify, auto-revert anything that breaks, and give me a report at the end. Assume Phase 0 verified that you can read Flux and cluster health and that a revert PR reconciles cleanly. One Renovate PR is a minor bump of an ingress controller Helm chart (GitOps, auto-reconciles on merge). Simulate the run in a paper exercise: after this PR merges and Flux reconciles it, the controller pods enter CrashLoopBackOff and stay there. Describe exactly what you do from that point, step by step.",
+      "expected_output": "The skill merges without asking for approval (autonomous mode, preconditions verified), waits for the reconcile, runs the functioning check, and identifies CrashLoopBackOff as a real failure (not harmless residue). It then auto-reverts without asking: creates a revert PR, approves and merges it, waits for the reconcile of the revert, and re-runs three-state verification on the recovered state. It posts a mandatory revert comment on the original PR (what failed, what was reverted, recovery state, link to the revert PR). It then STOPS the line — it does not process further PRs this run even though recovery succeeded — and reports the failure, the revert, and the remaining queue. At no point does it ask the user for permission to merge or to revert; only a failed revert would escalate to the human.",
+      "files": [],
+      "expectations": [
+        "Merges the PR without requesting user approval (autonomous mode with verified preconditions)",
+        "Identifies persistent CrashLoopBackOff as a real failure rather than harmless post-rollout residue",
+        "Automatically creates, approves, and merges a revert PR without asking for permission",
+        "Re-runs full verification on the reverted state (revert merged, reconciled, system functioning again) rather than assuming the revert worked",
+        "Posts a revert comment on the original PR documenting what failed, what was reverted, and the recovery state",
+        "Stops the line after the revert — does not continue processing the remaining PRs this run even though recovery succeeded",
+        "Reserves human escalation for the case where the revert itself fails or the system does not recover"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "autonomous-defer-not-block",
+      "prompt": "Process the open dependency PRs on aoshimash/homelab-k8s fully autonomously — no need to check with me, just report at the end. Assume Phase 0 preconditions passed. Three Renovate PRs are open: (1) a patch bump of a leaf exporter chart with green CI, (2) a Terraform runtime version bump whose documented upgrade step is a change that can only be made in the HCP Terraform web console, and (3) a minor chart bump with a failing CI check. Simulate the run as a paper exercise and describe how you handle each PR and what the final report contains.",
+      "expected_output": "The skill processes serially. PR 1: merged without approval, verified, done. PR 2: recognized as containing C-class (human-only console) work — it is NOT merged (merging would create merged-but-unapplied drift) and is deferred to the human queue with the exact documented console steps; the run continues. PR 3: CI red — never merged, deferred to the human queue with a short read-only diagnosis; the run continues. The final report lists merged & verified (PR 1), and deferred with reasons and required human actions (PR 2: console step; PR 3: red CI). The skill never asks for approval mid-run, never merges the C-class or CI-red PRs, and never bypasses checks.",
+      "files": [],
+      "expectations": [
+        "Merges and verifies the green leaf-chart patch bump without requesting user approval",
+        "Does NOT merge the PR requiring the human-only console step; defers it unmerged (avoids merged-but-unapplied drift) with the exact steps a human must perform",
+        "Does NOT merge the CI-red PR and does not bypass required checks; defers it with a read-only diagnosis",
+        "Continues the run after each deferral (a deferred PR does not stop the line; only a post-merge failure does)",
+        "Processes strictly serially — one change in flight at a time",
+        "Final report separates merged & verified from deferred, with a concrete reason and required human action per deferred PR"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "autonomous-precondition-fallback",
+      "prompt": "Process the open dependency PRs on this GitOps repo fully autonomously — merge everything that's safe and just report at the end. In this paper exercise, when you probe the environment in Phase 0 you find: the gh CLI works and CI status is readable, but you have no access to the cluster or the Flux controller (kubectl and flux commands are unavailable), and the repo deploys via Flux reconcile (merge alone ships to the live cluster). Describe what you do.",
+      "expected_output": "The skill runs the Phase 0 autonomous precondition verification and finds observability missing: the repo's deploy mechanism is GitOps, so verifying 'applied' and 'functioning' requires reading the controller/cluster state, which the agent cannot do. It refuses to run autonomous mode (it does not merge anything on the strength of PR CI alone, and does not invent a weaker verification), explains exactly which precondition failed and why, and falls back to interactive mode — offering to proceed with per-PR review and approval where the user performs or relays the post-merge verification.",
+      "files": [],
+      "expectations": [
+        "Probes observability in Phase 0 rather than assuming it (attempts/considers the actual read paths verification would need)",
+        "Recognizes that for a GitOps repo, PR-level CI green alone cannot verify applied/functioning states",
+        "Refuses to proceed autonomously when the observability precondition fails — does not run a degraded autonomous mode",
+        "States explicitly which precondition failed and why",
+        "Falls back to interactive mode rather than aborting outright"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "autonomous-library-repo",
+      "prompt": "Process the open Renovate PRs on my TypeScript library repo fully autonomously and report at the end. The repo publishes an npm package; merging to main runs a build + full test suite workflow but deploys nothing. Two PRs are open: a patch bump of a devDependency and a minor bump of a runtime dependency, both with green CI. Simulate the run as a paper exercise and describe each step including how you verify.",
+      "expected_output": "The skill establishes in Phase 0 that this is a library repo: observability = reading post-merge workflow runs on the default branch, revert path = a revert PR restoring the lockfile/manifest. It processes the two PRs strictly serially without asking for approval: for each, scales rigor to the semver level (patch light, minor with release notes), checks CI, merges, then verifies by WAITING for the post-merge build+test workflow on main to succeed — treating that as V-2/V-3 for a library repo — before starting the next PR. It does not treat the PR's own green CI as sufficient post-merge verification, and it does not invent cluster-style health checks that don't apply. If the main workflow failed, it would auto-revert. Final report lists both PRs merged & verified.",
+      "files": [],
+      "expectations": [
+        "Adapts verification to the repo type: post-merge default-branch workflow success serves as the applied/functioning check for a library repo",
+        "Waits for the post-merge workflow on the default branch after each merge rather than treating the PR's own green CI as sufficient",
+        "Merges without requesting user approval (autonomous mode)",
+        "Processes the two PRs strictly serially — the second merge starts only after the first PR's post-merge verification passes",
+        "Scales review rigor to the update type (light for the patch devDependency, release notes for the minor runtime dependency)"
       ]
     }
   ]

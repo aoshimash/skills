@@ -4,23 +4,24 @@ Human-readable index of the eval scenarios. The runnable source of truth is [../
 
 ## Trigger Evals
 
-Phrases that **should** invoke `review-dependency-prs` (a backlog of Renovate/Dependabot PRs to review and merge), and genuinely-tricky near-misses that should **not**. Full set in `evals.json` under `trigger_evals`.
+Phrases that **should** invoke `review-dependency-prs` (a backlog of Renovate PRs to review and merge), and genuinely-tricky near-misses that should **not**. Full set in `evals.json` under `trigger_evals`.
 
 ### Should trigger (EN + JA)
 
 - "renovate has piled up like 6 PRs … go through the dependency update PRs and merge the safe ones"
 - "review the dependency PRs on this repo one by one before merging anything"
-- "Dependabot opened a bunch of security update PRs, please handle them"
 - "依存更新PRがたまってるので処理して。Renovate のやつ全部見て"
 - "RenovateのPRをレビューしてマージしていって。1個ずつ確認しながらで"
-- "DependabotのPR対応しといて"
 - "renovate たまってるからやって"
 - "the k8s and cilium bump PRs from renovate need reviewing … last time bumping both at once broke the cluster"
 - "go merge the dependency bot PRs but make sure the cluster actually comes back up after each one"
+- "renovate のPRたち、全自動でマージまでやって。壊れてたら revert して報告してくれればいい"
+- "process the renovate backlog fully autonomously — merge, verify each one works, auto-revert anything that breaks, just give me a report at the end"
 
 ### Should NOT trigger (near-misses)
 
 - Responding to **review comments** on a PR → that's `respond-to-pr-review`, not dependency triage.
+- Handling **Dependabot** PRs ("Dependabot opened a bunch of security update PRs", "DependabotのPR対応しといて") → the skill is **Renovate-only**; Dependabot backlogs are out of scope.
 - Authoring a **Renovate config** PR (packageRules) → that's a normal code change, not reviewing bot PRs.
 - Manually **bumping a dependency** in `package.json` → editing deps directly, not reviewing bot-opened PRs.
 - **Debugging a failing CI** on one renovate PR → narrow debugging task, not the review/merge loop.
@@ -34,7 +35,9 @@ Phrases that **should** invoke `review-dependency-prs` (a backlog of Renovate/De
 
 Each maps to an entry in `evals/evals.json` with objective expectations.
 
-### Case 1: Manual-apply routing (`manual-apply-routing`)
+The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 pin interactive mode** (their prompts explicitly ask to confirm each step) and exercise the approval-gate discipline. **Cases 5–8 exercise autonomous mode**: zero gates, precondition verification, defer-don't-block, auto-revert, and repo-type-adapted verification.
+
+### Case 1: Manual-apply routing (`manual-apply-routing`) — interactive
 
 **Setup**: A Renovate PR bumps the Kubernetes version (minor). Repo docs say a K8s bump needs `talosctl upgrade-k8s` after merge — it does **not** auto-reconcile.
 
@@ -47,7 +50,7 @@ Each maps to an entry in `evals/evals.json` with objective expectations.
 - After merge: route B (propose → approve → execute → verify); three-state verification (merged → reconciled/applied → functioning).
 - Does not start another PR until this one is verified functioning.
 
-### Case 2: Downtime confirmation (`downtime-confirmation`)
+### Case 2: Downtime confirmation (`downtime-confirmation`) — interactive
 
 **Setup**: A Talos OS upgrade PR reboots every node one at a time. The user already approved the overall processing order earlier.
 
@@ -58,7 +61,7 @@ Each maps to an entry in `evals/evals.json` with objective expectations.
 - Confirms a **rollback path** (A/B partition / prior image) before the irreversible apply.
 - On verification, distinguishes **harmless post-reboot residue** (stale `Failed`-phase pods whose controllers are already at full Ready count) from a real `CrashLoopBackOff` failure.
 
-### Case 3: Conflict pair + ordering (`conflict-pair-ordering`)
+### Case 3: Conflict pair + ordering (`conflict-pair-ordering`) — interactive
 
 **Setup**: Two related PRs — a Kubernetes bump and a Cilium (CNI) bump that must support the target K8s version — plus a digest-bump PR superseded by a major-bump PR for the same image.
 
@@ -69,7 +72,7 @@ Each maps to an entry in `evals/evals.json` with objective expectations.
 - Proposes a low → high blast-radius order.
 - Plan-level Hard Gate for approval, with each individual merge still gated.
 
-### Case 4: CI-red — no merge (`ci-red-no-merge`)
+### Case 4: CI-red — no merge (`ci-red-no-merge`) — interactive
 
 **Setup**: A minor controller-chart bump PR has a failing CI check.
 
@@ -79,7 +82,52 @@ Each maps to an entry in `evals/evals.json` with objective expectations.
 - Investigates read-only and presents it as a finding (hold / pin / fix) for the user to decide.
 - Surfaces the red PR as deferred rather than letting it silently block or get rubber-stamped.
 
+### Case 5: Auto-revert on verify failure (`autonomous-verify-fail-revert`) — autonomous
+
+**Setup**: Autonomous run, preconditions verified. A minor Helm-chart bump merges and reconciles, then the controller pods enter persistent `CrashLoopBackOff`.
+
+**Expected behavior**:
+- Merges without asking (autonomous, preconditions verified); waits for reconcile; runs the functioning check.
+- Identifies persistent `CrashLoopBackOff` as a **real failure**, not residue.
+- **Auto-reverts without asking**: revert PR created → approved → merged → recovery re-verified with the full three states.
+- Posts the **mandatory revert comment** on the original PR (failure, revert, recovery state, revert-PR link).
+- **Stops the line** after the revert — no further PRs this run, even though recovery succeeded.
+- Escalates to the human only if the revert itself fails or the system does not recover.
+
+### Case 6: Defer, don't block (`autonomous-defer-not-block`) — autonomous
+
+**Setup**: Autonomous run with three PRs: a green leaf-chart patch bump; a Terraform runtime bump whose upgrade step is console-only (C-class); a minor bump with red CI.
+
+**Expected behavior**:
+- PR 1 merged and verified without approval.
+- The C-class PR is **not merged** (merging would create merged-but-unapplied drift) — deferred to the human queue with the exact console steps.
+- The CI-red PR is **not merged**, no check bypass — deferred with a read-only diagnosis.
+- Deferrals do **not** stop the line (only a post-merge failure does); the run continues serially.
+- Final report separates merged & verified from deferred, with reasons and required human actions.
+
+### Case 7: Precondition fallback (`autonomous-precondition-fallback`) — autonomous
+
+**Setup**: Autonomous run requested on a GitOps repo, but Phase 0 probing finds no cluster/Flux read access (only `gh` works).
+
+**Expected behavior**:
+- Probes observability instead of assuming it.
+- Recognizes PR-level CI green cannot verify applied/functioning for a GitOps repo.
+- **Refuses to run autonomous mode** — no degraded variant, nothing merged on CI-green alone.
+- States which precondition failed and why; **falls back to interactive mode** rather than aborting.
+
+### Case 8: Library-repo verification (`autonomous-library-repo`) — autonomous
+
+**Setup**: Autonomous run on a TypeScript npm-library repo (merge runs build + full tests on main, deploys nothing). Two green PRs: a patch devDependency bump and a minor runtime-dependency bump.
+
+**Expected behavior**:
+- Adapts verification to the repo type: **post-merge default-branch workflow success = the applied/functioning check**.
+- After each merge, **waits for the main workflow** — the PR's own green CI is not sufficient.
+- Merges without approval; strictly serial (second merge only after the first PR's post-merge verification passes).
+- Scales rigor to semver (patch light; minor with release notes).
+
 ## Evaluation Log
+
+> Note: the 2026-06-21 results below predate the 2026-07-23 autonomous redesign; they were run against the interactive-only version of the skill (Cases 1–4). Cases 5–8 have not been benchmarked yet.
 
 ### 2026-06-21 — Iteration 1 (run-sprint, issue #50)
 
