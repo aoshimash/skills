@@ -59,10 +59,12 @@ file in `aoshimash/skills`.
 6. **The rule text is copied verbatim.** Do not reword, re-wrap, summarize, or
    "improve" a rule body while writing it. Byte-for-byte copying is what makes
    the block idempotent and what makes a corrected rule propagate cleanly.
-7. **Nothing is written until the decision to write is made.** Every filesystem
-   edit happens in Phase 10. Phases 0–9 read, decide, and ask; a run that ends
-   in "already in sync", a cancelled bootstrap, or a refusal leaves the
-   repository exactly as it was found.
+7. **Nothing is written until the decision to write is made.** No edit to the
+   repository's tracked content happens outside git's own branch operations until
+   Phase 10 — Phase 2 does create/check out a branch, which moves git refs and can
+   swap tracked files, and the wrap-up restores both. Phases 0–9 otherwise read,
+   decide, and ask; a run that ends in "already in sync", a cancelled bootstrap,
+   or a refusal leaves the repository exactly as it was found.
 
 ## Environment Adaptation
 
@@ -110,11 +112,14 @@ failed if any does not hold.
    Refuse to proceed otherwise, so the commit contains only the sync and no
    in-progress work is swept into it.
 3. **`gh` is authenticated** (`gh auth status`) and the network is reachable.
-4. **Record the starting position** so the wrap-up can restore it:
+4. **An `origin` remote exists and points at GitHub** (`git remote get-url
+   origin`). Without it, Phase 2's `git fetch origin` and `gh repo view` fail
+   mid-run; a local-only repository has nowhere to open a pull request.
+5. **Record the starting position** so the wrap-up can restore it:
    `git symbolic-ref --quiet --short HEAD` for a branch, or — when that fails
    because HEAD is detached — `git rev-parse HEAD` for the commit. Restoring by
    SHA is correct for a detached HEAD; do not assume a branch name exists.
-5. **If the remote is `aoshimash/skills` itself**, the target is the corpus
+6. **If the remote is `aoshimash/skills` itself**, the target is the corpus
    repository. Rules there are authored, not distributed, and a managed block in
    its `AGENTS.md` would duplicate the corpus it ships. Say so and ask the user
    to choose (see Environment Adaptation) whether to continue or stop; default
@@ -140,9 +145,13 @@ Hold the fetched text in memory, or write it to a temporary location **outside
 the repository** (e.g. the system temp directory) — never into the working tree.
 Parse every `## rule: <id>` section into `(id, title, detect patterns, body)`.
 The body starts on the line **after** the `**Rule:**` line and runs to the next
-`## rule:` heading or end of file, with surrounding blank lines trimmed — the
-`**Rule:**` marker line itself is never part of the body. Preserve the corpus
-order, which determines the order of newly appended rules.
+`##`-level heading or end of file, with surrounding blank lines trimmed — the
+`**Rule:**` marker line itself is never part of the body. Stopping at any `##`
+heading, not only at the next `## rule:`, is what keeps a non-rule section
+appended after the last rule from being absorbed into that rule's body and
+copied into every target repository — which would inject a `##` heading that the
+corpus format forbids in bodies. Preserve the corpus order, which determines the
+order of newly appended rules.
 
 Two things are **not** rules and must be skipped: sections that are not
 `## rule:` headings (the corpus's own "Contract" and "Format" documentation),
@@ -153,9 +162,72 @@ markdown.
 If both reads fail, stop and report it. Never fall back to a copy bundled with
 the skill, and never reconstruct rule text from memory.
 
-### Phase 2: Detect which rules are relevant
+### Phase 2: Establish the working branch
 
-For each rule, test its `Detect` patterns against the files present in this
+Do this **before** detecting anything and before reading the target file, so
+every step that follows — detection, read, render, compare, write — sees one
+single branch's copy of the repository.
+
+```bash
+git fetch origin
+```
+
+Determine the default branch (e.g.
+`gh repo view --json defaultBranchRef --jq .defaultBranchRef.name`), then check
+whether a sync pull request is actually open:
+
+```bash
+gh pr list --head chore/sync-agent-rules --state open
+```
+
+- **An open pull request exists for `chore/sync-agent-rules`** → reuse that
+  branch. Its target file already carries the block and may carry hand edits a
+  reviewer made on the pull request; reading and writing there is what preserves
+  them.
+
+  ```bash
+  git switch chore/sync-agent-rules
+  git merge --ff-only origin/chore/sync-agent-rules
+  ```
+
+  If the fast-forward fails, stop and report — **never** `git reset --hard`,
+  merge, rebase, or force. A local branch that is merely *ahead* of the remote is
+  the expected state after Phase 10 step 4 preserved an unpushed commit, and a
+  hard reset would silently destroy it.
+- **No open pull request** → do not reuse the branch even if a local
+  `chore/sync-agent-rules` exists. Nothing deletes local branches when a pull
+  request merges, so a leftover branch is behind the default branch; after a
+  squash merge its merge base is the pre-sync commit, and the next pull request
+  would re-add the whole block and conflict with the already-merged version.
+  Recreate it from the freshly fetched default branch:
+
+  ```bash
+  git switch -c chore/sync-agent-rules origin/<default-branch>   # -C to replace a leftover branch
+  ```
+
+  **Never base it on the session's current branch** — a feature branch would drag
+  unrelated commits into the pull request, and a stale local default branch would
+  give a stale base. Before replacing a leftover local branch, check it holds no
+  commits absent from `origin/<default-branch>`; if it does (an unpushed commit
+  from an earlier rejected push), stop and report rather than discarding work.
+
+If the branch operation fails for any other reason — most commonly
+`git switch` aborting because unrelated uncommitted files would be overwritten —
+stop and report it. Do not stash or discard the user's work to get past it.
+
+Remember whether this run created the branch. If the run later ends without a
+commit, the wrap-up deletes it.
+
+### Phase 3: Detect which rules are relevant
+
+Detection runs **after** the checkout above, so it reflects the branch the pull
+request will actually be based on. Detecting against the session's own branch
+would be wrong in both directions: a `Dockerfile` that exists only on a feature
+branch would be reported as the reason for a rule the pull request's base does
+not contain, and a file deleted on that feature branch but present on the default
+branch would be missed.
+
+For each rule, test its `Detect` patterns against the files present in the
 repository. Use git's own file list, so `.gitignore` is honoured and files added
 but not yet committed still count. Run **one invocation per pattern**, so you
 know which pattern matched and not merely that something did:
@@ -182,33 +254,6 @@ Notes:
 Record, per detected rule, the pattern that matched and one example file, so the
 pull request can explain why every rule is there.
 
-### Phase 3: Establish the working branch
-
-Do this **before** reading the target file, so everything that follows reads,
-renders, compares, and writes against one single branch's copy of the file.
-
-```bash
-git fetch origin
-```
-
-Determine the default branch (e.g.
-`gh repo view --json defaultBranchRef --jq .defaultBranchRef.name`), then:
-
-- **A sync branch already exists** (local `chore/sync-agent-rules` or
-  `origin/chore/sync-agent-rules`) → check it out and fast-forward it to the
-  remote. That branch's `AGENTS.md` already carries the block and may carry
-  hand edits a reviewer made on the open pull request; reading and writing there
-  is what preserves them. If the local branch has diverged and cannot
-  fast-forward, stop and report — do not merge, rebase, or force anything.
-- **No sync branch exists** → create it from the freshly fetched default branch:
-  `git switch -c chore/sync-agent-rules origin/<default-branch>`. **Never base
-  it on the session's current branch** — a feature branch would drag unrelated
-  commits into the pull request, and a stale local default branch would give a
-  stale base.
-
-Remember whether this run created the branch. If the run later ends without a
-commit, the wrap-up deletes it.
-
 ### Phase 4: Read the target file
 
 Pick the target file, in this order:
@@ -216,20 +261,24 @@ Pick the target file, in this order:
 | Situation | Target |
 |---|---|
 | `AGENTS.md` exists | `AGENTS.md` |
-| `AGENTS.md` absent, but `CLAUDE.md` contains a managed block | `CLAUDE.md`. A previous run wrote there on the user's instruction; the block's location *is* that recorded decision, so do not ask again |
+| `AGENTS.md` absent, but `CLAUDE.md` contains a `BEGIN` delimiter line | `CLAUDE.md`. A previous run wrote there on the user's instruction; the block's location *is* that recorded decision, so do not ask again. Test for the `BEGIN` line alone, not for a well-formed pair — a stray unmatched `BEGIN` must reach step 1 below and be refused, not be treated as "no block" and get a second one appended |
 | Otherwise | **Undecided** — resolved in Phase 6, after Phase 5 can still cancel the run |
 
 Then, on the chosen file:
 
 1. **Validate the block.** Count the lines whose entire content, ignoring
    surrounding whitespace, is exactly the `BEGIN` delimiter, and likewise for
-   `END`. Requiring the delimiter to be the whole line is what stops a prose
-   mention of it in the document from being miscounted. Accept only **zero** of
-   each (no block yet) or **exactly one of each, `BEGIN` before `END`**.
-   Anything else — a `BEGIN` with no `END` (truncated file, deleted marker) or
-   two pairs (bad merge) — is a malformed block: **stop and report, write
-   nothing.** Never guess the missing boundary; treating an unterminated block
-   as running to end of file would destroy every hand-written section below it.
+   `END`, **skipping fenced code regions** as Phase 1 does. Requiring the
+   delimiter to be the whole line stops a prose mention of it from being
+   miscounted; skipping fences stops a target file that *documents* this
+   mechanism with a fenced example from being treated as the real block — which
+   would replace the fence's contents and leave stray fence lines behind. Accept
+   only **zero** of each (no block yet) or **exactly one of each, `BEGIN` before
+   `END`**. Anything else — a `BEGIN` with no `END` (truncated file, deleted
+   marker) or two pairs (bad merge) — is a malformed block: **stop and report,
+   write nothing.** Never guess the missing boundary; treating an unterminated
+   block as running to end of file would destroy every hand-written section
+   below it.
 2. **Record the file's line ending** (LF or CRLF, by majority) and whether the
    file ends with a newline. Phase 9 compares and Phase 10 writes in the file's
    own line ending, so a CRLF checkout does not diff against an LF render on
@@ -240,11 +289,19 @@ Then, on the chosen file:
    with the blank lines around them. Phase 8 re-emits both verbatim. **Skipping
    this step is what makes a second run produce a spurious diff**, because the
    preamble would otherwise be captured as content and then duplicated.
-4. **Parse the remainder into an ordered list of entries.** An entry carrying a
-   `<!-- rule: <id> -->` marker is a **managed entry**; anything else between the
-   delimiters is a **foreign entry** — including a hand-written paragraph that
-   sits before the first `###` heading. A file with no delimiters yields an empty
-   list.
+4. **Parse the remainder into an ordered list of entries, trimming each entry's
+   surrounding blank lines** exactly as Phase 1 trims a corpus body. An entry
+   carrying a `<!-- rule: <id> -->` marker is a **managed entry**; anything else
+   between the delimiters is a **foreign entry** — including a hand-written
+   paragraph that sits before the first `###` heading. A file with no delimiters
+   yields an empty list.
+
+   The trim is not cosmetic. Phase 8 supplies the separator blank lines on emit,
+   so an entry parsed *with* its trailing blank line gains another one on every
+   render — the gap grows by one line per run and the block never reaches a fixed
+   point, breaking Principle 4. Managed entries escape this only because step 2 of
+   Phase 7 replaces their bodies wholesale; foreign entries are preserved as
+   parsed, so untrimmed input persists.
 
 ### Phase 5: Bootstrap when nothing is detected
 
@@ -281,6 +338,16 @@ Option 1 is the only case where a second file is touched; it is a one-line
 addition to a file that already exists, it happens only on the user's explicit
 selection, and like everything else it is applied in Phase 10. No other file in
 the repository is ever created or modified.
+
+**Then apply Phase 4 steps 1–4 to the resolved file before continuing.** Phase 4
+routed this file to "Undecided" and so never validated or measured it. If the
+target resolved to an existing file — option 2's `CLAUDE.md` — it still needs its
+block validated, its line ending recorded, its preamble stripped and its entries
+parsed. Skipping that appends an LF block to a CRLF `CLAUDE.md` (whose mismatch
+the *next* run would "fix" with a purely cosmetic second pull request), and
+appends a second block to a `CLAUDE.md` holding a stray unmatched `BEGIN` instead
+of refusing it. For a file that does not exist yet, the steps are trivially
+satisfied: no block, no entries, and LF as the line ending.
 
 ### Phase 7: Merge into the managed block
 
@@ -343,9 +410,9 @@ Phase 9's comparison meaningful:
 
 Placement:
 
-- **Creating the file** (Phase 6 rows 1–2): the file *is* the block —
-  `<!-- BEGIN … -->` is line 1, with no leading blank line, and the file ends
-  with a single newline after `<!-- END … -->`.
+- **Creating the file** (Phase 6 rows 1–2, and row 3 options 1 and 3): the file
+  *is* the block — `<!-- BEGIN … -->` is line 1, with no leading blank line, and
+  the file ends with a single newline after `<!-- END … -->`.
 - **Appending to an existing file with no block**: if the file does not already
   end with a newline, add one; then one blank line, then the block; then a
   single trailing newline.
@@ -367,7 +434,7 @@ recorded line ending so the comparison reflects real content and not encoding.
 ### Phase 10: Write, commit, and open a pull request
 
 This is the only phase that modifies anything. The branch is already checked out
-and up to date from Phase 3.
+and up to date from Phase 2.
 
 1. Write the target file, and `CLAUDE.md` too if the user chose Phase 6 option 1.
 2. Stage **only** those files by name. Never `git add -A` / `git add .` — that is
@@ -385,7 +452,7 @@ and up to date from Phase 3.
 4. Push (`git push -u origin chore/sync-agent-rules`). If the push is rejected as
    non-fast-forward, someone pushed to the sync branch during this run: **stop and
    report, and do not force-push** — the local commit is preserved, and re-running
-   the skill picks the new remote state up in Phase 3.
+   the skill picks the new remote state up in Phase 2.
 5. Open the pull request, or, when one is already open for this branch
    (`gh pr list --head chore/sync-agent-rules`), let the push update it instead of
    opening a second one. The body states, per rule, whether it was **added**,
@@ -403,7 +470,7 @@ part of this skill.
 Reached by every exit path — success, "already in sync", a cancelled bootstrap, or
 a refusal.
 
-1. Restore the starting position recorded in Phase 0 step 4 (branch name, or
+1. Restore the starting position recorded in Phase 0 step 5 (branch name, or
    commit SHA for a detached HEAD).
 2. If this run created the sync branch and made no commit on it, delete it
    (`git branch -d chore/sync-agent-rules`) so a cancelled run leaves nothing

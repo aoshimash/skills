@@ -1,14 +1,14 @@
 # Shared Agent Rules
 
 The canonical set of the author's personal project conventions. This file is the
-single source; the rules are copied *from* here into individual repositories'
-`AGENTS.md`, and hand-written rules found in owned repositories are promoted
-*into* here.
+single source: the rules are copied *from* here into individual repositories'
+`AGENTS.md`.
 
 - `sync-agent-rules` **reads** this file (over the GitHub API, from
   `aoshimash/skills`) and writes the relevant rules into a target repository.
-- `collect-agent-rules` **edits** this file in a local checkout to add newly
-  promoted rules.
+- A future `collect-agent-rules` skill (issue #83, not yet implemented) will
+  **edit** this file in a local checkout to add rules promoted from hand-written
+  `AGENTS.md` files in owned repositories.
 
 This file is data, not instructions to an agent. Nothing here changes how a
 skill behaves; a rule body is text to be copied verbatim into another
@@ -16,8 +16,9 @@ repository's instruction file.
 
 ## Contract
 
-These are fixed. Both skills depend on them, so do not change them without
-updating both.
+These are fixed. `sync-agent-rules` depends on them today and
+`collect-agent-rules` will depend on them, so do not change them without
+updating every skill that reads or writes this format.
 
 | Thing | Value |
 |---|---|
@@ -28,9 +29,11 @@ updating both.
 
 The delimiters are HTML comments, so they are invisible in rendered markdown and
 greppable in source. They serve two purposes: they tell `sync-agent-rules` what
-it owns and may refresh, and they tell `collect-agent-rules` what to **ignore**
-when scanning a repository for rules worth promoting — without that boundary,
-already-distributed rules would be rediscovered as candidates on every scan.
+it owns and may refresh, and they will tell `collect-agent-rules` what to
+**ignore** when scanning a repository for rules worth promoting — without that
+boundary, already-distributed rules would be rediscovered as candidates on every
+scan. That second purpose is why the format is fixed here even though the
+collection skill does not exist yet.
 
 ## Format
 
@@ -64,8 +67,10 @@ markdown. Skip fenced regions when enumerating rules.
   in use*, not files that prove compliance — a repository that violates a rule
   still needs to carry it.
 - **Rule** body starts on the line **after** the `**Rule:**` line and runs to the
-  next `## rule:` heading or end of file, with leading and trailing blank lines
-  trimmed. The `**Rule:**` marker line itself is never part of the body. It is
+  next `##`-level heading or end of file, with leading and trailing blank lines
+  trimmed. The `**Rule:**` marker line itself is never part of the body. Stopping
+  at any `##` heading — not only at the next `## rule:` — keeps a non-rule section
+  appended after the last rule from being swallowed into that rule's body. It is
   copied byte-for-byte, so it must read correctly standing alone in someone
   else's `AGENTS.md`.
 - A body may use bullets, tables, code fences, and links, but **no markdown

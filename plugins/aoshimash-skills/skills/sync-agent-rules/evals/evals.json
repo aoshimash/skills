@@ -126,13 +126,15 @@
     {
       "id": 7,
       "name": "no-clone-no-extra-files",
-      "prompt": "Sync the shared agent rules into this repository — it's a Python service with pyproject.toml, a Dockerfile, and GitHub Actions workflows. I'm currently on a feature branch called `feat/checkout-flow` with two of my own commits on it. Paper exercise: list every file you create or modify anywhere, every git command you run, and where you put anything you download.",
-      "expected_output": "The skill runs in place inside the target repository. It never runs `git clone` — the target is the current working tree and the corpus is fetched over the API. It runs `git fetch origin` and creates the sync branch from `origin/<default-branch>`, NOT from the current `feat/checkout-flow` HEAD, so the user's two unrelated commits do not end up in the pull request and the base is not stale. The only repository file created or modified is AGENTS.md. No per-repository state file, config file, manifest, cache, or scratch file is created in the repository; the managed block itself is the state. The fetched corpus is written to a temporary location outside the working tree, or held in memory. Staging is explicit — only AGENTS.md is added, never `git add -A` or `git add .`. The work lands on its own branch with a pull request, never a direct commit to the default branch, and the skill does not merge the pull request itself. Afterwards it restores `feat/checkout-flow`.",
+      "prompt": "Sync the shared agent rules into this repository — it's a Python service with pyproject.toml, a Dockerfile, and GitHub Actions workflows. I'm currently on a feature branch called `feat/checkout-flow` with two of my own commits on it, and one of those commits is the one that added the Dockerfile — it does not exist on the default branch yet. Paper exercise: list every file you create or modify anywhere, every git command you run, where you put anything you download, and say which branch you inspect to decide which rules are relevant.",
+      "expected_output": "The skill runs in place inside the target repository. It never runs `git clone` — the target is the current working tree and the corpus is fetched over the API. It runs `git fetch origin` and creates the sync branch from `origin/<default-branch>`, NOT from the current `feat/checkout-flow` HEAD, so the user's two unrelated commits do not end up in the pull request and the base is not stale. Critically, detection runs AFTER that checkout and therefore inspects the sync branch, not the feature branch: the Dockerfile that exists only on `feat/checkout-flow` is NOT detected, and the container image rule is neither written nor cited as relevant, because the pull request's base does not contain that file. The only repository file created or modified is AGENTS.md. No per-repository state file, config file, manifest, cache, or scratch file is created in the repository; the managed block itself is the state. The fetched corpus is written to a temporary location outside the working tree, or held in memory. Staging is explicit — only AGENTS.md is added, never `git add -A` or `git add .`. The work lands on its own branch with a pull request, never a direct commit to the default branch, and the skill does not merge the pull request itself. Afterwards it restores `feat/checkout-flow`.",
       "files": [],
       "expectations": [
         "Runs no `git clone` — operates on the current working tree",
         "Runs `git fetch origin` and bases the sync branch on `origin/<default-branch>`, not on the current feature branch HEAD",
         "Explicitly avoids carrying the user's unrelated feature-branch commits into the pull request",
+        "Runs detection AFTER checking out the sync branch, so relevance reflects the pull request's base rather than the session's branch",
+        "Does not detect or write the container image rule, because the Dockerfile exists only on the feature branch and not on the sync branch's base",
         "Creates or modifies no repository file other than AGENTS.md",
         "Creates no per-repository state, config, or cache file to track what was synced",
         "Keeps the fetched corpus outside the working tree (temp location or memory)",
@@ -146,7 +148,7 @@
       "id": 8,
       "name": "self-sync-guard",
       "prompt": "Sync the shared agent rules into this repository. Note the working directory is a checkout of aoshimash/skills itself — the repo that holds the shared corpus. It has GitHub Actions workflows, so at least one rule would match. Paper exercise: describe what you do.",
-      "expected_output": "The skill checks the remote in its preconditions and recognizes that the target IS the corpus repository. Rules there are authored rather than distributed, and writing a managed block into its AGENTS.md would duplicate the corpus the repository ships and confuse the collection skill, which relies on the delimiters to know what to ignore. Rather than proceeding silently on the strength of the matching workflow files, it says so and asks the user whether to continue or stop, defaulting to stopping. If the user does not explicitly choose to continue, nothing is written, no branch is created, and no pull request is opened.",
+      "expected_output": "The skill checks the remote in its preconditions and recognizes that the target IS the corpus repository. Rules there are authored rather than distributed, and writing a managed block into its AGENTS.md would duplicate the corpus the repository ships. Rather than proceeding silently on the strength of the matching workflow files, it says so and asks the user whether to continue or stop, defaulting to stopping. If the user does not explicitly choose to continue, nothing is written, no branch is created, and no pull request is opened.",
       "files": [],
       "expectations": [
         "Checks the git remote during preconditions and identifies the target as the aoshimash/skills corpus repository itself",
@@ -202,6 +204,22 @@
         "Updates the already-open pull request instead of opening a second one",
         "Does not force-push; stops and reports if the push is rejected as non-fast-forward",
         "Stops rather than merging or rebasing if the local sync branch has diverged and cannot fast-forward"
+      ]
+    },
+    {
+      "id": 12,
+      "name": "fenced-template-is-not-a-rule",
+      "prompt": "Sync the shared agent rules into this repository. It was created this morning and holds a README.md and a LICENSE, nothing else — no Dockerfile, no workflows, no source files, no config. Paper exercise: before you offer me anything, list every rule you parsed out of the corpus with its exact id, then show me exactly the catalog you would present. Be explicit about which `## rule:` lines in the corpus file are rules and which are not, and why.",
+      "expected_output": "The corpus file documents itself before it lists rules: a \"Contract\" section, a \"Format\" section, and a \"Rules\" heading. The Format section shows the rule template inside a fenced code block whose first line is literally `## rule: <id>`, followed by `**Title:** <heading text used in the target repository>`, `**Detect:** `<glob>`, `<glob>`, …`, and `**Rule:**`. That fenced line is NOT a rule, and the skill skips fenced regions when enumerating rather than matching `## rule:` line by line. It therefore parses exactly four rules — container-base-image, python-package-management, cli-version-management, github-actions-pinning — and no fifth phantom entry with the placeholder id `<id>`. It also skips the headings that are not `## rule:` headings at all. Because nothing is detected here and there is no existing managed block, this is the bootstrap case and the full catalog is offered for explicit selection; the catalog contains exactly those four real rules and does NOT offer a placeholder `<id>` / `<glob>` entry. That is where a missed fence becomes visible: a phantom entry would be selectable, and selecting it would write the template's placeholder text into the target repository as if it were a convention.",
+      "files": [],
+      "expectations": [
+        "Skips fenced code regions when enumerating corpus rules rather than matching `## rule:` line by line",
+        "Does NOT treat the `## rule: <id>` line inside the Format section's fenced template as a rule",
+        "Parses exactly four rules and names their real ids (container-base-image, python-package-management, cli-version-management, github-actions-pinning)",
+        "Skips the corpus's own non-rule sections (Contract, Format, Rules) as well",
+        "Offers no phantom catalog entry with the placeholder id `<id>` or the placeholder detect pattern `<glob>`",
+        "Presents the bootstrap catalog containing exactly the four real rules for explicit selection",
+        "Never writes the fenced template's placeholder text into the target repository"
       ]
     }
   ]

@@ -25,9 +25,9 @@ that should **not**. Full set in `evals.json` under `trigger_evals`.
 
 ### Should NOT trigger (near-misses)
 
-- **Collecting** rules from other repos into the corpus → that is the opposite
-  direction, `collect-agent-rules`. This is the sharpest near-miss: same
-  vocabulary, opposite data flow.
+- **Collecting** rules from other repos into the corpus → the opposite direction
+  (the future `collect-agent-rules` skill, issue #83, not yet implemented). This
+  is the sharpest near-miss: same vocabulary, opposite data flow.
 - **Editing the corpus** ("add a rule saying we use go-task not Make") → a
   normal edit to `aoshimash/skills`, not a distribution run.
 - **Authoring an `AGENTS.md`** describing this repo's architecture and test
@@ -52,7 +52,8 @@ need no live repository.
 
 **Cases 1–7 are success paths**; **cases 8–10 are guard/refusal paths** (the
 skill must decline and leave the repository untouched); **case 11** covers the
-re-run-against-an-open-PR path.
+re-run-against-an-open-PR path; **case 12** covers corpus parsing, where the
+corpus itself guarantees the tricky input is present on every run.
 
 ### Case 1: Detected subset, silent skip (`detect-subset-silently`)
 
@@ -159,14 +160,20 @@ carries the older container image rule.
 ### Case 7: No clone, no extra files (`no-clone-no-extra-files`)
 
 **Setup**: A Python service with `pyproject.toml`, a `Dockerfile`, and
-workflows. **The session is on a feature branch with two unrelated commits.**
-The prompt asks for every file touched and every git command run.
+workflows. **The session is on a feature branch with two unrelated commits**, and
+**one of them is the commit that added the `Dockerfile`** — that file does not
+exist on the default branch yet. The prompt asks for every file touched, every
+git command run, and which branch is inspected to decide relevance.
 
 **Expected behavior**:
 - **No `git clone`** — operates on the current working tree.
 - `git fetch origin`, then the sync branch is based on
   **`origin/<default-branch>`**, never on the current feature-branch HEAD, so the
   user's two commits stay out of the PR and the base is not stale.
+- **Detection runs *after* that checkout**, so relevance reflects the PR's base
+  rather than the session's branch: the `Dockerfile` that exists only on
+  `feat/checkout-flow` is **not** detected, and the container image rule is
+  neither written nor cited as relevant.
 - The only repository file created or modified is `AGENTS.md`.
 - **No per-repository state/config/cache file** — the managed block is the state.
 - Fetched corpus kept outside the working tree.
@@ -183,7 +190,7 @@ repository that holds the corpus. It has workflows, so a rule *would* match.
 - Identifies the target as the corpus repository during preconditions.
 - **Does not proceed silently** on the strength of the matching files.
 - Explains the problem (rules there are authored, not distributed; the block
-  would duplicate the shipped corpus and confuse `collect-agent-rules`).
+  would duplicate the corpus the repository ships).
 - Asks whether to continue or stop, **defaulting to stopping**.
 - Absent an explicit "continue": nothing written, no branch, no PR.
 
@@ -234,6 +241,28 @@ A newly added `Dockerfile` makes one more rule match.
 - **No force-push**: stops and reports on a non-fast-forward rejection, and stops
   in branch setup if the local branch diverged.
 
+### Case 12: The fenced template is not a rule (`fenced-template-is-not-a-rule`)
+
+**Setup**: A repository created this morning — `README.md` and `LICENSE` only, so
+nothing is detected and the bootstrap catalog is what gets shown. The prompt asks
+for every parsed rule id, the exact catalog, and which `## rule:` lines in the
+corpus are rules and which are not.
+
+**Expected behavior**:
+- **Fenced regions are skipped when enumerating rules.** The corpus's "Format"
+  section shows the rule template inside a fence whose first line is literally
+  `## rule: <id>`; matching `## rule:` line by line parses a fifth, phantom rule
+  with the placeholder id `<id>` and the placeholder detect pattern `<glob>`.
+- Exactly the four real rules are parsed, by id.
+- The corpus's own non-rule sections (Contract, Format, Rules) are skipped too.
+- **The catalog offers exactly those four rules** — no `<id>` entry. This is where
+  a missed fence stops being harmless: on the detected path the phantom matches
+  nothing, but a bootstrap catalog makes it *selectable*, and selecting it would
+  write the template's placeholder text into the repository as a convention.
+
+Unlike every other case, this one needs no special fixture: the corpus ships the
+fenced template, so **every** run of the skill exercises this path.
+
 ## Evaluation Log
 
 ### 2026-07-26 — Mechanism verification (issue #82, review fix round 1)
@@ -249,7 +278,7 @@ reading `SKILL.md` follows it.
 
 | # | Claim under test | Result |
 |---|---|---|
-| T1 | Per-pattern `git ls-files --cached --others --exclude-standard -- ':(glob)<p>'` detection (Phase 2) | **Pass** — on a Go+Docker fixture, `container-base-image` matched via `**/Dockerfile` and `github-actions-pinning` via `.github/workflows/*.yml`, while the Python and CLI-version rules matched nothing. Exactly case 1's expectation, and one invocation per pattern does reveal *which* pattern matched. |
+| T1 | Per-pattern `git ls-files --cached --others --exclude-standard -- ':(glob)<p>'` detection (Phase 3) | **Pass** — on a Go+Docker fixture, `container-base-image` matched via `**/Dockerfile` and `github-actions-pinning` via `.github/workflows/*.yml`, while the Python and CLI-version rules matched nothing. Exactly case 1's expectation, and one invocation per pattern does reveal *which* pattern matched. |
 | T2 | `.gitignore`d paths excluded | **Pass** — a planted `node_modules/Dockerfile` did not appear; only the root `Dockerfile` matched. |
 | T3 | Malformed-block validation by whole-line delimiter count (Phase 4 step 1) | **Pass** — well-formed 1/1; unterminated 1/0; doubled 2/2; a file mentioning both delimiters inline in prose counted 0/0, i.e. not miscounted. All four states are distinguishable, so case 9's refusal is implementable. |
 | T4 | Preamble strip → re-emit is idempotent (Phase 4 step 3) | **Pass** — three successive render→parse→render rounds were byte-identical, with the `## Shared Conventions` heading and the managed-by comment each appearing exactly once. |
@@ -257,17 +286,38 @@ reading `SKILL.md` follows it.
 | T6 | Case 3 survives the preamble strip | **Pass** — a hand-written paragraph above the first `###` was preserved verbatim while the preamble was still emitted exactly once. The strip is narrow (two known items only), not "everything before the first heading". |
 | T7 | Line-ending normalization (Phase 9) | **Pass** — an LF render compared byte-wise against a CRLF file differs, which would have produced a pull request on every run; comparing after normalizing to the file's own ending matches. |
 
-**Accepted deviation.** The 11 behavioral cases and 20 trigger cases in
-`evals.json` have **not** been benchmarked. Both need the eval harness (skill
-registration, repeated executor runs, independent grading) plus a with-skill vs
-baseline comparison to be meaningful, and neither is available here. They are
-authored and reviewed but unmeasured — treat the table above as evidence that
-the mechanisms work, not that the skill triggers or is followed reliably. Run
-the full benchmark before relying on any pass-rate claim, as
-`merge-renovate-prs` did on 2026-06-21.
+### 2026-07-26 — Mechanism verification (issue #82, review fix round 2)
+
+**What was run.** Same method and same limits as round 1: the *mechanical claims*
+added or changed in round 2 were executed directly — the fence-aware enumerator
+and delimiter counter, and the entry trim — against the real corpus file in this
+branch and against synthetic target files. Still not a skill-behavior benchmark.
+
+| # | Claim under test | Result |
+|---|---|---|
+| M1 | A `## rule:` line inside a fence is not a rule (Phase 1) | **Pass** — run against the actual corpus in this branch: a naive line-by-line match finds **5** `## rule:` lines, a fence-aware enumerator finds **4**. The one suppressed line is the Format section's template (`## rule: <id>`), and it is the corpus's only fenced `##` line. This is the input case 12 asserts, and it is present on **every** run. |
+| M2 | Trimming each parsed entry's blank lines reaches a fixed point (Phase 4 step 4) | **Pass** — with a foreign entry supplied carrying a trailing blank line, the untrimmed parser grew the block by exactly one line per render (17→18→19→20, no fixed point). With the trim, render 1 normalizes (17→16) and renders 2 and 3 are byte-identical at 16. Confirms the round-2 claim and that the failure it fixes was real. |
+| M3 | A body terminated at the next `##`-level heading, not just the next `## rule:` (Phase 1) | **Pass** — parsing the real corpus this way yields 4 bodies (13/8/11/12 lines) and **no body contains a markdown heading**, which is what the corpus format requires of a body copied into a target repository. |
+| M4 | Fence-aware whole-line delimiter counting (Phase 4 step 1) | **Pass** — real block 1/1; a target file that documents the mechanism inside a fence 0/0; that same file plus one real block 1/1 fence-aware but **2/2 counted naively**, i.e. naive counting would refuse a legitimate file as malformed. Round 1's four states still distinguishable: unterminated 1/0, doubled 2/2, prose mention 0/0. |
+| M5 | `evals.json` valid and schema-identical to `merge-renovate-prs` | **Pass** — parses as JSON; same top-level keys (`skill_name`, `trigger_evals`, `evals`); every eval carries exactly `id`/`name`/`prompt`/`expected_output`/`files`/`expectations`; every trigger eval exactly `query`/`should_trigger`; ids sequential 1–12. |
+
+### Accepted deviation (both rounds)
+
+The 12 behavioral cases and 20 trigger cases in `evals.json` have **not** been
+benchmarked. Both need the eval harness (skill registration, repeated executor
+runs, independent grading) plus a with-skill vs baseline comparison to be
+meaningful, and neither is available here. They are authored and reviewed but
+unmeasured — treat the tables above as evidence that the mechanisms work, not
+that the skill triggers or is followed reliably. Run the full benchmark before
+relying on any pass-rate claim, as `merge-renovate-prs` did on 2026-06-21.
+
+This applies to case 12 as well: the fence-skipping *mechanism* is verified
+against the real corpus (M1), but whether an agent reading `SKILL.md` actually
+skips the fence is exactly the unmeasured part.
 
 | Date | Case | Result | Notes |
 |------|------|--------|-------|
-| 2026-07-26 | T1–T7 mechanism checks | 7/7 pass | Executed against a scratch repo; the preamble defect was reproduced and the fix verified. |
+| 2026-07-26 | T1–T7 mechanism checks (round 1) | 7/7 pass | Executed against a scratch repo; the preamble defect was reproduced and the fix verified. |
+| 2026-07-26 | M1–M5 mechanism checks (round 2) | 5/5 pass | Executed against the real corpus file and synthetic target files; the untrimmed-entry growth defect was reproduced and the fix verified. |
 | 2026-07-26 | Trigger evals (20) | not run | Accepted deviation — harness unavailable. |
-| 2026-07-26 | Behavioral cases 1–11 | not run | Accepted deviation — harness unavailable. |
+| 2026-07-26 | Behavioral cases 1–12 | not run | Accepted deviation — harness unavailable. |
