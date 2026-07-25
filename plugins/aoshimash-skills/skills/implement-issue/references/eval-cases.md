@@ -24,7 +24,7 @@
 | 18 | Post-PR CI monitored | CI checks monitored after PR creation; fixable failures result in a fix commit before returning the PR URL |
 | 19 | Parent-issue confirmation asked | When a single referenced issue has open sub-issues, the user is asked to choose batch / this-issue-only / pick-one before proceeding |
 | 20 | Review gates run in Single mode | Stage 1 (spec compliance) then Stage 2 (code quality) run after PR creation even for a single issue; Stage 2.5 is skipped |
-| 21 | Batch dependency graph correct | Dependencies parsed from issue bodies/platform links form a valid DAG; cycles are surfaced to the user; parallel groups are computed correctly |
+| 21 | Batch dependency graph correct | Dependencies read from the platform's relationship records first and from issue bodies as fallback, unioned into a valid DAG; closed blockers excluded; cycles are surfaced to the user; parallel groups are computed correctly |
 | 22 | Batch failure cascade works | A BLOCKED issue causes its transitive dependents to be marked SKIPPED; independent issues continue |
 | 23 | Stage 2.5 pattern propagation offered | When a `rule-violation-instance` is found in Batch mode, other in-flight PRs are scanned and the user is offered a fix, without blocking the original issue |
 
@@ -594,3 +594,63 @@ the implementer derives the plan itself; a stronger reviewer is the cheapest
 guard against derivation errors when implementers run on a faster model. The
 fallback (no model selection) runs everything on the session default with the
 workflow unchanged. Full eval re-run pending.
+
+### 2026-07-26 — Read GitHub relationships from structured JSON fields (follow-up to #84)
+
+`gh issue view --json` / `gh issue list --json` now expose `parent`, `subIssues`,
+`subIssuesSummary`, `blockedBy`, and `blocking` as first-class fields. The GitHub guide
+predated this: it read sub-issues through the REST `sub_issues` endpoint and dependencies
+by parsing `Blocked by: #N` out of issue bodies ("check platform-level sub-issue blocking
+if available" — with no field named). Neither was broken; both were the weaker option.
+
+Verified before writing, on `gh` 2.96.0 (2026-07-02):
+
+- `gh issue view --help` and `gh issue list --help` both list all five fields under `JSON FIELDS`.
+- Live against this repo: `gh issue view 83 --json number,parent,subIssues,blockedBy,blocking`
+  returns `parent` = #81 and `blockedBy` = [#82] as full node objects (`id`, `number`,
+  `title`, `state`, `url`). `gh issue view 81` returns `subIssuesSummary.total` = 2 with
+  both children as nodes. `gh issue list --json` accepts the same relationship fields.
+- Every command written into the guide was then run verbatim, `--jq` expressions included.
+- Availability, per the [gh v2.94.0 release notes](https://github.com/cli/cli/releases/tag/v2.94.0)
+  ("brings GitHub's advanced issue features to `gh issue create`, `edit`, `view`, and
+  `list`"): fields need `gh` v2.94.0+; sub-issues work on GitHub.com and GHES 3.17+;
+  `blockedBy` / `blocking` relationships require GHES 3.19+.
+
+Changes:
+
+- `platform-github.md` gains a **Platform-Level Issue Relationships** section — the five
+  fields with their shapes, the node contents, the version/GHES availability constraints,
+  how to confirm support (`gh issue view --help` fails on an unknown field rather than
+  returning empty), and the two fallback triggers.
+- "Detect Sub-Issues of a Parent" reads `subIssuesSummary,subIssues`; the REST `sub_issues`
+  endpoint and body parsing drop to ordered fallbacks.
+- "List Sub-Issues / …" uses `subIssues` for the parent case and adds `parent,blockedBy` to
+  the milestone/label `gh issue list` calls, so one call per batch source yields the issue
+  set and its edges. Notes that `subIssues.nodes` carries no `body`/`labels`, so a sub-issue
+  batch still fetches each issue.
+- "Check Dependency Links" reads `blockedBy,blocking` as primary, keeps body parsing as the
+  prose fallback, and states two things the old text left implicit: only `OPEN` blockers
+  become DAG edges, and the two sources must be **unioned** (a registered link and a prose
+  mention can name different blockers).
+- `batch.md` B1-1 renamed Parse → **Collect Dependencies** and restructured into
+  primary (platform records, per-platform pointers) + fallback (body patterns), building the
+  mapping from the union. The old text named no GitHub field at all.
+- `SKILL.md` Batch summary step 1 corrected: it claimed platform-specific links were parsed
+  "from each issue body", which was never true of the platform records and is now clearly wrong.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 16 | Pass | Linear sub-issue batch: `subIssues` + `blockedBy` produce the same DAG the body scan did, without depending on the author having written `Blocked by:` |
+| 17 | Pass | Parallel groups unchanged; issues with `blockedBy.totalCount` 0 land in Level 0 |
+| 18 | Pass | Failure cascade untouched — B1-1 only changes how edges are collected, not the DAG or cascade semantics |
+| 22 | Pass | Parent detection now one call: `subIssuesSummary.total` ≥ 1 answers "is this a parent?", `nodes[].state` filters to open children |
+| 24 | Pass | "This issue only" path unaffected; the detection call fetches no sub-issue bodies |
+
+Regression check on the fallback path: an issue whose dependency exists only as
+`Blocked by: #N` prose has `blockedBy.totalCount` 0, so a structured-only reader would
+drop the edge — this is why B1-1 keeps body parsing and unions rather than treating an
+empty field as "no dependencies". Called out explicitly in both files.
+
+Out of scope, left as-is: `create-issue`'s `platform-github.md` still reads sub-issues via
+the REST `sub_issues` endpoint (line ~57). It works; `--add-sub-issue-blocked-by` there was
+already fixed in #84. Worth the same treatment in a follow-up.
