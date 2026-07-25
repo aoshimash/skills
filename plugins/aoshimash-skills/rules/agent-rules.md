@@ -16,13 +16,14 @@ repository's instruction file.
 
 ## Contract
 
-Three things are fixed. Both skills depend on them, so do not change them
-without updating both.
+These are fixed. Both skills depend on them, so do not change them without
+updating both.
 
 | Thing | Value |
 |---|---|
 | This file's path | `plugins/aoshimash-skills/rules/agent-rules.md`, relative to the repository root of `aoshimash/skills` |
-| Managed-block delimiters | `<!-- BEGIN aoshimash-agent-rules -->` … `<!-- END aoshimash-agent-rules -->` |
+| Managed-block delimiters | `<!-- BEGIN aoshimash-agent-rules -->` … `<!-- END aoshimash-agent-rules -->`, each alone on its own line |
+| Block preamble | Immediately inside `BEGIN`: the heading `## Shared Conventions`, then an HTML comment beginning `<!-- Managed by the sync-agent-rules skill`. Both are generated, not content — a reader strips them, a writer re-emits them |
 | Per-rule marker inside a block | `<!-- rule: <id> -->`, on the line after the rule's `###` heading |
 
 The delimiters are HTML comments, so they are invisible in rendered markdown and
@@ -56,14 +57,17 @@ markdown. Skip fenced regions when enumerating rules.
 
 - **Detect** is a comma-separated list of backticked glob patterns. Each is
   matched against the target repository's file list; **any** match makes the
-  rule relevant. Use `**/` prefixes so a pattern matches at the repository root
-  and at any depth. Patterns name the *files that indicate the tool is in use*,
-  not files that prove compliance — a repository that violates a rule still
-  needs to carry it.
-- **Rule** body runs from the `**Rule:**` line to the next `## rule:` heading or
-  end of file, with leading and trailing blank lines trimmed. It is copied
-  byte-for-byte, so it must read correctly standing alone in someone else's
-  `AGENTS.md`.
+  rule relevant. Prefix a pattern with `**/` so it matches at the repository root
+  and at any depth — unless the tool only ever works at a fixed path, in which
+  case anchor the pattern there instead (as `github-actions-pinning` does with
+  `.github/workflows/*.yaml`). Patterns name the *files that indicate the tool is
+  in use*, not files that prove compliance — a repository that violates a rule
+  still needs to carry it.
+- **Rule** body starts on the line **after** the `**Rule:**` line and runs to the
+  next `## rule:` heading or end of file, with leading and trailing blank lines
+  trimmed. The `**Rule:**` marker line itself is never part of the body. It is
+  copied byte-for-byte, so it must read correctly standing alone in someone
+  else's `AGENTS.md`.
 - A body may use bullets, tables, code fences, and links, but **no markdown
   headings** — it is emitted under a `###` heading and any heading inside it
   would break the target file's outline.
