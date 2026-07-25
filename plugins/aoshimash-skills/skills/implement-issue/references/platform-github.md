@@ -36,8 +36,10 @@ prefer them over the REST sub-issues endpoint or parsing prose out of issue bodi
 | `blocking` | `{nodes: [...], totalCount}` | Issues this one blocks |
 
 Every node carries `number`, `title`, `state`, `url`, and `id` — enough to build a
-dependency graph without a second call per issue. Nodes do NOT carry `body` or
-`labels`; fetch those per issue when needed.
+dependency graph without a second call per issue. `state` is upper-case (`OPEN` /
+`CLOSED`). `subIssues`, `blockedBy`, and `blocking` wrap their contents in `.nodes`, so a
+`.subIssues[]` expression finds nothing. Nodes do NOT carry `body` or `labels`; fetch
+those per issue when needed.
 
 **Availability.** These fields need `gh` v2.94.0 or newer. Sub-issues work on
 GitHub.com and GHES 3.17+; `blockedBy` / `blocking` relationships require GHES 3.19+.
@@ -113,8 +115,17 @@ gh issue view <number> --json blockedBy,blocking \
 Only blockers whose `state` is `OPEN` actually gate implementation — a `CLOSED`
 blocker is satisfied and must not become a DAG edge.
 
-Then read the body as the fallback, for issues whose dependencies were only ever
-written in prose:
+If the fields are unavailable, the same relationships are readable from REST:
+
+```bash
+gh api repos/{owner}/{repo}/issues/<number>/dependencies/blocked_by --jq '.[] | {number, state}'
+gh api repos/{owner}/{repo}/issues/<number>/dependencies/blocking --jq '.[] | {number, state}'
+```
+
+REST returns `state` lower-case (`open` / `closed`) where the JSON fields return
+`OPEN` / `CLOSED` — normalize before comparing.
+
+Then read the body, for issues whose dependencies were only ever written in prose:
 
 ```bash
 gh issue view <number> --json body --jq '.body'

@@ -651,6 +651,12 @@ Regression check on the fallback path: an issue whose dependency exists only as
 drop the edge — this is why B1-1 keeps body parsing and unions rather than treating an
 empty field as "no dependencies". Called out explicitly in both files.
 
-Out of scope, left as-is: `create-issue`'s `platform-github.md` still reads sub-issues via
-the REST `sub_issues` endpoint (line ~57). It works; `--add-sub-issue-blocked-by` there was
-already fixed in #84. Worth the same treatment in a follow-up.
+A REST fallback for dependencies was added alongside the body fallback:
+`repos/{owner}/{repo}/issues/<n>/dependencies/blocked_by` and `/blocking` both exist and
+return the relationships (verified live on #83 → [{number: 82, state: "open"}]). This was
+initially going to be documented as "no REST equivalent exists"; testing the endpoint
+disproved that. REST reports `state` lower-case where the JSON fields report `OPEN` /
+`CLOSED`, so the guide says to normalize before comparing.
+
+`create-issue`'s `platform-github.md` was given the matching treatment in the same change —
+see that skill's own evaluation log entry for the same date.

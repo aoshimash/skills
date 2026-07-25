@@ -71,15 +71,52 @@ Blocked by: #<issue-number>
 gh issue list [--label "<label>"] [--milestone "<milestone>"] [--state open]
 ```
 
-To inspect an issue's hierarchy and dependency links:
+## Inspect Hierarchy and Dependency Links
+
+Use this to verify what was created — after linking a parent or a dependency, read the
+relationships back rather than assuming the edit took. `gh issue view --json` and
+`gh issue list --json` both accept these relationship fields:
+
+| Field | Shape | Holds |
+|---|---|---|
+| `parent` | object, or `null` | The parent issue, when this issue is a sub-issue |
+| `subIssues` | `{nodes: [...], totalCount}` | This issue's sub-issues |
+| `subIssuesSummary` | `{total, completed, percentCompleted}` | Sub-issue completion counts |
+| `blockedBy` | `{nodes: [...], totalCount}` | Issues that must close before this one |
+| `blocking` | `{nodes: [...], totalCount}` | Issues this one blocks |
+
+`subIssues`, `blockedBy`, and `blocking` wrap their contents in `.nodes` — a `.subIssues[]`
+expression finds nothing. Each node carries `number`, `title`, `state`, `url`, and `id`;
+`state` is upper-case (`OPEN` / `CLOSED`).
+
 ```bash
+# One issue's links
 gh issue view <number> --json number,parent,subIssues,blockedBy,blocking
+
+# Verify a created hierarchy in one call
+gh issue view <parent-number> --json subIssuesSummary,subIssues \
+  --jq '{total: .subIssuesSummary.total, sub: [.subIssues.nodes[] | {number, title, state}]}'
+
+# Confirm a dependency actually registered
+gh issue view <blocked-number> --json blockedBy --jq '[.blockedBy.nodes[].number]'
 ```
 
-Or via the REST API, to list sub-issues of a parent:
+**Availability.** These fields need `gh` v2.94.0 or newer; the `JSON FIELDS` list in
+`gh issue view --help` names every field the installed version accepts, and an unsupported
+name makes the command fail rather than return empty. Sub-issues work on GitHub.com and
+GHES 3.17+; `blockedBy` / `blocking` require GHES 3.19+.
+
+**Fallback.** Where the fields are unavailable, read the same relationships from REST:
+
 ```bash
-gh api repos/{owner}/{repo}/issues/<parent-number>/sub_issues --jq '.[] | {number, title, state}'
+gh api repos/{owner}/{repo}/issues/<number>/sub_issues --jq '.[] | {number, title, state}'
+gh api repos/{owner}/{repo}/issues/<number>/dependencies/blocked_by --jq '.[] | {number, state}'
+gh api repos/{owner}/{repo}/issues/<number>/dependencies/blocking --jq '.[] | {number, state}'
 ```
+
+REST returns `state` lower-case (`open` / `closed`), unlike the JSON fields above — do not
+compare the two forms directly. Where REST is unavailable too, dependencies live in the
+issue body as `Blocked by: #N` (see [Add Dependency Between Issues](#add-dependency-between-issues)).
 
 ## CLAUDE.md Config Example
 
