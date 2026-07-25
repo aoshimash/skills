@@ -100,18 +100,27 @@ The issue workflow draws from two sources and combines them with an issue-centri
 | [multi-agent-review](plugins/aoshimash-skills/skills/multi-agent-review/) | Run multiple AI CLIs (Claude, Codex, Gemini) in parallel for code review and produce a unified review output |
 | [respond-to-pr-review](plugins/aoshimash-skills/skills/respond-to-pr-review/) | Process PR review comments one by one — explain, confirm actions, implement fixes, and post reply comments |
 | [merge-renovate-prs](plugins/aoshimash-skills/skills/merge-renovate-prs/) | Merge Renovate PRs one at a time, autonomously by default — verify monitoring/revert preconditions, LLM pre-check, merge, post-merge verification, and auto-revert on failure; interactive per-PR-approval mode available |
+| [sync-agent-rules](plugins/aoshimash-skills/skills/sync-agent-rules/) | Write the shared conventions from [the rule corpus](plugins/aoshimash-skills/rules/agent-rules.md) into the current repository's `AGENTS.md` — detect which rules apply from the files actually present, write only those into a delimited managed block, and open a PR; additive, so nothing is removed without confirmation |
 
 ## Structure
 
 ```
 plugins/aoshimash-skills/
 ├── .claude-plugin/plugin.json    # Plugin manifest
+├── rules/
+│   └── agent-rules.md            # Shared conventions corpus (read by sync-agent-rules)
 └── skills/
     └── <skill-name>/
         ├── SKILL.md              # Skill definition (required)
         ├── scripts/              # Helper scripts (optional)
         └── references/           # Reference docs (optional)
 ```
+
+`rules/agent-rules.md` sits outside every skill on purpose: a running skill
+resolves to a version-pinned copy rather than the git checkout, so the corpus is
+addressed as a repository path and fetched over the GitHub API at runtime. That
+also means a rule added there is distributable immediately, without waiting for
+an installed plugin to update.
 
 ## License
 

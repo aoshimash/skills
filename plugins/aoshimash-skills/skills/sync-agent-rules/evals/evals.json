@@ -1,0 +1,136 @@
+{
+  "skill_name": "sync-agent-rules",
+  "trigger_evals": [
+    { "query": "sync the shared agent rules into this repo's AGENTS.md", "should_trigger": true },
+    { "query": "apply my standard conventions to this repository — only the ones that actually apply here", "should_trigger": true },
+    { "query": "共通ルールをこのリポジトリに同期して", "should_trigger": true },
+    { "query": "AGENTS.md に共通の規約を反映して。使ってないツールのルールは入れなくていい", "should_trigger": true },
+    { "query": "add my usual project rules to AGENTS.md and open a PR", "should_trigger": true },
+    { "query": "この新しいリポジトリに標準のルールを入れたい", "should_trigger": true },
+    { "query": "distribute the shared conventions from aoshimash/skills into this repo", "should_trigger": true },
+    { "query": "エージェントルールを同期して、PR 作って", "should_trigger": true },
+    { "query": "pull down my shared rule set and write the relevant ones into AGENTS.md", "should_trigger": true },
+    { "query": "collect the hand-written rules from my other repos and add the good ones to the shared corpus", "should_trigger": false },
+    { "query": "add a rule to the shared corpus saying we always use go-task instead of Make", "should_trigger": false },
+    { "query": "write an AGENTS.md for this repo describing its architecture, directory layout, and test commands", "should_trigger": false },
+    { "query": "this repo's Dockerfile uses alpine — switch it to a debian slim base and rebuild", "should_trigger": false },
+    { "query": "sync my fork with upstream main and resolve the conflicts", "should_trigger": false },
+    { "query": "what conventions do I usually use for Python projects?", "should_trigger": false },
+    { "query": "create an issue to centralize our project conventions across repos", "should_trigger": false },
+    { "query": "review the dependency PRs on this repo and merge the safe ones", "should_trigger": false },
+    { "query": "analyze my recent sessions and propose improvements to my skills", "should_trigger": false },
+    { "query": "pin all the GitHub Actions in .github/workflows to commit SHAs", "should_trigger": false },
+    { "query": "respond to the review comments on PR #12", "should_trigger": false }
+  ],
+  "evals": [
+    {
+      "id": 1,
+      "name": "detect-subset-silently",
+      "prompt": "Sync my shared agent rules into this repository's AGENTS.md. This is a Go service repo: it has a `Dockerfile`, `cmd/server/main.go`, `go.mod`, and `.github/workflows/ci.yml`. There are no Python files, no `pyproject.toml`, no `aqua.yaml`, and no `.tool-versions`. An `AGENTS.md` exists with a few repo-specific sections and no managed block yet. Do this as a paper exercise: describe exactly what you read, what you detect, what you write, and what you ask me. Do not actually push anything.",
+      "expected_output": "The skill fetches the rule corpus from aoshimash/skills over the GitHub API (not from its own bundled directory), runs detection against the repository's actual file list, and finds two rules relevant: the container image policy (Dockerfile) and the GitHub Actions pinning rule (.github/workflows/ci.yml). The Python package management and CLI tool version management rules do not match any pattern, so they are skipped SILENTLY — the skill does not write them, does not list them as options, and does not ask whether Python or aqua might be used later. The two detected rules are appended to AGENTS.md inside a managed block delimited by the BEGIN/END aoshimash-agent-rules HTML comments, each rule carrying its per-rule marker comment, with rule bodies copied verbatim from the corpus. The existing repo-specific sections of AGENTS.md are left untouched. The change lands on a branch as a pull request, not as a direct commit to the default branch.",
+      "files": [],
+      "expectations": [
+        "Fetches the corpus from the aoshimash/skills repository over the network rather than reading a copy bundled with the skill",
+        "Detects the container image rule from the Dockerfile and the GitHub Actions pinning rule from .github/workflows/ci.yml",
+        "Does NOT write the Python package management rule or the CLI tool version management rule",
+        "Does NOT prompt, ask, or offer options about the non-matching rules (silent skip, no forecasting of future tooling)",
+        "Writes the rules inside delimiters that identify the block as managed (BEGIN/END aoshimash-agent-rules), with a per-rule id marker for each rule",
+        "Copies each rule body verbatim from the corpus rather than rewording or summarizing it",
+        "Leaves the pre-existing repo-specific content of AGENTS.md unchanged",
+        "Delivers the change as a pull request on its own branch rather than committing to the default branch"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "idempotent-second-run",
+      "prompt": "Sync the shared agent rules into this repository again. I ran the same sync yesterday: AGENTS.md already contains the managed block with the container image rule and the GitHub Actions pinning rule, and nothing in the repository or the corpus has changed since. Paper exercise — tell me precisely what you do.",
+      "expected_output": "The skill fetches the corpus, re-runs detection, renders what the block should contain, and compares it against the file on disk. Because the rendered result is byte-identical to the current AGENTS.md, it makes no edit at all: no branch is created, no commit is made, no pull request is opened. It reports that the repository is already in sync, listing which rules are present and which were detected. It does not open an empty or no-op pull request, does not reorder or reformat the existing block, and does not treat the already-present rules as new additions.",
+      "files": [],
+      "expectations": [
+        "Renders the expected block and compares it against the current file before writing anything",
+        "Makes no change to AGENTS.md because the result is identical",
+        "Creates no branch, no commit, and no pull request on the second run",
+        "Reports that the repository is already in sync rather than claiming to have added rules",
+        "Does not reorder, reformat, or re-wrap the existing managed block (which would manufacture a spurious diff)"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "additive-preserve-and-confirm-removal",
+      "prompt": "Sync the shared agent rules into this repository. The existing managed block in AGENTS.md currently contains three entries: (1) the Python package management rule — I added it explicitly months ago when this repo was empty, and the repo still has no Python files at all; (2) an entry marked with the rule id `legacy-changelog-policy`, which no longer exists in the shared corpus; (3) a paragraph I hand-wrote directly inside the block about our staging database, which has no rule id marker. Detection currently matches only the container image rule, which is not yet in the block. Paper exercise: what does the block look like afterwards, and what do you ask me?",
+      "expected_output": "Writes are additive. The Python package management rule is KEPT even though detection does not produce it — the skill does not remove it and does not ask about it, because a user may have placed it deliberately. The hand-written staging-database paragraph is kept verbatim in place, and mentioned in the pull request body as content inside the block that the skill does not manage. The `legacy-changelog-policy` entry is orphaned (its id is gone from the corpus), so the skill presents it for explicit confirmation — Keep (default) or Remove — and does not delete it unless the user explicitly chooses removal. The container image rule is appended. Nothing is removed automatically under any circumstance.",
+      "files": [],
+      "expectations": [
+        "Keeps the Python package management rule in the block despite detection not matching it",
+        "Does not prompt about the undetected-but-present Python rule — it is simply preserved",
+        "Preserves the hand-written unmarked paragraph inside the block verbatim rather than deleting or rewriting it",
+        "Identifies the `legacy-changelog-policy` entry as orphaned because its id is absent from the corpus",
+        "Presents the orphaned entry for explicit user confirmation before any removal, defaulting to keeping it",
+        "Never removes any entry automatically",
+        "Appends the newly detected container image rule"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "empty-repo-bootstrap",
+      "prompt": "I just created this repository ten minutes ago. It contains a README.md and a LICENSE, nothing else — no Dockerfile, no workflows, no source code. Sync my shared agent rules into it. Paper exercise: describe exactly what happens.",
+      "expected_output": "Detection matches nothing, and there is no existing managed block, so this is the bootstrap case. The skill does NOT finish with an empty run, does not write an empty managed block, and does not report that there is nothing to do. Instead it presents the full corpus catalog — every rule with its id, title, and a one-line gist — and asks the user to select which rules to write, supporting multiple selections plus select-all and cancel. Whatever the user picks is written exactly as detected rules would be, in the managed block, and the result lands as a pull request. The skill notes that a later run which detects nothing must still preserve these explicitly chosen rules.",
+      "files": [],
+      "expectations": [
+        "Recognizes that nothing was detected and that no managed block exists yet (the bootstrap case)",
+        "Offers the FULL corpus catalog for explicit user selection rather than reporting an empty result or writing nothing",
+        "Supports selecting multiple rules, and allows cancelling without changes",
+        "Writes the explicitly selected rules into the managed block in the same format as detected rules",
+        "Does not fabricate detection matches to justify writing rules"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "claude-md-only-target",
+      "prompt": "Sync the shared agent rules into this repository. Note that this repo has no AGENTS.md — it has a 200-line CLAUDE.md written by hand, and that CLAUDE.md does not reference or import AGENTS.md anywhere. Detection matches the container image rule and the GitHub Actions pinning rule. Paper exercise: what do you do about the target file?",
+      "expected_output": "The skill recognizes that silently creating a fresh AGENTS.md here would put the rules in a file no agent actually loads, since this CLAUDE.md does not import AGENTS.md. It does not guess. It asks the user to choose between: creating AGENTS.md and adding a one-line `@AGENTS.md` import to the existing CLAUDE.md (recommended, matching the convention); writing the managed block into CLAUDE.md instead; creating AGENTS.md only, with an explicit warning that nothing will load it until something imports it; or aborting. It creates no file other than AGENTS.md, and it only touches CLAUDE.md if the user explicitly picks an option that does so. It does not rewrite, reorganize, or reformat the rest of CLAUDE.md.",
+      "files": [],
+      "expectations": [
+        "Detects that AGENTS.md is absent and that CLAUDE.md does not import it",
+        "Does not silently create an AGENTS.md that nothing loads",
+        "Asks the user to choose, offering at minimum the AGENTS.md-plus-import option and the write-into-CLAUDE.md option",
+        "Marks the create-AGENTS.md-plus-import option as the recommended one (it matches the established convention)",
+        "Touches CLAUDE.md only as a result of an explicit user selection, and then only to add the import line",
+        "Creates no file in the repository other than AGENTS.md",
+        "Does not rewrite or reformat the existing hand-written CLAUDE.md content"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "corpus-is-authoritative",
+      "prompt": "Sync the shared agent rules into this repository. Two things to know: I edited the shared corpus in aoshimash/skills an hour ago — I corrected the wording of the container image rule and added a brand new rule — and the copy of this skill installed on my machine is from a release that predates both edits. This repo already carries the older container image rule in its managed block. Paper exercise: describe what you read and what ends up in AGENTS.md.",
+      "expected_output": "The skill reads the corpus from the aoshimash/skills repository over the network (e.g. `gh api .../contents/plugins/aoshimash-skills/rules/agent-rules.md` with the raw Accept header, or the raw.githubusercontent equivalent), explicitly NOT from its own installed directory, which is a version-pinned copy that predates the edits. Both the corrected container image wording and the brand new rule are therefore available immediately, with no plugin update required. The existing container image entry in the block is refreshed in place with the corrected corpus text — matched by rule id, not by comparing body text — which is how a corrected rule propagates to repositories that already carry it. The new rule is written only if its detect patterns match this repository. If the fetch fails, the skill stops and reports it rather than falling back to a bundled copy or reconstructing rule text from memory.",
+      "files": [],
+      "expectations": [
+        "Reads the corpus from the aoshimash/skills repository over the network, not from the skill's own installed directory",
+        "States or demonstrates that a stale installed copy of the skill does not limit which rules are available",
+        "Refreshes the existing container image entry in place with the corrected corpus wording",
+        "Matches existing entries by rule id rather than by comparing or fuzzy-matching body text",
+        "Writes the newly added corpus rule only if its detect patterns match this repository",
+        "On a failed fetch, stops and reports rather than falling back to a bundled copy or writing remembered rule text"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "no-clone-no-extra-files",
+      "prompt": "Sync the shared agent rules into this repository — it's a Python service with pyproject.toml, a Dockerfile, and GitHub Actions workflows. Paper exercise: list every file you create or modify anywhere, every git command you run, and where you put anything you download.",
+      "expected_output": "The skill runs in place inside the target repository. It never runs `git clone` — the target is the current working tree and the corpus is fetched over the API. The only repository file created or modified is AGENTS.md. No per-repository state file, config file, manifest, cache, or scratch file is created in the repository; the managed block itself is the state. The fetched corpus is written to a temporary location outside the working tree, or held in memory. Staging is explicit — only AGENTS.md is added, never `git add -A` or `git add .`. The work lands on its own branch (reusing an existing sync branch or pull request rather than opening a duplicate) with a pull request, never a direct commit to the default branch, and the skill does not merge the pull request itself.",
+      "files": [],
+      "expectations": [
+        "Runs no `git clone` — operates on the current working tree",
+        "Creates or modifies no repository file other than AGENTS.md",
+        "Creates no per-repository state, config, or cache file to track what was synced",
+        "Keeps the fetched corpus outside the working tree (temp location or memory)",
+        "Stages only AGENTS.md explicitly, avoiding `git add -A` / `git add .`",
+        "Commits to a dedicated branch and opens a pull request instead of committing to the default branch",
+        "Reuses an existing sync branch or open pull request rather than opening a duplicate",
+        "Does not merge the pull request as part of the skill"
+      ]
+    }
+  ]
+}

@@ -12,6 +12,7 @@ This is a Claude Code Plugin Marketplace repository. It contains a plugin (`aosh
 - `.claude-plugin/marketplace.json` — Marketplace manifest (lists available plugins)
 - `plugins/aoshimash-skills/.claude-plugin/plugin.json` — Plugin manifest
 - `plugins/aoshimash-skills/skills/<skill-name>/` — Individual skills, each with a `SKILL.md` and optional `references/`, `scripts/`, `assets/`
+- `plugins/aoshimash-skills/rules/agent-rules.md` — Shared conventions corpus, deliberately outside every skill. A running skill resolves to a version-pinned copy rather than the git checkout, so this file is addressed as a repository path and fetched over the GitHub API at runtime. Its "Contract" and "Format" sections are authoritative for the rule format and the managed-block delimiters
 
 ## Skill Development
 
