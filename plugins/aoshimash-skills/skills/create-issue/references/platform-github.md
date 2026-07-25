@@ -22,6 +22,15 @@ gh issue create --title "<title>" --body "<body>" [--label "<label>"] [--assigne
 number=$(gh issue create --title "<title>" --body "<body>" | grep -oE '[0-9]+$')
 ```
 
+Parent and dependency relationships can also be set at creation time, avoiding a
+follow-up `gh issue edit`:
+
+```bash
+gh issue create --title "<title>" --body "<body>" --parent <parent-number> --blocked-by <blocking-number>
+```
+
+Both flags accept a comma-separated list of issue numbers or URLs.
+
 ## Add Sub-Issue to Parent
 
 After creating a sub-issue, link it to the parent:
@@ -30,17 +39,27 @@ After creating a sub-issue, link it to the parent:
 gh issue edit <parent-number> --add-sub-issue <sub-issue-number>
 ```
 
+Equivalently, from the child's side: `gh issue edit <sub-issue-number> --parent <parent-number>`.
+
+Counterparts: `--remove-sub-issue <number>`, `--remove-parent`.
+
 ## Add Dependency Between Issues
 
 Mark that one issue blocks another:
 
 ```bash
-gh issue edit <blocked-issue-number> --add-sub-issue-blocked-by <blocking-issue-number>
+gh issue edit <blocked-issue-number> --add-blocked-by <blocking-issue-number>
 ```
 
-Note: Dependency tracking via `blocked-by` is available when sub-issues are enabled in the repository.
+Counterparts: `--remove-blocked-by <number>`, `--add-blocking <number>`, `--remove-blocking <number>`.
 
-If sub-issue commands are not available (older `gh` version or feature not enabled), fall back to mentioning dependencies in the issue body:
+Note: issue dependencies (`blocked by` / `blocking`) are a separate GitHub feature
+from sub-issues — neither requires the other, and GitHub's docs describe no
+repository setting to enable either. Dependencies went generally available in
+August 2025; the `gh` flags above were added in `gh` v2.94.0. Up to 50 issues can
+be linked per relationship type.
+
+If the flags are rejected as unknown (older `gh` version), fall back to mentioning dependencies in the issue body:
 
 ```markdown
 Blocked by: #<issue-number>
@@ -52,7 +71,12 @@ Blocked by: #<issue-number>
 gh issue list [--label "<label>"] [--milestone "<milestone>"] [--state open]
 ```
 
-To list sub-issues of a parent:
+To inspect an issue's hierarchy and dependency links:
+```bash
+gh issue view <number> --json number,parent,subIssues,blockedBy,blocking
+```
+
+Or via the REST API, to list sub-issues of a parent:
 ```bash
 gh api repos/{owner}/{repo}/issues/<parent-number>/sub_issues --jq '.[] | {number, title, state}'
 ```

@@ -15,7 +15,7 @@ Check in order:
 Before creating, fetch available issue types:
 
 ```bash
-bee issue-type list <project_key>
+bee issue-type list -p <project_key>
 ```
 
 Then create the issue:
@@ -61,16 +61,18 @@ Backlog natively supports parent issues. Set the parent when creating:
 
 ```bash
 bee issue create -p <project_key> -t "<title>" -d "<body>" -T <issue_type_id> -P <priority> \
-  --parent <parent_issue_key>
+  --parent-issue <parent_issue_id>
 ```
 
-Or update an existing issue to set its parent:
+Or edit an existing issue to set its parent:
 
 ```bash
-bee issue update <issue_key> --parent <parent_issue_key>
+bee issue edit <issue_key> --parent-issue <parent_issue_id>
 ```
 
-This also applies to grandchild issues — set `--parent <child_issue_key>` when creating a grandchild.
+`--parent-issue` takes the numeric issue ID, not the issue key.
+
+This also applies to grandchild issues — set `--parent-issue <child_issue_id>` when creating a grandchild.
 
 ## Add Dependency Between Issues
 
@@ -82,12 +84,12 @@ Backlog does not have built-in dependency/blocking relationships. Use these alte
 ## List Issues
 
 ```bash
-bee issue list -p <project_key> [--status <status_id>]
+bee issue list -p <project_key> [-S <status_id>]
 ```
 
 To list child issues of a parent:
 ```bash
-bee issue list -p <project_key> --parent <parent_issue_key>
+bee issue list -p <project_key> --parent-issue <parent_issue_id>
 ```
 
 ## CLAUDE.md Config Example
@@ -103,4 +105,4 @@ bee issue list -p <project_key> --parent <parent_issue_key>
 ## Notes
 
 - Backlog uses project keys (e.g., `PROJ-123`) as issue identifiers, not just numbers.
-- Use `--json` flag on any command for structured JSON output.
+- Use the `--json` flag on any command for structured JSON output. It optionally takes a comma-separated list of field names to filter by.
