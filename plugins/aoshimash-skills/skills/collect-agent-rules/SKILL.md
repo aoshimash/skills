@@ -56,11 +56,13 @@ managed block, and tidying the hand-written original is left to the author.
    not a verdict — many conventions are legitimately specific to one project,
    and only the author can tell which are general. Candidates are decided **one
    at a time**, and nothing is added without an explicit decision (Phase 7).
-6. **Nothing is written until the decision to write is made.** Phases 0–7 read,
-   decide, and ask; Phase 8 is the only phase that changes anything, including
-   git refs. A run that finds nothing, is cancelled at the repository
-   confirmation, or has every candidate rejected leaves the checkout exactly as
-   it was found — no stray file, no stray branch, no stray commit.
+6. **Nothing is written until the decision to write is made.** No local branch,
+   working-tree file, or commit changes before Phase 8 — Phase 1 does run
+   `git fetch`, which updates remote-tracking refs, but that touches nothing the
+   run could damage and nothing the wrap-up has to undo. Phases 0–7 otherwise
+   read, decide, and ask. A run that finds nothing, is cancelled at the
+   repository confirmation, or has every candidate rejected leaves the checkout
+   exactly as it was found — no stray file, no stray branch, no stray commit.
 7. **A promoted rule is never re-proposed.** Two mechanisms close the loop:
    Phase 2 reads the corpus from the branch the pull request will be based on,
    so a rule promoted by an earlier run is already known; and Phase 5 excludes
@@ -114,23 +116,38 @@ fenced delimiter examples that must not be mistaken for a real block.
 Verify all of the following before touching anything. Stop and say which one
 failed if any does not hold.
 
+The order matters: every check that needs the network runs after the checks that
+prove the network is usable, so a failure is diagnosed as the thing it actually
+is.
+
 1. **Inside a git repository, at its root.** `git rev-parse --show-toplevel`
    succeeds; run everything from that directory.
-2. **This checkout is `aoshimash/skills`.** The corpus file must exist at the
-   contract path, and `gh repo view --json nameWithOwner,parent` must report
-   `aoshimash/skills` as the repository itself or as its parent (a fork is
-   acceptable; [references/corpus-edit.md](references/corpus-edit.md) covers
-   making the pull request land on the corpus repository). Otherwise **stop and
+2. **An `origin` remote exists and points at GitHub** (`git remote get-url
+   origin`). Without it Phase 1's fetch and Phase 8's push have nowhere to go,
+   and a local-only repository has nowhere to open a pull request.
+3. **`gh` is authenticated** (`gh auth status`) and the network is reachable.
+   This runs before the identity check below, which is an API call: a logged-out
+   or offline `gh` must be reported as exactly that, never as "this is not a
+   checkout of `aoshimash/skills`".
+4. **This checkout is `aoshimash/skills`.** Two parts, in this order:
+   1. The corpus file exists at the contract path. This is a local check; if it
+      fails, the checkout is definitively not the corpus repository.
+   2. `gh repo view --json nameWithOwner,parent` reports `aoshimash/skills` as
+      the repository itself or as its parent (a fork is acceptable;
+      [references/corpus-edit.md](references/corpus-edit.md) covers the extra
+      handling a fork needs). **If the command itself fails** — network error,
+      permission error, rate limit — report *that* failure and stop; do not
+      convert a failed call into a wrong-repository verdict.
+
+   When either part shows this is genuinely the wrong repository, **stop and
    explain**: this skill edits the corpus as a real file, the corpus lives in
    `aoshimash/skills`, and a running skill's own copy is a version-pinned cache
    that is replaced on update — so there is nothing here to edit. Tell the user
    to re-run from a checkout of `aoshimash/skills`. Do not clone one.
-3. **The corpus file is unmodified and nothing is staged.**
+5. **The corpus file is unmodified and nothing is staged.**
    `git status --porcelain` must not list the corpus file and must show no
-   staged entries, so the commit contains only the promotion.
-4. **`gh` is authenticated** (`gh auth status`) and the network is reachable.
-5. **An `origin` remote exists and points at GitHub** (`git remote get-url
-   origin`). Without it Phase 1's fetch and Phase 8's push have nowhere to go.
+   staged entries, so the commit contains only the promotion. Refuse rather than
+   stashing, committing, or discarding the user's work.
 6. **Record the starting position** so the wrap-up can restore it:
    `git symbolic-ref --quiet --short HEAD` for a branch, or — when that fails
    because HEAD is detached — `git rev-parse HEAD` for the commit. Restoring by
@@ -140,7 +157,11 @@ failed if any does not hold.
 
 Fetch, determine the default branch, and decide which ref this run reads the
 corpus from and will later commit onto — **without checking anything out**
-(Principle 6). See [references/corpus-edit.md](references/corpus-edit.md).
+(Principle 6). An open promotion pull request means its branch is reused; a
+promotion branch left on the remote with **no** open pull request stops the run,
+because every subsequent push would be rejected and no re-run could clear it.
+A fork needs its default branch verified current first. See
+[references/corpus-edit.md](references/corpus-edit.md).
 
 ### Phase 2: Read and parse the corpus
 
@@ -162,12 +183,13 @@ it. On cancel, go straight to the wrap-up. See
 
 ### Phase 4: Read each repository's `AGENTS.md`
 
-For each confirmed repository, read `AGENTS.md` over the GitHub API. Never
-clone, and keep anything written to disk outside the working tree. A repository
-with no `AGENTS.md` is recorded and skipped; an authentication, rate-limit, or
-network failure **stops the scan and reports**, because recurrence counted over
-a partial set understates the signal. See
-[references/scanning.md](references/scanning.md).
+For each confirmed repository, read `AGENTS.md` over the GitHub API, and — as a
+best-effort second call — its file list, which is what lets Phase 6 check a
+drafted `Detect` pattern against real paths. Never clone, and keep anything
+written to disk outside the working tree. A repository with no `AGENTS.md` is
+recorded and skipped; an authentication, rate-limit, or network failure **stops
+the scan and reports**, because recurrence counted over a partial set
+understates the signal. See [references/scanning.md](references/scanning.md).
 
 ### Phase 5: Exclude managed blocks and segment the text
 
@@ -185,7 +207,9 @@ From the hand-written sections, derive candidate rules. The primary signal is
 **recurrence**: the same convention stated in 2+ scanned repositories. Drop
 anything already covered by a corpus rule from Phase 2, and anything tied to one
 project's domain, architecture, or build commands. Conventions seen in exactly
-one repository are listed for visibility but **not proposed**. If nothing meets
+one repository are listed for visibility but **not proposed** — unless the user
+asks for one of them specifically, which puts it to the same per-candidate
+decision as any other. If nothing meets
 the threshold, report that and go to the wrap-up — no branch, no pull request.
 See [references/candidates.md](references/candidates.md).
 

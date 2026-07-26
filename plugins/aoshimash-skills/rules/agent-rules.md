@@ -15,9 +15,9 @@ repository's instruction file.
 
 ## Contract
 
-These are fixed. `sync-agent-rules` depends on them today and
-`collect-agent-rules` will depend on them, so do not change them without
-updating every skill that reads or writes this format.
+These are fixed. `sync-agent-rules` and `collect-agent-rules` both depend on
+them, so do not change them without updating every skill that reads or writes
+this format.
 
 | Thing | Value |
 |---|---|
@@ -28,11 +28,11 @@ updating every skill that reads or writes this format.
 
 The delimiters are HTML comments, so they are invisible in rendered markdown and
 greppable in source. They serve two purposes: they tell `sync-agent-rules` what
-it owns and may refresh, and they will tell `collect-agent-rules` what to
+it owns and may refresh, and they tell `collect-agent-rules` what to
 **ignore** when scanning a repository for rules worth promoting — without that
 boundary, already-distributed rules would be rediscovered as candidates on every
-scan. That second purpose is why the format is fixed here even though the
-collection skill does not exist yet.
+scan. That second purpose is why the format is fixed here rather than inside
+either skill.
 
 ## Format
 

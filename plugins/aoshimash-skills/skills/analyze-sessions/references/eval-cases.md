@@ -161,3 +161,6 @@ Record results here after each evaluation run.
 | 2026-03-14 | 7 | Pending | Case 7 redesigned in #32 to test single-skill enforcement. Requires interactive eval after merge. | N/A |
 | 2026-03-14 | 8 | Pending | New case added in #36. Requires sessions with repeated tool permission approvals for interactive eval. | N/A |
 | 2026-03-14 | 9 | Pending | New case added in #36. Requires sessions with both skill-level and environment-level patterns for interactive eval. | N/A |
+| 2026-07-26 | 10 | Pending | New case added in #83 for the trigger boundary against `collect-agent-rules`. Requires an interactive eval with both skills registered. | N/A |
+| 2026-07-26 | 11 | Pending | New case added in #83 — Japanese phrasing of the same boundary. Requires an interactive eval with both skills registered. | N/A |
+| 2026-07-26 | 12 | Pending | New case added in #83 to confirm cases 10–11 do not suppress this skill's own trigger phrases. Requires an interactive eval. | N/A |

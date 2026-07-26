@@ -56,10 +56,11 @@ Each maps to an entry in `evals/evals.json` with objective expectations. All are
 paper exercises — they judge the discipline of the described approach, so they
 need no live repositories.
 
-**Cases 1–2 and 8–9 are success paths**; **cases 3–7 are guard/refusal paths**
-(the skill must decline, skip, or stop and leave the checkout untouched);
-**case 10** covers re-running against an open promotion PR; **case 11** covers
-fence-aware parsing, which the corpus itself exercises on every run.
+**Cases 1–2 and 8–9 are success paths**; **cases 3–7, 12 and 13 are
+guard/refusal paths** (the skill must decline, skip, or stop and leave the
+checkout untouched); **case 10** covers re-running against an open promotion PR;
+**case 11** covers fence-aware parsing, which the corpus itself exercises on
+every run.
 
 ### Case 1: Recurrence proposes, one repository does not (`recurrence-across-repos`)
 
@@ -80,14 +81,14 @@ Makefile" convention in hand-written text; one states a project-specific
 ### Case 2: Managed blocks are invisible (`managed-block-excluded`)
 
 **Setup**: Five repositories that already received the corpus via
-`sync-agent-rules`, so each carries all four shared rules inside a managed
-block. One of them also has a hand-written commit-message convention outside
-the block, matched by one other repository.
+`sync-agent-rules`, so each carries the shared rules inside a managed block. One
+of them also has a hand-written commit-message convention outside the block,
+matched by one other repository.
 
 **Expected behavior**:
 - Everything between `<!-- BEGIN aoshimash-agent-rules -->` and
   `<!-- END aoshimash-agent-rules -->` is removed before candidate derivation,
-  so the four distributed rules are **not** rediscovered — not proposed, not
+  so the distributed rules are **not** rediscovered — not proposed, not
   counted as five-repository recurrence, not reported as candidates.
 - Content inside the block is excluded even where it carries no `<!-- rule: -->`
   marker.
@@ -101,7 +102,9 @@ the block, matched by one other repository.
 
 **Expected behavior**:
 - Preconditions detect that this is not a checkout of `aoshimash/skills` (the
-  corpus path is absent and the remote does not resolve to it).
+  corpus path is absent and the remote does not resolve to it) — and distinguish
+  that from an identity check that could not run at all, since a logged-out or
+  offline `gh` must be reported as itself, not as a wrong-repository verdict.
 - **Stops and explains**: the corpus must be edited as a real file, and the
   skill's own bundled copy is a version-pinned cache that is replaced on update,
   so there is nothing here to edit.
@@ -243,11 +246,56 @@ and also carries one real managed block.
   corpus's own Format fence is **not** parsed as a rule, so no phantom `<id>`
   rule exists to collide with a proposed id or to mark a candidate "already
   covered".
+- Only the real rule sections the corpus currently holds are parsed, named by
+  id. The expectation is deliberately not a fixed count — this skill's own first
+  successful run adds a fifth.
 - Prose that merely mentions a delimiter inline is not counted either — only
   whole lines count.
 
 Case 11 needs no special fixture on the corpus side: the corpus ships the fenced
 template, so **every** run exercises that half.
+
+### Case 12: The corpus moved mid-run (`corpus-moved-mid-run`)
+
+**Setup**: One candidate approved. While the run was scanning and asking, a
+teammate merged a pull request that added a rule to the corpus, so the file on
+the branch about to be committed to is not the file Phase 2 read.
+
+**Expected behavior**:
+- After checking out the promotion branch and **before appending**, the corpus
+  file on disk is re-read and compared byte-for-byte against the Phase 2 read.
+- The difference **stops the run**; nothing is written.
+- The reasoning is stated: the recorded insertion point describes the file that
+  was read, not the file on disk, so appending at a stale index could land the
+  new section inside another rule's body — and deduplication was done against
+  the older rule set, so the approved candidate may now be a duplicate.
+- No silent recompute-and-continue, no merge, rebase, reset, or force.
+- Re-running is named as the recovery.
+
+This is the check standing between a stale insertion index and a corrupted
+corpus, and it is the one path that neither the append-format case nor the
+re-run case exercises.
+
+### Case 13: Precondition guards (`precondition-guards`)
+
+**Setup**: The corpus file has uncommitted edits, an unrelated file is already
+staged, and the checkout has no `origin` remote.
+
+**Expected behavior**:
+- Preconditions run in an order where each failure is diagnosed as itself: git
+  repository root, then `origin`, then `gh` auth and network, then repository
+  identity, then the clean-corpus check.
+- The missing `origin` is named as blocking, with the reason (the base-ref fetch
+  and the push both need it; a local-only repository has nowhere to open a pull
+  request).
+- The modified corpus file and the pre-staged change are both named as blocking,
+  so the promotion commit contains only the promotion.
+- **Nothing is stashed, committed, or discarded** on the user's behalf, and the
+  in-progress corpus edits are not overwritten.
+- Nothing is scanned, no branch is created, no pull request is opened.
+- The report also makes clear that a logged-out `gh` would be reported as a
+  login problem rather than as a wrong-repository error, since the auth check
+  precedes the identity check.
 
 ## Evaluation Log
 
@@ -272,9 +320,27 @@ whether an agent reading `SKILL.md` follows it.
 | C6 | `evals.json` valid and schema-identical to `merge-renovate-prs` | **Pass** — parses as JSON; same top-level keys (`skill_name`, `trigger_evals`, `evals`); every eval carries exactly `id`/`name`/`prompt`/`expected_output`/`files`/`expectations`; every trigger eval exactly `query`/`should_trigger`; ids sequential 1–11. |
 | C7 | `gh` invocations used by the skill exist as described | **Pass** — verified against the installed CLI (`gh` 2.96.0): `gh repo list` supports `--source`, `--no-archived`, `--limit`, `--json nameWithOwner,…` and defaults to a limit of 30; `gh api repos/<o>/<r>/contents/<path> -H "Accept: application/vnd.github.raw"` returns raw file text and reports `HTTP 404` for a missing path. |
 
+### 2026-07-26 — Mechanism verification (issue #83, review fix round 1)
+
+**What was run.** Same method and same limits as the round above: the mechanical
+claims *added or changed* in the fix round were executed directly. Still not a
+skill-behavior benchmark.
+
+| # | Claim under test | Result |
+|---|---|---|
+| F1 | The optional file-list read exists and reports truncation (Phase 4-2) | **Pass** — `gh api "repos/aoshimash/skills/git/trees/main?recursive=1"` returns a `tree` array of blob/tree entries plus a `truncated` boolean (`false`, 85 entries for this repository), so the `Detect` sanity check has a real data source and a defined "incomplete" signal. |
+| F2 | A directory path is not a 404 (scanning.md error table) | **Confirmed** — `gh api repos/aoshimash/skills/contents/plugins -H "Accept: application/vnd.github.raw"` returns HTTP 200 with a JSON array, not 404. The reviewed revision's parenthetical was wrong; the "not markdown text" row now names this case explicitly. |
+| F3 | `deleteBranchOnMerge` on the corpus repository (Phase 1 stale-branch stop) | **Pass** — `gh repo view aoshimash/skills --json deleteBranchOnMerge` reports `true`, so a merged promotion cleans its branch up and the leftover-remote-branch case is specifically the closed-unmerged one, as the instruction now states. |
+| F4 | The commands the fork path prescribes exist | **Pass** — `gh repo sync` exists and syncs a destination from its parent by default; `gh pr list` accepts `--repo` and the `headRepositoryOwner` JSON field, and its help states `--head` does not support `<owner>:<branch>` syntax — which is why the fork path checks the head owner rather than relying on that filter. |
+| F5 | `evals.json` still valid and schema-identical after the fix round | **Pass** — parses as JSON; same top-level keys as `merge-renovate-prs`; every eval carries exactly `id`/`name`/`prompt`/`expected_output`/`files`/`expectations`; every trigger eval exactly `query`/`should_trigger`; ids sequential 1–13; names unique. |
+| F6 | The corpus parse and splice still behave after the corpus Contract edit | **Pass** — re-ran the round-1 C1–C5 checks against the edited corpus: fence-aware enumeration still yields the real rules where a naive match yields one more, the insertion point still resolves to end of file, and two independent splices remain byte-identical and idempotent. |
+
+Not re-verified because nothing changed there: the round-1 findings on delimiter
+counting and managed-block removal stand as recorded.
+
 ### Accepted deviation
 
-The 11 behavioral cases and 20 trigger cases in `evals.json` have **not** been
+The 13 behavioral cases and 20 trigger cases in `evals.json` have **not** been
 benchmarked. Both need the eval harness (skill registration, repeated executor
 runs, independent grading) plus a with-skill vs baseline comparison to be
 meaningful, and neither is available here. They are authored and reviewed but
@@ -291,5 +357,6 @@ benchmark would measure.
 | Date | Case | Result | Notes |
 |------|------|--------|-------|
 | 2026-07-26 | C1–C7 mechanism checks | 7/7 pass | Executed against the real corpus file, synthetic `AGENTS.md` fixtures, and the installed `gh`. |
+| 2026-07-26 | F1–F6 mechanism checks (fix round 1) | 6/6 pass | Executed against the live GitHub API for `aoshimash/skills`, the installed `gh` 2.96.0, and the edited corpus. |
 | 2026-07-26 | Trigger evals (20) | not run | Accepted deviation — harness unavailable. |
-| 2026-07-26 | Behavioral cases 1–11 | not run | Accepted deviation — harness unavailable. |
+| 2026-07-26 | Behavioral cases 1–13 | not run | Accepted deviation — harness unavailable. |

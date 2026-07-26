@@ -74,8 +74,15 @@ become. The corpus's own "Format" section is authoritative; the essentials:
   with `**/` so it matches at the root and at any depth, unless the tool only
   ever works at a fixed path, in which case anchor it there. Derive the patterns
   from the convention itself (a uv rule detects `**/pyproject.toml`,
-  `**/uv.lock`, `**/*.py`), and sanity-check them against the repositories the
-  convention was found in — a pattern that matches none of them is wrong.
+  `**/uv.lock`, `**/*.py`), then **sanity-check them against the file lists read
+  in Phase 4-2**: at least one pattern should match at least one path in at
+  least one repository the convention was found in. A pattern set matching
+  nothing there is almost certainly wrong, and a rule whose patterns match
+  nothing is undistributable — `sync-agent-rules` would never write it into any
+  repository. Report a failed check alongside the candidate and let the user
+  correct it through **Add with edits**; do not drop the candidate silently, and
+  do not block on it. Phase 4-2 is best-effort, so when no file list is
+  available say the check was **skipped** rather than implying it passed.
 - **Body** — English, no markdown headings (it is emitted under a `###` heading
   in the target file), written to read correctly standing alone in a stranger's
   `AGENTS.md`. Merge the wording from the repositories it was found in rather
@@ -100,7 +107,7 @@ Repositories scanned: N (M skipped — <reason per repository>)
 ### 1. <title>  —  seen in <k> repositories
 - **Proposed id**: `<id>`
 - **Seen in**: `<owner>/<repo>` (heading “<path>”), `<owner>/<repo>` (heading “<path>”), …
-- **Detect**: `<glob>`, `<glob>`
+- **Detect**: `<glob>`, `<glob>` — matches `<path>` in `<owner>/<repo>` (or: matched nothing / check skipped, no file list)
 - **Proposed rule body**:
   <the drafted body>
 

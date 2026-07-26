@@ -11,15 +11,22 @@ anything**, including git refs.
 ## Phase 1: Resolve the base ref
 
 ```bash
-git fetch origin
-gh repo view --json defaultBranchRef --jq .defaultBranchRef.name
-gh pr list --head chore/collect-agent-rules --state open --json number,url
+git fetch --prune origin
+gh repo view --repo <origin owner/repo> --json defaultBranchRef --jq .defaultBranchRef.name
+gh pr list --repo aoshimash/skills --head chore/collect-agent-rules --state open \
+  --json number,url,headRepositoryOwner
+git ls-remote --heads origin chore/collect-agent-rules
 ```
+
+Always pass `--repo` explicitly. Without it the base repository `gh` picks
+depends on the local configuration, which is the difference between reading the
+fork's default branch and the corpus repository's.
 
 | Situation | Base ref | Mode |
 |---|---|---|
 | An open pull request exists for `chore/collect-agent-rules` | `origin/chore/collect-agent-rules` | **reuse** |
-| No open pull request | `origin/<default-branch>` | **create** |
+| No open pull request, and no remote branch of that name | `origin/<default-branch>` | **create** |
+| No open pull request, but `origin/chore/collect-agent-rules` still exists | — | **stop** (see below) |
 
 - **Do not check anything out here.** The branch is established in Phase 8, once
   there is something to commit (Principle 6). Recording the decision now is what
@@ -27,16 +34,52 @@ gh pr list --head chore/collect-agent-rules --state open --json number,url
 - The reuse case is what stops a rule promoted by a still-open earlier run from
   being proposed a second time and appended twice: Phase 2 reads that branch's
   corpus, so the rule is already there.
+- **A remote branch with no open pull request stops the run.** `aoshimash/skills`
+  has `deleteBranchOnMerge` enabled, so a merged promotion cleans itself up; the
+  branch that survives is one whose pull request was **closed without merging**.
+  Create mode would then base on the default branch and push a history unrelated
+  to that leftover branch, and every future run would repeat the same rejected
+  push forever — Phase 1 makes the identical decision each time, so "re-run and
+  it resolves" would be false. Stop, and say exactly how to clear it: delete the
+  remote branch (`git push origin --delete chore/collect-agent-rules`) or reopen
+  the closed pull request, then re-run. Query the remote directly with
+  `git ls-remote` rather than trusting a remote-tracking ref, which is why the
+  fetch above uses `--prune`.
 - A **local** `chore/collect-agent-rules` with no open pull request is not
-  reused. Nothing deletes local branches when a pull request merges, so a
+  reused either. Nothing deletes local branches when a pull request merges, so a
   leftover branch sits behind the default branch; after a squash merge its merge
   base is the pre-promotion commit, and the next pull request would re-add
   everything and conflict.
-- When the checkout is a fork of `aoshimash/skills`, which repository `gh`
-  treats as the base depends on the local configuration. Pass
-  `--repo aoshimash/skills` explicitly to `gh pr list` and `gh pr create` so the
-  pull request is looked up and opened on the corpus repository rather than on
-  the fork.
+
+### When the checkout is a fork
+
+A fork is accepted, but two things must be handled or the run silently corrupts
+the corpus.
+
+1. **The pull request must land on the corpus repository.** Pass
+   `--repo aoshimash/skills` to `gh pr list` and `gh pr create`. Note that
+   `gh pr list --head` does not support the `<owner>:<branch>` syntax, so when
+   the branch lives on a fork, confirm the pull request it finds is the one for
+   this fork's branch (check its `headRepositoryOwner`) before treating it as
+   reuse.
+2. **The base ref must not be a stale fork copy.** `origin/<default-branch>` on
+   a fork can be behind `aoshimash/skills`. Phase 2 would then dedupe against an
+   old corpus, and a rule promoted upstream since the last fork sync would be
+   re-proposed and appended a second time — a duplicate `## rule: <id>` in the
+   merged corpus, exactly the collision 6-4 and Principle 7 exist to prevent.
+   Verify the fork is current before using its default branch as the base:
+
+   ```bash
+   git fetch https://github.com/aoshimash/skills.git <parent default branch>
+   git rev-list --count origin/<fork default branch>..FETCH_HEAD
+   ```
+
+   A count of `0` means the fork carries every upstream commit and
+   `origin/<fork default branch>` is a sound base. Anything else means the fork
+   is behind: **stop and report**, telling the user to sync it
+   (`gh repo sync <fork> --source aoshimash/skills`) and re-run. Do not sync it
+   automatically — that is a write to another repository, outside what this
+   skill does.
 
 ## Phase 2: Read and parse the corpus
 
@@ -90,9 +133,16 @@ git switch chore/collect-agent-rules     # or: git switch -c chore/collect-agent
 git merge --ff-only origin/chore/collect-agent-rules
 ```
 
-If the fast-forward fails, **stop and report**. Never `git reset --hard`, merge,
-rebase, or force: a local branch merely *ahead* of the remote is the expected
-state after a rejected push, and a hard reset would destroy that commit.
+If the fast-forward fails the branches have genuinely diverged: **stop and
+report**. Never `git reset --hard`, merge, rebase, or force — a hard reset here
+would destroy whatever the local branch carries that the remote does not.
+
+A local branch merely *ahead* of the remote — the expected state after a
+rejected push — is **not** a failure: `git merge --ff-only` reports
+"Already up to date." and exits 0, so the run continues. That is safe because
+8-2 then compares the corpus on disk against what Phase 2 read from
+`origin/chore/collect-agent-rules`; the unpushed commit makes them differ and
+the run stops there, before any append lands on a base it did not read.
 
 **Create** — no open pull request:
 
@@ -192,10 +242,19 @@ If the push is rejected as non-fast-forward, someone pushed to the branch during
 this run: **stop and report, and do not force-push.** The local commit survives,
 and re-running picks the new remote state up in Phase 1.
 
-Then open the pull request against `aoshimash/skills`, or — when one is already
-open for this branch — let the push update it rather than opening a second one.
-Use a plain title (no Conventional Commit prefix), e.g. *Promote N hand-written
-rules into the shared corpus*.
+Then open the pull request against `aoshimash/skills` (`--repo aoshimash/skills`,
+and `--head <fork owner>:chore/collect-agent-rules` when pushing from a fork),
+or — when one is already open for this branch — let the push update it rather
+than opening a second one. Use a plain title (no Conventional Commit prefix),
+e.g. *Promote N hand-written rules into the shared corpus*.
+
+**If `gh pr create` itself fails** after a successful push, the commit is safely
+on the remote branch and the wrap-up will *not* delete that branch, because a
+commit landed on it. Report the branch name, the error, and that the corpus edit
+is pushed but unreviewed. Re-running is the recovery: Phase 1 finds no open pull
+request, and — because the remote branch now exists without one — stops with the
+instructions for clearing it, so the user can either open the pull request by
+hand or delete the branch and start over. Do not retry blindly in a loop.
 
 The body states, per promoted rule:
 

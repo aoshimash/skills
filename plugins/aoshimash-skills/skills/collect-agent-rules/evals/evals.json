@@ -195,17 +195,51 @@
       "id": 11,
       "name": "fenced-regions-skipped",
       "prompt": "Collect rules from my repositories. One of the repositories you will scan has an AGENTS.md that documents this whole mechanism: it shows the BEGIN and END delimiters inside fenced code blocks as examples, shows a `## rule:` template inside another fence, and it also has one real managed block further down. Paper exercise: before you propose anything, tell me exactly how you count the delimiters in that file and how many rules you parsed out of the corpus, and why.",
-      "expected_output": "Fenced regions are inert for every parse this skill performs. Counting delimiters in that AGENTS.md skips the fenced examples, so the file counts exactly one BEGIN and one END — the real block — and is accepted as well-formed. Counting naively would find two of each and refuse a perfectly legitimate file as malformed, skipping a repository that had real candidates in it. Segmenting the hand-written text also skips fences, so a heading inside a code sample does not start a section. The same rule applies on the corpus side: the corpus's own Format section shows the rule template inside a fence whose first line is literally `## rule: <id>`, so a line-by-line match would parse a fifth, phantom rule with the placeholder id `<id>` and the placeholder pattern `<glob>`. Exactly four real rules are parsed — container-base-image, python-package-management, cli-version-management, github-actions-pinning — and the corpus's own non-rule sections (Contract, Format, Rules) are skipped as well. That matters here because a phantom `<id>` rule would be available to collide with a proposed id and could mark an unrelated candidate as already covered. Finally, only whole lines count as delimiters: a sentence that mentions a delimiter inline is not counted.",
+      "expected_output": "Fenced regions are inert for every parse this skill performs. Counting delimiters in that AGENTS.md skips the fenced examples, so the file counts exactly one BEGIN and one END — the real block — and is accepted as well-formed. Counting naively would find two of each and refuse a perfectly legitimate file as malformed, skipping a repository that had real candidates in it. Segmenting the hand-written text also skips fences, so a heading inside a code sample does not start a section. The same rule applies on the corpus side: the corpus's own Format section shows the rule template inside a fence whose first line is literally `## rule: <id>`, so a line-by-line match would parse one extra, phantom rule with the placeholder id `<id>` and the placeholder pattern `<glob>`. Only the real rule sections the corpus currently holds are parsed — at the time of writing container-base-image, python-package-management, cli-version-management and github-actions-pinning, though the set grows every time this skill promotes something — and the corpus's own non-rule sections (Contract, Format, Rules) are skipped as well. That matters here because a phantom `<id>` rule would be available to collide with a proposed id and could mark an unrelated candidate as already covered. Finally, only whole lines count as delimiters: a sentence that mentions a delimiter inline is not counted.",
       "files": [],
       "expectations": [
         "Skips fenced regions when counting BEGIN/END delimiters in a scanned file",
         "Counts that file as one well-formed block rather than refusing it as malformed",
         "Skips fenced regions when segmenting the hand-written text into sections",
         "Skips fenced regions when enumerating `## rule:` sections in the corpus",
-        "Parses exactly four corpus rules and names their real ids",
+        "Parses only the real `## rule:` sections the corpus currently holds and names their ids, without asserting a fixed count that a later promotion would invalidate",
         "Offers no phantom rule with the placeholder id `<id>` or pattern `<glob>`",
         "Skips the corpus's own non-rule sections (Contract, Format, Rules)",
         "Counts only whole-line delimiters, so an inline prose mention is not counted"
+      ]
+    },
+    {
+      "id": 12,
+      "name": "corpus-moved-mid-run",
+      "prompt": "Collect rules from my repositories. Assume I approve one candidate. While you were scanning and asking me about candidates, a teammate merged a different pull request that added a rule to plugins/aoshimash-skills/rules/agent-rules.md, so the corpus on the branch you are about to commit to is no longer the one you read at the start. Paper exercise: what do you do at the point where you would write?",
+      "expected_output": "Immediately after checking out the promotion branch, and before appending anything, the skill re-reads the corpus file from the working tree and compares it byte-for-byte against what it read from the base ref at the start of the run. Here they differ. The skill STOPS and reports, writing nothing. The reason is that the insertion point it recorded — the index of the first heading after the last `## rule:` section — describes the file it read, not the file on disk; appending at a stale index could place the new section inside another rule's body or after a non-rule section, producing a corpus that the distribution skill would parse wrongly. It also means the deduplication done during candidate derivation was against an older rule set, so the approved candidate might now duplicate a rule someone else just added. The remedy is to re-run: the fresh run reads the current corpus, re-checks the candidate against it, and either proposes it again or reports it as already covered. The skill does not re-derive the insertion point and continue, does not merge or rebase to reconcile, and does not force anything.",
+      "files": [],
+      "expectations": [
+        "Re-reads the corpus from the working tree after checking out the branch and before appending",
+        "Compares it byte-for-byte against what was read from the base ref at the start",
+        "Stops and reports on any difference, writing nothing",
+        "Explains that the recorded insertion point no longer describes the file on disk",
+        "Notes that deduplication was performed against the older corpus, so the approved candidate may now be a duplicate",
+        "Does not silently recompute the insertion point and continue",
+        "Does not merge, rebase, reset, or force to reconcile the difference",
+        "Names re-running as the recovery"
+      ]
+    },
+    {
+      "id": 13,
+      "name": "precondition-guards",
+      "prompt": "Collect rules from my repositories and add the approved ones to the corpus. Three things about my environment: I have uncommitted edits to plugins/aoshimash-skills/rules/agent-rules.md right now, I have already staged an unrelated file for a commit I'm about to make, and this checkout has no `origin` remote — I cloned it from a colleague's directory over the network share. Paper exercise: what do you check, in what order, and what do you tell me?",
+      "expected_output": "The preconditions run in an order chosen so each failure is diagnosed as the thing it actually is. Being inside a git repository at its root is checked first; then the `origin` remote, which is missing here — that alone blocks the run, because the fetch that resolves the base ref and the push that delivers the promotion both need it, and a repository with no remote has nowhere to open a pull request. The skill reports that specific failed precondition rather than a vague error. The dirty-corpus and pre-staged checks are equally blocking: the promotion commit must contain only the promotion, and committing on top of in-progress edits to the corpus would mix unrelated work into the pull request while risking overwriting those edits with the appended result. The skill does NOT stash, commit, discard, or work around any of it on the user's behalf; it names what failed and tells the user to commit or stash and to add a GitHub `origin` remote, then re-run. Nothing is scanned, no branch is created, and no pull request is opened. Note also that the authentication and network check runs before the repository-identity check, so a logged-out `gh` is reported as a login problem and never as 'this is not a checkout of aoshimash/skills'.",
+      "files": [],
+      "expectations": [
+        "Checks that the working directory is a git repository root first",
+        "Identifies the missing `origin` remote as a blocking precondition and explains why it is needed",
+        "Identifies both the modified corpus file and the pre-staged change as blocking",
+        "Does not stash, commit, or discard the user's uncommitted or staged work",
+        "Does not overwrite the in-progress corpus edits with the appended result",
+        "Runs the `gh` authentication and network check before the repository-identity check, so a logged-out `gh` is not reported as a wrong-repository error",
+        "Scans nothing, creates no branch, and opens no pull request",
+        "Names each failed precondition and how to unblock it"
       ]
     }
   ]
