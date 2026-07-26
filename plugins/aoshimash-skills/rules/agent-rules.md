@@ -191,8 +191,8 @@ decisions fall into two layers:
 
 Log implementation-time decisions where a reviewer will see them:
 
-- Default: a `Decisions` / `Deviations` section in the pull-request body,
-  stating each decision and its rationale.
+- Default: a `Decisions` / `Deviations` section in the pull/merge request
+  body, stating each decision and its rationale.
 - A constraint tied to a specific piece of code goes in a code comment next to
   that code.
 - Commit a lightweight ADR under `docs/adr/` only when a decision contradicts
