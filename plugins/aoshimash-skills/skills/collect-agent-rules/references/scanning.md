@@ -91,8 +91,10 @@ gh api "repos/<owner>/<repo>/git/trees/<default-branch>?recursive=1" \
   --jq '.truncated, (.tree[] | select(.type == "blob") | .path)'
 ```
 
-`<default-branch>` is the `defaultBranchRef` from Phase 3, so no extra lookup is
-needed. The paths feed one thing only: the `Detect` sanity check in
+`<default-branch>` is `defaultBranchRef.name` from Phase 3 — the field is an
+**object**, so substituting `defaultBranchRef` itself yields a broken URL — and
+using it means no extra lookup is needed. The paths feed one thing only: the
+`Detect` sanity check in
 [candidates.md](candidates.md#6-4-draft-each-candidate-in-corpus-format), which
 confirms that a drafted glob actually matches a file in a repository the
 convention was found in. A pattern matching nothing there is almost certainly

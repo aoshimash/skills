@@ -113,18 +113,24 @@ fenced delimiter examples that must not be mistaken for a real block.
 
 ### Phase 0: Preconditions
 
-Verify all of the following before touching anything. Stop and say which one
-failed if any does not hold.
+Verify all of the following before touching anything, and stop if any does not
+hold.
 
-The order matters: every check that needs the network runs after the checks that
-prove the network is usable, so a failure is diagnosed as the thing it actually
-is.
+**Evaluation order.** Step 1 comes first; if it fails nothing else can be
+evaluated, so report it alone. Steps 2 and 5 are then both local: evaluate
+**both** and report **every** failure together, so a user with two problems
+learns about two rather than discovering them one re-run at a time. Steps 3 and
+4 need the network and run only once the local checks pass, in that order,
+stopping at the first failure — which is what keeps a logged-out `gh` from being
+reported as a wrong repository. Step 6 runs last, only when everything passed.
 
 1. **Inside a git repository, at its root.** `git rev-parse --show-toplevel`
    succeeds; run everything from that directory.
 2. **An `origin` remote exists and points at GitHub** (`git remote get-url
    origin`). Without it Phase 1's fetch and Phase 8's push have nowhere to go,
-   and a local-only repository has nowhere to open a pull request.
+   and a local-only repository has nowhere to open a pull request. Parse the URL
+   into `<owner>/<repo>` and keep it: **every later `gh` call names its
+   repository explicitly**, and this is where that name comes from.
 3. **`gh` is authenticated** (`gh auth status`) and the network is reachable.
    This runs before the identity check below, which is an API call: a logged-out
    or offline `gh` must be reported as exactly that, never as "this is not a
@@ -132,12 +138,20 @@ is.
 4. **This checkout is `aoshimash/skills`.** Two parts, in this order:
    1. The corpus file exists at the contract path. This is a local check; if it
       fails, the checkout is definitively not the corpus repository.
-   2. `gh repo view --json nameWithOwner,parent` reports `aoshimash/skills` as
-      the repository itself or as its parent (a fork is acceptable;
-      [references/corpus-edit.md](references/corpus-edit.md) covers the extra
-      handling a fork needs). **If the command itself fails** — network error,
-      permission error, rate limit — report *that* failure and stop; do not
-      convert a failed call into a wrong-repository verdict.
+   2. `gh repo view <origin owner/repo> --json nameWithOwner,parent` reports
+      `aoshimash/skills` as the repository itself or as its parent (a fork is
+      acceptable; [references/corpus-edit.md](references/corpus-edit.md) covers
+      the extra handling a fork needs). **Naming the repository is mandatory
+      here** — `gh repo view` takes it as a positional argument, and the value
+      is the one recorded in step 2. Left off, `gh` resolves the repository from
+      the whole remote set and **prefers a remote named `upstream` over
+      `origin`**, so the standard fork layout (`origin` = the fork, `upstream` =
+      `aoshimash/skills`) reports `aoshimash/skills` with a null parent — the run
+      would conclude it is *not* on a fork and skip every fork safeguard,
+      including the staleness check that stops a duplicate rule id from being
+      appended. **If the command itself fails** — network error, permission
+      error, rate limit — report *that* failure and stop; do not convert a
+      failed call into a wrong-repository verdict.
 
    When either part shows this is genuinely the wrong repository, **stop and
    explain**: this skill edits the corpus as a real file, the corpus lives in
@@ -183,13 +197,15 @@ it. On cancel, go straight to the wrap-up. See
 
 ### Phase 4: Read each repository's `AGENTS.md`
 
-For each confirmed repository, read `AGENTS.md` over the GitHub API, and — as a
-best-effort second call — its file list, which is what lets Phase 6 check a
-drafted `Detect` pattern against real paths. Never clone, and keep anything
-written to disk outside the working tree. A repository with no `AGENTS.md` is
-recorded and skipped; an authentication, rate-limit, or network failure **stops
-the scan and reports**, because recurrence counted over a partial set
-understates the signal. See [references/scanning.md](references/scanning.md).
+For each confirmed repository, read `AGENTS.md` over the GitHub API. Then, only
+for those whose `AGENTS.md` was read successfully, make a best-effort second
+call for the repository's file list — that is what lets Phase 6 check a drafted
+`Detect` pattern against real paths, and it never blocks the run. Never clone,
+and keep anything written to disk outside the working tree. A repository with no
+`AGENTS.md` is recorded and skipped; an authentication, rate-limit, or network
+failure **stops the scan and reports**, because recurrence counted over a
+partial set understates the signal. See
+[references/scanning.md](references/scanning.md).
 
 ### Phase 5: Exclude managed blocks and segment the text
 
@@ -209,9 +225,9 @@ anything already covered by a corpus rule from Phase 2, and anything tied to one
 project's domain, architecture, or build commands. Conventions seen in exactly
 one repository are listed for visibility but **not proposed** — unless the user
 asks for one of them specifically, which puts it to the same per-candidate
-decision as any other. If nothing meets
-the threshold, report that and go to the wrap-up — no branch, no pull request.
-See [references/candidates.md](references/candidates.md).
+decision as any other. If nothing meets the threshold, report that and go to the
+wrap-up — no branch, no pull request. See
+[references/candidates.md](references/candidates.md).
 
 ### Phase 7: Decide one candidate at a time
 
@@ -227,7 +243,9 @@ format — id, title, detect patterns, body — before moving to the next. See
 Reached only with at least one approved candidate. Check out the branch decided
 in Phase 1, confirm the corpus file on disk still matches what Phase 2 read,
 append the approved rules by the byte-level recipe, stage only the corpus file,
-commit, push, and open the pull request against `aoshimash/skills`. See
+commit, push, and open the pull request against `aoshimash/skills`. If anything
+fails between writing the file and a successful commit, **restore the corpus
+file** before the wrap-up — nothing else undoes a modified tracked file. See
 [references/corpus-edit.md](references/corpus-edit.md).
 
 ### Wrap-up
@@ -261,6 +279,9 @@ result, a refusal, and every stop-and-report above.
   Contract and Format sections. It only appends new `## rule:` sections.
 - Does not repair a malformed managed block in a scanned repository, force-push,
   or resolve a diverged collect branch. Each of those stops for a human.
+- Does not delete a leftover promotion branch, sync a stale fork, or push to a
+  remote it lacks access to. It stops and hands each back with the exact command
+  that clears it.
 
 ## References
 

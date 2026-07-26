@@ -12,21 +12,37 @@ anything**, including git refs.
 
 ```bash
 git fetch --prune origin
-gh repo view --repo <origin owner/repo> --json defaultBranchRef --jq .defaultBranchRef.name
+gh repo view <origin owner/repo> --json defaultBranchRef --jq .defaultBranchRef.name
 gh pr list --repo aoshimash/skills --head chore/collect-agent-rules --state open \
   --json number,url,headRepositoryOwner
 git ls-remote --heads origin chore/collect-agent-rules
 ```
 
-Always pass `--repo` explicitly. Without it the base repository `gh` picks
-depends on the local configuration, which is the difference between reading the
-fork's default branch and the corpus repository's.
+**Never let `gh` guess the repository — name it in every call, in every phase.**
+The syntax differs by command: `gh repo view` takes the repository as a
+**positional argument** (there is no `--repo` flag on it), while `gh pr list`
+and `gh pr create` take `--repo`. Left implicit, `gh` resolves from the whole
+remote set and prefers a remote named `upstream` over `origin`, so on the
+standard fork layout it silently reports the *parent* — the difference between
+reading the fork's default branch and the corpus repository's, and between
+engaging the fork path below and skipping it. The `<origin owner/repo>` value
+comes from Phase 0 step 2.
+
+**A pull request counts as "for this branch" only if its head is ours.**
+`gh pr list --head` matches on branch name alone and does not support the
+`<owner>:<branch>` syntax, so it can return a pull request whose branch of that
+name lives on somebody else's fork. Compare `headRepositoryOwner.login` against
+origin's owner; if they differ, it is **not** a match — ignore that pull request
+and continue down the table as though none were open. This is not a fork-only
+concern: treating a stranger's pull request as reuse sets the base ref to
+`origin/chore/collect-agent-rules`, which does not exist locally, and Phase 2's
+`git show` then dies with `fatal: invalid object name`.
 
 | Situation | Base ref | Mode |
 |---|---|---|
-| An open pull request exists for `chore/collect-agent-rules` | `origin/chore/collect-agent-rules` | **reuse** |
-| No open pull request, and no remote branch of that name | `origin/<default-branch>` | **create** |
-| No open pull request, but `origin/chore/collect-agent-rules` still exists | — | **stop** (see below) |
+| An open pull request for `chore/collect-agent-rules` **whose head owner is origin's owner** | `origin/chore/collect-agent-rules` | **reuse** |
+| No such pull request, and `git ls-remote` prints **nothing** for the branch | `origin/<default-branch>` | **create** |
+| No such pull request, but `git ls-remote` prints a ref for the branch | — | **stop** (see below) |
 
 - **Do not check anything out here.** The branch is established in Phase 8, once
   there is something to commit (Principle 6). Recording the decision now is what
@@ -44,7 +60,10 @@ fork's default branch and the corpus repository's.
   remote branch (`git push origin --delete chore/collect-agent-rules`) or reopen
   the closed pull request, then re-run. Query the remote directly with
   `git ls-remote` rather than trusting a remote-tracking ref, which is why the
-  fetch above uses `--prune`.
+  fetch above uses `--prune`. **Key the decision on non-empty output, not on the
+  exit status**: `git ls-remote --heads origin <branch>` exits 0 with no output
+  when the branch does not exist, so an exit-status test would read "absent" as
+  "present" and stop every run.
 - A **local** `chore/collect-agent-rules` with no open pull request is not
   reused either. Nothing deletes local branches when a pull request merges, so a
   leftover branch sits behind the default branch; after a squash merge its merge
@@ -57,11 +76,10 @@ A fork is accepted, but two things must be handled or the run silently corrupts
 the corpus.
 
 1. **The pull request must land on the corpus repository.** Pass
-   `--repo aoshimash/skills` to `gh pr list` and `gh pr create`. Note that
-   `gh pr list --head` does not support the `<owner>:<branch>` syntax, so when
-   the branch lives on a fork, confirm the pull request it finds is the one for
-   this fork's branch (check its `headRepositoryOwner`) before treating it as
-   reuse.
+   `--repo aoshimash/skills` to `gh pr list` and `gh pr create`, and add
+   `--head <fork owner>:chore/collect-agent-rules` when creating, so the pull
+   request is opened from the fork's branch against the corpus repository. The
+   head-owner comparison above applies here as it does everywhere.
 2. **The base ref must not be a stale fork copy.** `origin/<default-branch>` on
    a fork can be behind `aoshimash/skills`. Phase 2 would then dedupe against an
    old corpus, and a rule promoted upstream since the last fork sync would be
@@ -70,9 +88,15 @@ the corpus.
    Verify the fork is current before using its default branch as the base:
 
    ```bash
+   # the parent's default branch — gh repo view --json parent does NOT carry it
+   gh repo view aoshimash/skills --json defaultBranchRef --jq .defaultBranchRef.name
    git fetch https://github.com/aoshimash/skills.git <parent default branch>
    git rev-list --count origin/<fork default branch>..FETCH_HEAD
    ```
+
+   Look the parent's default branch up rather than assuming `main`:
+   `gh repo view --json parent` returns only the parent's `id`, `name` and
+   `owner`, so there is nothing there to read it from.
 
    A count of `0` means the fork carries every upstream commit and
    `origin/<fork default branch>` is a sound base. Anything else means the fork
@@ -94,9 +118,11 @@ exists on the base — or gets dropped as "already covered" when it is not there
 
 Then:
 
-1. **Record the line ending** (LF or CRLF, by majority) and whether the blob
-   ends with a newline. Phase 8 writes in that same line ending; assuming LF
-   would rewrite every line of a CRLF file.
+1. **Record the line ending** (LF or CRLF, by majority). Phase 8 writes in that
+   same line ending; assuming LF would rewrite every line of a CRLF file. Note
+   whether the blob ends with a newline **for the report only** — 8-4 always
+   emits exactly one trailing line ending, so a missing final newline is
+   normalized rather than preserved, and this flag decides nothing.
 2. **Enumerate `## rule: <id>` sections, skipping fenced regions.** The Format
    section shows the template inside a fence whose first line is literally
    `## rule: <id>`; a line-by-line match parses a phantom rule with the
@@ -218,6 +244,28 @@ Consequences worth stating, because they are what make two runs agree:
   the file lacked one. Both are normalizations of whitespace the corpus should
   not have had; nothing inside an existing rule is touched.
 
+### 8-4b. Roll back if anything fails before the commit lands
+
+From the moment 8-4 writes the spliced file until `git commit` **succeeds**, the
+working tree holds a modification that no other step will clean up: the wrap-up
+switches branches, deletes a branch this run created, and removes temp files
+*outside* the checkout — none of which restores a modified tracked file.
+
+So: on **any** failure in this window — a rejecting pre-commit hook, a signing
+or identity error, a commit aborted for any reason — restore the file before
+going to the wrap-up:
+
+```bash
+git restore -- plugins/aoshimash-skills/rules/agent-rules.md
+```
+
+Then report what failed. Skipping this leaves the user on their starting branch
+with a dirty corpus, which breaks Principle 6's "no stray file" and makes the
+*next* run fail Phase 0 step 5 for a reason it did not cause.
+
+Once the commit succeeds this no longer applies: the change is a commit on a
+branch, which is exactly what 8-6 and the wrap-up are written to handle.
+
 ### 8-5. Commit
 
 Stage **only** the corpus file, by name. Never `git add -A` or `git add .` —
@@ -238,9 +286,20 @@ Scanned <n> repositories (<m> skipped: <reasons>).
 git push -u origin chore/collect-agent-rules
 ```
 
-If the push is rejected as non-fast-forward, someone pushed to the branch during
-this run: **stop and report, and do not force-push.** The local commit survives,
-and re-running picks the new remote state up in Phase 1.
+Two rejections to distinguish, because the remedies are opposite:
+
+- **Non-fast-forward** — someone pushed to the branch during this run. **Stop
+  and report, and do not force-push.** The local commit survives, and re-running
+  picks the new remote state up in Phase 1.
+- **Denied for lack of write access** (`403`, "Permission to … denied", "The
+  requested URL returned error: 403") — the account can read `origin` but not
+  push to it, which is the ordinary case for a clone of someone else's fork or a
+  read-only token. **Stop and report**, naming the remote and that the commit is
+  sitting on the local branch. Do not retry, do not invent a different remote,
+  and do not push somewhere the user did not choose. The commit is preserved;
+  the user can grant access, or push it themselves, and re-run.
+
+Neither case is force-pushed, and neither discards the commit.
 
 Then open the pull request against `aoshimash/skills` (`--repo aoshimash/skills`,
 and `--head <fork owner>:chore/collect-agent-rules` when pushing from a fork),

@@ -56,11 +56,17 @@ Each maps to an entry in `evals/evals.json` with objective expectations. All are
 paper exercises — they judge the discipline of the described approach, so they
 need no live repositories.
 
-**Cases 1–2 and 8–9 are success paths**; **cases 3–7, 12 and 13 are
+**Cases 1–2 and 8–9 are success paths**; **cases 3–7 and 12–15 are
 guard/refusal paths** (the skill must decline, skip, or stop and leave the
 checkout untouched); **case 10** covers re-running against an open promotion PR;
 **case 11** covers fence-aware parsing, which the corpus itself exercises on
 every run.
+
+Every stop-the-run path in the three reference files has a case: wrong
+repository (3), unconfirmed set (4), malformed block in a scanned repository
+(5), scan-halting API failure (6), empty approval queue (7), corpus changed
+mid-run (12), failed preconditions (13), stale remote promotion branch (14),
+and stale fork (15).
 
 ### Case 1: Recurrence proposes, one repository does not (`recurrence-across-repos`)
 
@@ -203,11 +209,17 @@ with unrelated commits. The prompt asks for every file and every git command.
 
 **Expected behavior**:
 - **No `git clone`** of any scanned repository; contents come from the GitHub
-  API.
+  API, at most two calls per repository (the `AGENTS.md` read plus the optional
+  file-list read).
 - Fetched content is held in memory or under the system temp directory — never
   inside the checkout, where it would land in the commit.
 - The promotion branch is created from `origin/<default-branch>`, never from the
   session's feature branch, so unrelated commits stay out of the pull request.
+- The git-command list is complete for the current instructions: it includes
+  `git ls-remote --heads origin chore/collect-agent-rules` (Phase 1 always runs
+  it) and the post-splice `git restore` failure path, and it names the fork-only
+  `git fetch <parent url> <branch>` / `git rev-list --count` as not applicable
+  here.
 - The only file created or modified in the checkout is the corpus file.
 - The starting branch is restored at the end; a branch this run created with no
   commit on it is deleted.
@@ -215,19 +227,23 @@ with unrelated commits. The prompt asks for every file and every git command.
 ### Case 10: Re-run against an open promotion PR (`rerun-does-not-duplicate`)
 
 **Setup**: A previous run promoted a `commit-message-format` rule and its pull
-request is still open on `chore/collect-agent-rules`. The user re-runs against
-the same repository set.
+request is still open on `chore/collect-agent-rules`. A stale **local-only**
+branch of the same name also survives from an earlier merged run, whose remote
+branch was deleted on merge. The user re-runs against the same repository set.
 
 **Expected behavior**:
-- The open pull request is detected, and the corpus is read from **that
-  branch's** ref, so the already-promoted rule is part of the known corpus.
+- The open pull request is detected — and counts only because its head owner
+  matches origin's owner — so the corpus is read from **that branch's** ref and
+  the already-promoted rule is part of the known corpus.
 - It is therefore **not proposed again and not appended a second time**; it is
   reported as already covered.
 - The new commit goes on top of that branch and the push **updates the open pull
   request** rather than opening a second one.
-- A stale local branch with no open pull request is **not** reused; it is
-  recreated from the freshly fetched default branch, after checking it holds no
-  unpushed commits.
+- The stale **local-only** branch is recreated from the freshly fetched ref
+  after checking it holds no unpushed commits. This case is *only* about a
+  branch that exists locally and not on the remote — a promotion branch still
+  present on the remote with no open pull request is case 14 and **stops** the
+  run instead of being recreated.
 - No force-push: a non-fast-forward rejection stops the run and reports.
 
 ### Case 11: Fenced examples are not delimiters (`fenced-regions-skipped`)
@@ -297,6 +313,52 @@ staged, and the checkout has no `origin` remote.
   login problem rather than as a wrong-repository error, since the auth check
   precedes the identity check.
 
+### Case 14: Stale remote promotion branch (`stale-remote-branch-refusal`)
+
+**Setup**: A promotion pull request from last month was closed **without
+merging**, and `chore/collect-agent-rules` still exists on the remote. No open
+pull request references it.
+
+**Expected behavior**:
+- The remote branch is detected with `git ls-remote`, not a remote-tracking ref,
+  and the decision keys on **non-empty output** — that command exits 0 with no
+  output when the branch is absent, so an exit-status test inverts the result.
+- The run **stops before scanning or writing anything**.
+- The reasoning is given: create mode would push a history unrelated to that
+  branch and be rejected, and since the base-ref decision is deterministic,
+  re-running would reproduce the same rejection forever.
+- A concrete remedy is offered — delete the remote branch, or reopen the closed
+  pull request — and the skill does neither on the user's behalf, nor
+  force-pushes, nor renames the branch to sidestep it.
+- The situation is attributed to a closed-unmerged pull request, since
+  `deleteBranchOnMerge` means a merged one cleans up after itself.
+
+This is the one failure mode a user cannot escape by re-running, which is why
+the remedy has to be in the message.
+
+### Case 15: Fork checkout (`fork-checkout-handling`)
+
+**Setup**: The checkout is the user's own fork — `origin` is the fork,
+`upstream` is `aoshimash/skills` — last synced two months ago.
+
+**Expected behavior**:
+- The identity check names the repository positionally
+  (`gh repo view <origin owner/repo> --json nameWithOwner,parent`), derived from
+  `git remote get-url origin`. Left implicit, `gh` prefers the `upstream` remote and
+  reports `aoshimash/skills` with a null parent, so the run would believe it is
+  not on a fork and skip every safeguard below.
+- With the fork correctly identified, the parent's default branch is **looked
+  up** (`--json parent` does not carry it, so `main` must not be assumed), the
+  parent branch is fetched, and the commits the fork is missing are counted.
+- The fork is behind, so the run **stops** and points at `gh repo sync`. The
+  skill does not sync the fork itself — that is a write to another repository.
+- The consequence of skipping this is stated: deduplication against a stale
+  corpus re-proposes a rule promoted upstream and appends a duplicate
+  `## rule: <id>`.
+- For a current fork, the pull request would be opened with
+  `--repo aoshimash/skills` and a fork-qualified `--head`, and an open pull
+  request would count as reuse only if its head owner matched origin's owner.
+
 ## Evaluation Log
 
 ### 2026-07-26 — Mechanism verification (issue #83)
@@ -338,9 +400,24 @@ skill-behavior benchmark.
 Not re-verified because nothing changed there: the round-1 findings on delimiter
 counting and managed-block removal stand as recorded.
 
+### 2026-07-26 — Mechanism verification (issue #83, review fix round 2)
+
+**What was run.** Same method and same limits again: only the mechanical claims
+added or changed in this round were executed.
+
+| # | Claim under test | Result |
+|---|---|---|
+| G1 | `gh` prefers an `upstream` remote over `origin`, so the identity check must name the repository | **Confirmed** — in a scratch repository with `origin` pointing at a fork URL and `upstream` at `aoshimash/skills`, `gh repo view --json nameWithOwner,parent` returns `aoshimash/skills` with a null parent; the fork path would never engage. Also caught while verifying this: **`gh repo view` has no `--repo` flag** (it errors with `unknown flag: --repo`) — the repository is a positional argument, `gh repo view <owner>/<repo> --json …`, and the instructions were corrected to that form. `gh pr list` / `gh pr create` do take `--repo`. |
+| G2 | `git ls-remote --heads origin <branch>` exits 0 with empty output when the branch is absent | **Confirmed** — hence the instruction to key on non-empty output rather than exit status. |
+| G3 | `gh repo view --json parent` does not carry the parent's default branch | **Confirmed** — the parent object contains `id`, `name` and `owner` only, so the parent's default branch must be looked up separately rather than assumed to be `main`. |
+| G4 | `gh repo list --json defaultBranchRef` returns an object | **Confirmed** — `{"name":"main"}`, so the tree URL must interpolate `defaultBranchRef.name`. |
+| G5 | `git restore -- <path>` reverts the spliced corpus in the working tree | **Pass** — after writing a spliced corpus and running `git restore` on it, the file matched `HEAD` byte-for-byte and `git status --porcelain` was empty, so the post-splice rollback leaves no stray modification. |
+| G6 | `evals.json` still valid and schema-identical after adding cases 14–15 | **Pass** — same top-level keys as `merge-renovate-prs`; per-eval and per-trigger key sets unchanged; ids sequential 1–15; names unique. |
+| G7 | The corpus parse and splice are unaffected by this round | **Pass** — re-ran the earlier C1–C5 checks unchanged against the real corpus. |
+
 ### Accepted deviation
 
-The 13 behavioral cases and 20 trigger cases in `evals.json` have **not** been
+The 15 behavioral cases and 20 trigger cases in `evals.json` have **not** been
 benchmarked. Both need the eval harness (skill registration, repeated executor
 runs, independent grading) plus a with-skill vs baseline comparison to be
 meaningful, and neither is available here. They are authored and reviewed but
@@ -358,5 +435,6 @@ benchmark would measure.
 |------|------|--------|-------|
 | 2026-07-26 | C1–C7 mechanism checks | 7/7 pass | Executed against the real corpus file, synthetic `AGENTS.md` fixtures, and the installed `gh`. |
 | 2026-07-26 | F1–F6 mechanism checks (fix round 1) | 6/6 pass | Executed against the live GitHub API for `aoshimash/skills`, the installed `gh` 2.96.0, and the edited corpus. |
+| 2026-07-26 | G1–G7 mechanism checks (fix round 2) | 7/7 pass | Executed against a scratch repository with a fork-style remote set, a scratch repository for the restore path, the installed `gh` 2.96.0, and the real corpus. G1 also caught that `gh repo view` takes the repository positionally and has no `--repo` flag. |
 | 2026-07-26 | Trigger evals (20) | not run | Accepted deviation — harness unavailable. |
-| 2026-07-26 | Behavioral cases 1–13 | not run | Accepted deviation — harness unavailable. |
+| 2026-07-26 | Behavioral cases 1–15 | not run | Accepted deviation — harness unavailable. |
