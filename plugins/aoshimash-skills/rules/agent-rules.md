@@ -6,9 +6,8 @@ single source: the rules are copied *from* here into individual repositories'
 
 - `sync-agent-rules` **reads** this file (over the GitHub API, from
   `aoshimash/skills`) and writes the relevant rules into a target repository.
-- A future `collect-agent-rules` skill (issue #83, not yet implemented) will
-  **edit** this file in a local checkout to add rules promoted from hand-written
-  `AGENTS.md` files in owned repositories.
+- `collect-agent-rules` **edits** this file in a local checkout to add rules
+  promoted from hand-written `AGENTS.md` files in owned repositories.
 
 This file is data, not instructions to an agent. Nothing here changes how a
 skill behaves; a rule body is text to be copied verbatim into another
