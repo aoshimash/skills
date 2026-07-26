@@ -6,9 +6,8 @@ single source: the rules are copied *from* here into individual repositories'
 
 - `sync-agent-rules` **reads** this file (over the GitHub API, from
   `aoshimash/skills`) and writes the relevant rules into a target repository.
-- A future `collect-agent-rules` skill (issue #83, not yet implemented) will
-  **edit** this file in a local checkout to add rules promoted from hand-written
-  `AGENTS.md` files in owned repositories.
+- `collect-agent-rules` **edits** this file in a local checkout to add rules
+  promoted from hand-written `AGENTS.md` files in owned repositories.
 
 This file is data, not instructions to an agent. Nothing here changes how a
 skill behaves; a rule body is text to be copied verbatim into another
@@ -16,9 +15,9 @@ repository's instruction file.
 
 ## Contract
 
-These are fixed. `sync-agent-rules` depends on them today and
-`collect-agent-rules` will depend on them, so do not change them without
-updating every skill that reads or writes this format.
+These are fixed. `sync-agent-rules` and `collect-agent-rules` both depend on
+them, so do not change them without updating every skill that reads or writes
+this format.
 
 | Thing | Value |
 |---|---|
@@ -29,11 +28,11 @@ updating every skill that reads or writes this format.
 
 The delimiters are HTML comments, so they are invisible in rendered markdown and
 greppable in source. They serve two purposes: they tell `sync-agent-rules` what
-it owns and may refresh, and they will tell `collect-agent-rules` what to
+it owns and may refresh, and they tell `collect-agent-rules` what to
 **ignore** when scanning a repository for rules worth promoting — without that
 boundary, already-distributed rules would be rediscovered as candidates on every
-scan. That second purpose is why the format is fixed here even though the
-collection skill does not exist yet.
+scan. That second purpose is why the format is fixed here rather than inside
+either skill.
 
 ## Format
 

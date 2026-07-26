@@ -1,0 +1,283 @@
+{
+  "skill_name": "collect-agent-rules",
+  "trigger_evals": [
+    { "query": "collect the hand-written rules from my other repos and add the good ones to the shared corpus", "should_trigger": true },
+    { "query": "scan my repositories for conventions worth centralizing and promote them", "should_trigger": true },
+    { "query": "find conventions I've repeated across my projects and promote them into the shared rule corpus", "should_trigger": true },
+    { "query": "harvest the conventions from my own GitHub repos into the shared agent rules", "should_trigger": true },
+    { "query": "look through my repos' AGENTS.md files, tell me which rules should be shared, and add the ones I pick", "should_trigger": true },
+    { "query": "自分のリポジトリから共通化できる規約を集めて共通ルールに追加して", "should_trigger": true },
+    { "query": "他のリポジトリの AGENTS.md からルールを収集して", "should_trigger": true },
+    { "query": "エージェントルールを収集して、良さそうなものは共通ルールに昇格させて", "should_trigger": true },
+    { "query": "共通ルールに昇格させたいルールを探して PR 作って", "should_trigger": true },
+    { "query": "sync the shared agent rules into this repo's AGENTS.md", "should_trigger": false },
+    { "query": "AGENTS.md に共通の規約を反映して。使ってないツールのルールは入れなくていい", "should_trigger": false },
+    { "query": "add a rule to the shared corpus saying we always use go-task instead of Make", "should_trigger": false },
+    { "query": "analyze my recent sessions and propose improvements to my skills", "should_trigger": false },
+    { "query": "セッションを分析して", "should_trigger": false },
+    { "query": "スキルを改善して", "should_trigger": false },
+    { "query": "ログを分析して", "should_trigger": false },
+    { "query": "write an AGENTS.md for this repo describing its architecture, directory layout, and test commands", "should_trigger": false },
+    { "query": "what conventions do I usually use across my projects?", "should_trigger": false },
+    { "query": "clone all my repos and grep them for leftover TODO comments", "should_trigger": false },
+    { "query": "create an issue to centralize our project conventions across repos", "should_trigger": false }
+  ],
+  "evals": [
+    {
+      "id": 1,
+      "name": "recurrence-across-repos",
+      "prompt": "Collect hand-written rules from my repositories and promote the good ones into the shared corpus. I own six repositories. Three of them say some version of \"use go-task, never a Makefile\" in their AGENTS.md — the wording differs in each. One of them also has a note that integration tests require the staging VPN. Paper exercise: describe exactly what you read, what you propose, what you ask me, and what you write. Do not actually push anything.",
+      "expected_output": "The skill first verifies it is running inside a checkout of aoshimash/skills, then resolves the repository set and confirms it with the user before reading any repository content. It reads each confirmed repository's AGENTS.md over the GitHub API without cloning, strips any managed block, and segments the remaining hand-written text. The go-task convention is recognized as the same convention in three repositories despite the differing wording, and becomes the top-ranked candidate: it is drafted as a corpus rule with a stable lowercase id, a title, a Detect list of backticked glob patterns naming the files that indicate go-task is in use (Taskfile.yaml and friends), and an English body with no markdown headings that reads correctly standing alone in someone else's AGENTS.md. The staging-VPN note appears in exactly one repository and is project-specific, so it is listed as a single-repository observation and NOT proposed. Candidates are put to a decision one at a time — there is no bulk-approve option — and nothing is added without an explicit Add. The approved rule is appended to plugins/aoshimash-skills/rules/agent-rules.md and the change lands as a pull request against aoshimash/skills. The source repositories are not modified; a later sync-agent-rules run is what distributes the promoted rule back into them.",
+      "files": [],
+      "expectations": [
+        "Confirms the repository set with the user before reading any repository content",
+        "Reads each repository's AGENTS.md through the GitHub API without cloning anything",
+        "Groups the three differently-worded go-task sections into one candidate",
+        "Drafts the candidate in the corpus format with an id, a title, backticked Detect glob patterns, and a body",
+        "Derives Detect patterns that name the files indicating the tool is in use rather than files proving compliance",
+        "Lists the single-repository staging-VPN note as an observation and does NOT propose it",
+        "Presents candidates for decision one at a time, with no bulk-approve option",
+        "Adds nothing without an explicit approval decision",
+        "Writes the approved rule into plugins/aoshimash-skills/rules/agent-rules.md and opens a pull request against aoshimash/skills",
+        "Does not modify the scanned source repositories"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "managed-block-excluded",
+      "prompt": "Collect rules from my repositories into the shared corpus. Important context: five of these repositories already received the shared rules through sync-agent-rules, so each of their AGENTS.md files contains all four corpus rules inside a managed block delimited by the BEGIN/END aoshimash-agent-rules HTML comments. One of those blocks also contains a paragraph someone hand-wrote inside the delimiters with no rule id marker. Separately, two repositories have a hand-written commit-message convention outside any block. Paper exercise: what do you propose, and why is the rest not proposed?",
+      "expected_output": "Everything between the BEGIN and END delimiters is removed from each file before candidates are derived, so the four already-distributed rules are invisible to the scan: they are not proposed, not counted as a five-repository recurrence, and not reported as candidates. The hand-written paragraph that sits inside the block is excluded too, even though it carries no rule id marker — it is inside the boundary the block declares, and re-proposing it would be the same rediscovery loop by another route. Cross-checking candidates against the corpus read in the setup phase is a second, independent guard: any convention that matches an existing corpus rule is dropped as already covered, naming the covering rule id, so a rule that reached a repository by hand-copying rather than through a managed block is caught as well. The only candidate is the commit-message convention found outside the blocks in two repositories, which meets the two-repository recurrence threshold and is drafted in corpus format for an individual decision.",
+      "files": [],
+      "expectations": [
+        "Removes the region from BEGIN to END inclusive before deriving candidates",
+        "Does NOT propose the four already-distributed corpus rules",
+        "Does not count the distributed rules toward recurrence",
+        "Excludes the marker-less hand-written paragraph that sits inside the managed block",
+        "Also drops candidates that match an existing corpus rule, naming the covering rule id",
+        "Proposes only the commit-message convention found outside the blocks",
+        "Explains that without the managed-block boundary the corpus would rediscover itself on every scan"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "wrong-repository-refusal",
+      "prompt": "Collect the hand-written rules from my repositories and add the good ones to the shared corpus. Note that my current working directory is a checkout of one of my application projects, not of aoshimash/skills. Paper exercise: what do you do?",
+      "expected_output": "The precondition check finds that this checkout is not aoshimash/skills — the corpus path plugins/aoshimash-skills/rules/agent-rules.md is absent and the origin remote does not resolve to aoshimash/skills or a fork of it. The skill stops and explains why: it edits the corpus as a real file, the corpus lives in aoshimash/skills, and the skill's own bundled copy resolves to a version-pinned plugin cache that is replaced on the next plugin update, so writing there would write into a directory that disappears. It does NOT clone aoshimash/skills to work around the problem, does not scan any repository, creates no branch, and opens no pull request. It tells the user to re-run from a checkout of aoshimash/skills.",
+      "files": [],
+      "expectations": [
+        "Detects during preconditions that the checkout is not aoshimash/skills",
+        "Stops and explains, rather than proceeding",
+        "Explains that a running skill's own copy is a version-pinned cache and therefore not writable state",
+        "Does not clone aoshimash/skills to work around the precondition",
+        "Scans no repository and reads no AGENTS.md",
+        "Creates no branch, no commit, and no pull request",
+        "Tells the user to re-run from a checkout of aoshimash/skills"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "repository-set-confirmed",
+      "prompt": "Collect rules from my repos. I'm not going to name them. My account owns about 40 repositories, and some of them are forks of other people's projects and some are archived. Paper exercise: describe every step up to the point where you have read a single file, and tell me what happens if I cancel at that point.",
+      "expected_output": "The skill enumerates the repositories the authenticated account owns using metadata only — no repository content is read at this stage — excluding forks and archived repositories, because a fork carries someone else's conventions and an archived repository's conventions are frozen history. It presents the resolved list and asks the user to choose: scan all, scan a named subset, or cancel. Reading starts only after an explicit selection; an unanswered question is not consent, and the skill does not silently scan all 40 repositories. It also notes that scanning costs up to two API calls per repository — the AGENTS.md read plus an optional best-effort file-list read — so the user can narrow a large set first, and that the enumeration may be truncated if the result count equals the requested limit. On cancel, nothing has been read and nothing has been written: no repository content fetched, no branch created, no file in the checkout touched. The skill restores the branch the session started on and reports that the run was cancelled.",
+      "files": [],
+      "expectations": [
+        "Enumerates owned repositories using metadata only, before reading any file",
+        "Excludes forks and archived repositories from the candidate set",
+        "Presents the resolved set and asks for an explicit selection (all / subset / cancel)",
+        "Reads no repository content until the user confirms the set",
+        "Does not silently scan every owned repository",
+        "Notes that the listing may be truncated by the result limit rather than presenting a clipped set as complete",
+        "On cancellation, leaves no branch, no commit, and no modified file, and restores the starting branch"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "malformed-block-skipped",
+      "prompt": "Collect rules from these repositories into the shared corpus. Heads up on two of them: one AGENTS.md has a `<!-- BEGIN aoshimash-agent-rules -->` line with no matching END anywhere, after a botched merge, and about 150 lines of hand-written documentation follow it. Another has two complete BEGIN/END pairs. Paper exercise: what do you do with those two files and with the rest of the scan?",
+      "expected_output": "For each scanned file the skill counts the lines whose entire content is exactly the BEGIN delimiter and exactly the END delimiter, skipping fenced code regions, and accepts only zero of each or exactly one of each with BEGIN before END. The unterminated file counts 1/0 and the doubled file counts 2/2, so both are malformed. Both repositories are SKIPPED and reported with the counts observed. Critically, the unterminated BEGIN is NOT treated as running to end of file: that reading would classify the 150 lines of hand-written documentation as distributed rules and silently drop them from the scan, which is the opposite of what the skill is for. The skill does not attempt to repair either file, and it does not modify a scanned repository under any circumstance. The remaining repositories are still scanned normally, and the report and the pull request body both state which repositories were skipped and why, so the user can fix them and re-run.",
+      "files": [],
+      "expectations": [
+        "Counts whole-line BEGIN and END delimiters, skipping fenced regions",
+        "Accepts only zero of each or exactly one of each with BEGIN before END",
+        "Skips both malformed repositories rather than guessing the boundary",
+        "Does NOT treat the unterminated BEGIN as extending to end of file",
+        "Does not attempt to repair or edit any scanned repository",
+        "Continues scanning the remaining repositories",
+        "Reports the skipped repositories and the reason in the run report and the pull request body"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "api-failure-boundaries",
+      "prompt": "Collect rules from the eight repositories I selected. While you are reading them: two return 404 because they have no AGENTS.md, one returns a Git LFS pointer instead of markdown, and on the seventh call GitHub returns a rate-limit error. Paper exercise: describe the outcome of each call and the state of the corpus at the end.",
+      "expected_output": "Each outcome is handled explicitly rather than swallowed. A 404 is ordinary — the repository simply has no AGENTS.md — so it is recorded as such and the scan continues; a repository with no AGENTS.md contributes no conventions either way, so recurrence counts stay honest. The Git LFS pointer is not markdown, so that repository is skipped with a recorded reason and the scan continues; the skill does not try to interpret the content. The rate-limit error STOPS the scan and is reported, naming which repositories were read and which were not, because recurrence is counted across the confirmed set and a partial read understates the signal in a way the user cannot see from the report — a convention present in four repositories can look like a two-repository coincidence. Re-running later or with a smaller set is the suggested remedy. Nothing is written on any of these paths: no candidate is promoted from the partial data, no branch is created, no commit is made, and no pull request is opened. Every skipped repository appears in the report.",
+      "files": [],
+      "expectations": [
+        "Treats a 404 as 'no AGENTS.md', records it, and continues scanning",
+        "Skips the non-markdown (Git LFS pointer) response with a recorded reason rather than interpreting it",
+        "Stops the scan on the rate-limit error instead of continuing with a partial set",
+        "Explains that recurrence counted over a partial set understates the signal",
+        "Names which repositories were read and which were not",
+        "Writes nothing on any failure path — no branch, no commit, no pull request",
+        "Surfaces every skipped repository in the report rather than swallowing it silently"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "all-candidates-rejected",
+      "prompt": "Collect rules from my repositories. Assume you find three candidates and I skip every single one of them. Paper exercise: what is the state of the checkout and of the corpus when you finish, and will those candidates come back next time?",
+      "expected_output": "Each candidate is presented individually and skipped on an explicit decision; Skip is the default and silence or an ambiguous answer never counts as an approval. With every candidate skipped the approval queue is empty, so the write phase never runs at all: no branch is created or checked out, no commit is made, nothing is pushed, no pull request is opened, and the corpus file is not touched. This is the deferred-write principle in action — approvals accumulate in memory and the single write phase runs once at the end, only if the queue is non-empty. The wrap-up restores the branch the session started on (or the recorded commit SHA if HEAD was detached) and deletes any temporary file the run created outside the checkout. Because a skipped candidate is not recorded anywhere, a future run over the same repositories will propose it again, and the report says so rather than implying the skip is permanent.",
+      "files": [],
+      "expectations": [
+        "Presents each candidate individually and treats Skip as the default",
+        "Never treats silence or an ambiguous answer as approval",
+        "Runs no write phase when the approval queue is empty",
+        "Creates no branch, no commit, no push, and no pull request",
+        "Leaves the corpus file unmodified",
+        "Restores the starting branch or the recorded detached-HEAD SHA and removes temporary files",
+        "States that skipped candidates may be proposed again on a future run"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "corpus-append-format",
+      "prompt": "I approved one candidate — a convention about pinning CLI tools. Paper exercise: show me exactly how you write it into plugins/aoshimash-skills/rules/agent-rules.md. Be precise about where in the file it goes, the blank lines, the trailing newline, and the line ending. The corpus currently ends with its last `## rule:` section and a single trailing newline.",
+      "expected_output": "The rule is rendered in the corpus format established for the corpus: a `## rule: <id>` heading, a blank line, a `**Title:**` line, a blank line, a `**Detect:**` line listing backticked glob patterns separated by commas, a blank line, a `**Rule:**` line, a blank line, and then the body — which contains no markdown heading, has no leading or trailing blank lines, and is written to read correctly standing alone in someone else's AGENTS.md. The Detect patterns name the files that indicate the tool is in use, not files that prove compliance, because a repository that violates a rule still needs to carry it. Placement is after the LAST `## rule:` section — immediately before any following `##`-level heading, or at end of file if there is none — rather than blindly at end of file, so a non-rule section appended after the rules is not absorbed into the last rule's body. Exactly one blank line separates the previous section from the new one, the file gains no trailing blank line and ends with exactly one newline, and the corpus's own recorded line ending is used throughout rather than assuming LF. The chosen id is stable, lowercase and hyphen-separated, and is checked against the existing corpus ids so it cannot collide with or repurpose one. No existing rule is modified, reordered, or reformatted, and the Contract and Format sections are untouched. Only the corpus file is staged, by name, never with `git add -A`. The commit goes on a dedicated branch and the pull request targets aoshimash/skills; the skill does not merge it.",
+      "files": [],
+      "expectations": [
+        "Renders the rule with `## rule: <id>`, `**Title:**`, `**Detect:**`, and `**Rule:**` in that order",
+        "Lists Detect patterns as comma-separated backticked globs naming files that indicate the tool is in use",
+        "Places the new section after the last `## rule:` section rather than blindly at end of file",
+        "Uses exactly one blank line between sections, no trailing blank line, and exactly one trailing newline",
+        "Writes in the corpus file's recorded line ending rather than assuming LF",
+        "Checks the proposed id against existing corpus ids to avoid a collision, and never repurposes an existing id",
+        "Modifies no existing rule and does not touch the Contract or Format sections",
+        "Stages only the corpus file by name, never `git add -A` or `git add .`",
+        "Opens a pull request against aoshimash/skills and does not merge it"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "no-clone-read-only",
+      "prompt": "Collect rules from the twelve repositories I picked. I'm currently on a feature branch called feat/checkout-flow with two unrelated commits of my own. Paper exercise: list every file you create or modify anywhere, every git command you run, where you put anything you download, and which branch the pull request is based on.",
+      "expected_output": "No repository is cloned — every scanned repository is read through the GitHub API, at most two calls per repository (the AGENTS.md read, plus an optional best-effort file-list read used only to sanity-check Detect patterns). Fetched content is held in memory or written to a temporary location outside the checkout, such as the system temp directory, and deleted in the wrap-up; nothing fetched is ever written into the working tree, where it would end up in the commit. Git commands are limited to: recording the starting position, `git remote get-url origin`, `git fetch --prune origin`, `git ls-remote --heads origin chore/collect-agent-rules` to detect a leftover remote promotion branch, reading the corpus with `git show <base-ref>:<corpus path>`, creating the promotion branch with `git switch -c chore/collect-agent-rules origin/<default-branch>`, staging the corpus file by name, committing, pushing, and finally restoring `feat/checkout-flow` — plus `git restore` on the corpus file if anything fails between writing it and a successful commit. On a fork checkout the list also includes `git fetch <parent url> <parent default branch>` and `git rev-list --count` for the staleness check; this checkout is not a fork, so neither runs here. The branch is based on `origin/<default-branch>`, never on the current feature branch HEAD, so the user's two unrelated commits stay out of the pull request and the base is not stale. The only file created or modified inside the checkout is plugins/aoshimash-skills/rules/agent-rules.md. No per-run state file, cache, or scratch file is created in the repository. The branch is only created in the write phase, after at least one candidate is approved; if the run ends without a commit the branch this run created is deleted and the starting branch is restored.",
+      "files": [],
+      "expectations": [
+        "Runs no `git clone` of any scanned repository",
+        "Reads scanned repositories through the GitHub API only, at most two calls each",
+        "Includes `git ls-remote --heads origin chore/collect-agent-rules` in the command list, since Phase 1 always runs it",
+        "Includes the post-splice `git restore` of the corpus file as the failure path before a successful commit",
+        "Keeps fetched content in memory or in a temp location outside the checkout, and cleans it up",
+        "Bases the promotion branch on `origin/<default-branch>`, not on the current feature branch",
+        "Keeps the user's unrelated feature-branch commits out of the pull request",
+        "Creates or modifies only the corpus file inside the checkout",
+        "Creates no per-run state, config, or cache file in the repository",
+        "Creates the branch only in the write phase, and deletes it if no commit lands",
+        "Restores the branch the session started on"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "rerun-does-not-duplicate",
+      "prompt": "Run the collection again over the same repositories. Context: a previous run already promoted a rule with the id `commit-message-format`, and its pull request is still open on the branch `chore/collect-agent-rules` — it has not been merged yet. A stale LOCAL branch of that same name also exists in my clone from an even earlier merged run; the remote branch for that one was deleted when it merged. Paper exercise: which branch do you read the corpus from, what do you propose, and what happens to that open pull request?",
+      "expected_output": "Before reading anything the skill checks for an open pull request on chore/collect-agent-rules whose head owner matches origin's owner, finds one, and therefore reads the corpus from that branch's ref rather than from the default branch. The already-promoted commit-message-format rule is consequently part of the known corpus, so the same convention found again in the scanned repositories is dropped as already covered rather than being proposed a second time — and it is certainly not appended twice. Any newly approved rule is committed on top of that existing branch, and the push UPDATES the already-open pull request instead of opening a second one. The stale LOCAL branch is simply replaced: nothing deletes local branches when a pull request merges, so it sits behind the default branch, and after a squash merge its merge base is the pre-promotion commit, which would make the next pull request re-add everything and conflict. It is recreated from the freshly fetched ref, but only after checking it holds no commits absent from that base — the run stops rather than discarding an unpushed commit. This local-leftover handling is specific to a branch that exists ONLY locally; a promotion branch still present on the REMOTE with no open pull request is a different situation entirely and stops the run instead of being recreated. If the push is rejected as non-fast-forward the run stops and reports; there is no force-push and no reset.",
+      "files": [],
+      "expectations": [
+        "Checks for an open pull request on the promotion branch before reading the corpus",
+        "Reads the corpus from that branch's ref rather than from the default branch",
+        "Does not propose the already-promoted rule a second time",
+        "Does not append a duplicate section for it",
+        "Commits on top of the existing branch so the push updates the open pull request rather than opening a second one",
+        "Recreates the LOCAL-only leftover branch from the freshly fetched ref rather than reusing it",
+        "Distinguishes the local-only leftover from a promotion branch still on the remote, which stops the run instead",
+        "Checks a leftover branch for unpushed commits and stops rather than discarding them",
+        "Does not force-push; stops and reports on a non-fast-forward rejection"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "fenced-regions-skipped",
+      "prompt": "Collect rules from my repositories. One of the repositories you will scan has an AGENTS.md that documents this whole mechanism: it shows the BEGIN and END delimiters inside fenced code blocks as examples, shows a `## rule:` template inside another fence, and it also has one real managed block further down. Paper exercise: before you propose anything, tell me exactly how you count the delimiters in that file and how many rules you parsed out of the corpus, and why.",
+      "expected_output": "Fenced regions are inert for every parse this skill performs. Counting delimiters in that AGENTS.md skips the fenced examples, so the file counts exactly one BEGIN and one END — the real block — and is accepted as well-formed. Counting naively would find two of each and refuse a perfectly legitimate file as malformed, skipping a repository that had real candidates in it. Segmenting the hand-written text also skips fences, so a heading inside a code sample does not start a section. The same rule applies on the corpus side: the corpus's own Format section shows the rule template inside a fence whose first line is literally `## rule: <id>`, so a line-by-line match would parse one extra, phantom rule with the placeholder id `<id>` and the placeholder pattern `<glob>`. Only the real rule sections the corpus currently holds are parsed — at the time of writing container-base-image, python-package-management, cli-version-management and github-actions-pinning, though the set grows every time this skill promotes something — and the corpus's own non-rule sections (Contract, Format, Rules) are skipped as well. That matters here because a phantom `<id>` rule would be available to collide with a proposed id and could mark an unrelated candidate as already covered. Finally, only whole lines count as delimiters: a sentence that mentions a delimiter inline is not counted.",
+      "files": [],
+      "expectations": [
+        "Skips fenced regions when counting BEGIN/END delimiters in a scanned file",
+        "Counts that file as one well-formed block rather than refusing it as malformed",
+        "Skips fenced regions when segmenting the hand-written text into sections",
+        "Skips fenced regions when enumerating `## rule:` sections in the corpus",
+        "Parses only the real `## rule:` sections the corpus currently holds and names their ids, without asserting a fixed count that a later promotion would invalidate",
+        "Offers no phantom rule with the placeholder id `<id>` or pattern `<glob>`",
+        "Skips the corpus's own non-rule sections (Contract, Format, Rules)",
+        "Counts only whole-line delimiters, so an inline prose mention is not counted"
+      ]
+    },
+    {
+      "id": 12,
+      "name": "corpus-moved-mid-run",
+      "prompt": "Collect rules from my repositories. Assume I approve one candidate. While you were scanning and asking me about candidates, a teammate merged a different pull request that added a rule to plugins/aoshimash-skills/rules/agent-rules.md, so the corpus on the branch you are about to commit to is no longer the one you read at the start. Paper exercise: what do you do at the point where you would write?",
+      "expected_output": "Immediately after checking out the promotion branch, and before appending anything, the skill re-reads the corpus file from the working tree and compares it byte-for-byte against what it read from the base ref at the start of the run. Here they differ. The skill STOPS and reports, writing nothing. The reason is that the insertion point it recorded — the index of the first heading after the last `## rule:` section — describes the file it read, not the file on disk; appending at a stale index could place the new section inside another rule's body or after a non-rule section, producing a corpus that the distribution skill would parse wrongly. It also means the deduplication done during candidate derivation was against an older rule set, so the approved candidate might now duplicate a rule someone else just added. The remedy is to re-run: the fresh run reads the current corpus, re-checks the candidate against it, and either proposes it again or reports it as already covered. The skill does not re-derive the insertion point and continue, does not merge or rebase to reconcile, and does not force anything.",
+      "files": [],
+      "expectations": [
+        "Re-reads the corpus from the working tree after checking out the branch and before appending",
+        "Compares it byte-for-byte against what was read from the base ref at the start",
+        "Stops and reports on any difference, writing nothing",
+        "Explains that the recorded insertion point no longer describes the file on disk",
+        "Notes that deduplication was performed against the older corpus, so the approved candidate may now be a duplicate",
+        "Does not silently recompute the insertion point and continue",
+        "Does not merge, rebase, reset, or force to reconcile the difference",
+        "Names re-running as the recovery"
+      ]
+    },
+    {
+      "id": 13,
+      "name": "precondition-guards",
+      "prompt": "Collect rules from my repositories and add the approved ones to the corpus. Three things about my environment: I have uncommitted edits to plugins/aoshimash-skills/rules/agent-rules.md right now, I have already staged an unrelated file for a commit I'm about to make, and this checkout has no `origin` remote — I cloned it from a colleague's directory over the network share. Paper exercise: what do you check, in what order, and what do you tell me?",
+      "expected_output": "The preconditions run in an order chosen so each failure is diagnosed as the thing it actually is. Being inside a git repository at its root is checked first; then the `origin` remote, which is missing here — that alone blocks the run, because the fetch that resolves the base ref and the push that delivers the promotion both need it, and a repository with no remote has nowhere to open a pull request. The skill reports that specific failed precondition rather than a vague error. The dirty-corpus and pre-staged checks are equally blocking: the promotion commit must contain only the promotion, and committing on top of in-progress edits to the corpus would mix unrelated work into the pull request while risking overwriting those edits with the appended result. The skill does NOT stash, commit, discard, or work around any of it on the user's behalf; it names what failed and tells the user to commit or stash and to add a GitHub `origin` remote, then re-run. Nothing is scanned, no branch is created, and no pull request is opened. Note also that the authentication and network check runs before the repository-identity check, so a logged-out `gh` is reported as a login problem and never as 'this is not a checkout of aoshimash/skills'.",
+      "files": [],
+      "expectations": [
+        "Checks that the working directory is a git repository root first",
+        "Identifies the missing `origin` remote as a blocking precondition and explains why it is needed",
+        "Identifies both the modified corpus file and the pre-staged change as blocking",
+        "Does not stash, commit, or discard the user's uncommitted or staged work",
+        "Does not overwrite the in-progress corpus edits with the appended result",
+        "Runs the `gh` authentication and network check before the repository-identity check, so a logged-out `gh` is not reported as a wrong-repository error",
+        "Scans nothing, creates no branch, and opens no pull request",
+        "Names each failed precondition and how to unblock it"
+      ]
+    },
+    {
+      "id": 14,
+      "name": "stale-remote-branch-refusal",
+      "prompt": "Collect rules from my repositories. Something you should know: a promotion pull request from a run last month was closed without merging, and the branch `chore/collect-agent-rules` is still sitting on the remote. There is no open pull request for it now. Paper exercise: what do you do, and what do you tell me?",
+      "expected_output": "While resolving the base ref the skill looks for an open pull request for chore/collect-agent-rules and finds none, then queries the remote directly with `git ls-remote --heads origin chore/collect-agent-rules` — keying on the non-empty output rather than the exit status, since that command exits 0 with no output when the branch is absent. The branch exists, so the run STOPS before scanning or writing anything. The reasoning is that create mode would base on the default branch and push a history unrelated to that leftover branch, so the push would be rejected; and because the base-ref decision is made the same way every time, re-running would produce the identical rejection forever — 'just re-run' would be false advice. The report says exactly how to clear it: delete the remote branch with `git push origin --delete chore/collect-agent-rules`, or reopen the closed pull request, then re-run. The skill does not delete the branch itself, does not force-push over it, does not pick a different branch name to work around it, and does not reuse a branch whose pull request is closed. It also notes that this situation is specifically a closed-unmerged pull request: the repository has deleteBranchOnMerge enabled, so a merged promotion cleans its own branch up.",
+      "files": [],
+      "expectations": [
+        "Detects the remote promotion branch with `git ls-remote` rather than a remote-tracking ref",
+        "Keys the decision on non-empty output rather than the command's exit status",
+        "Stops the run before scanning or writing anything",
+        "Explains that create mode would push an unrelated history and be rejected on every future run",
+        "States that re-running alone cannot resolve it, because the base-ref decision is deterministic",
+        "Gives the concrete remedy: delete the remote branch or reopen the closed pull request",
+        "Does not delete the branch, force-push, rename the branch, or reuse a closed pull request's branch",
+        "Attributes the leftover branch to a closed-unmerged pull request, noting that merges clean up automatically"
+      ]
+    },
+    {
+      "id": 15,
+      "name": "fork-checkout-handling",
+      "prompt": "Collect rules from my repositories. My checkout is my own fork of aoshimash/skills — `origin` points at my fork and I also have an `upstream` remote pointing at aoshimash/skills. I last synced the fork about two months ago. Paper exercise: how do you identify this repository, which ref do you read the corpus from, and what do you do before writing anything?",
+      "expected_output": "The identity check names the repository explicitly — `gh repo view <origin owner/repo> --json nameWithOwner,parent`, as a positional argument, using the owner/repo parsed from `git remote get-url origin`. That is essential here: left implicit, gh resolves the repository from the whole remote set and prefers a remote named upstream over origin, so it would report aoshimash/skills with a null parent and the run would conclude it is NOT on a fork — skipping every fork safeguard. Named explicitly, the repository resolves to the fork with aoshimash/skills as its parent and the fork path engages. Because a fork's default branch can lag the parent, the skill verifies freshness before using it as the base: it looks up the parent's default branch (`gh repo view aoshimash/skills --json defaultBranchRef` — the parent object returned by `--json parent` does not carry it, so it must not be assumed to be `main`), fetches that branch from the parent URL, and counts the commits the fork is missing with `git rev-list --count origin/<fork default>..FETCH_HEAD`. The fork was last synced two months ago, so the count is non-zero: the run STOPS and tells the user to sync the fork (`gh repo sync <fork> --source aoshimash/skills`) and re-run. It does not sync the fork itself — that is a write to another repository. Had the fork been current, the base ref would be the fork's default branch, the pull request would be opened with `--repo aoshimash/skills` and `--head <fork owner>:chore/collect-agent-rules` so it lands on the corpus repository, and any open pull request would only count as reuse if its head owner matched origin's owner. The reason all of this matters is concrete: deduplicating candidates against a stale corpus would re-propose a rule promoted upstream since the last sync and append a duplicate `## rule: <id>`.",
+      "files": [],
+      "expectations": [
+        "Names the repository explicitly in the identity check (`gh repo view <origin owner/repo>`) rather than letting gh resolve it from the remote set",
+        "States that gh prefers an `upstream` remote over `origin`, which would otherwise hide the fork",
+        "Engages the fork path once the parent resolves to aoshimash/skills",
+        "Looks up the parent's default branch instead of assuming `main`",
+        "Fetches the parent branch and counts the commits the fork is missing before using the fork's default branch as a base",
+        "Stops and tells the user to sync the fork when it is behind, without syncing it automatically",
+        "Explains the consequence of a stale base: deduplication against an old corpus and a duplicate rule id",
+        "Would open the pull request with `--repo aoshimash/skills` and a fork-qualified head, and would only treat a matching-head-owner pull request as reuse"
+      ]
+    }
+  ]
+}

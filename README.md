@@ -101,6 +101,7 @@ The issue workflow draws from two sources and combines them with an issue-centri
 | [respond-to-pr-review](plugins/aoshimash-skills/skills/respond-to-pr-review/) | Process PR review comments one by one — explain, confirm actions, implement fixes, and post reply comments |
 | [merge-renovate-prs](plugins/aoshimash-skills/skills/merge-renovate-prs/) | Merge Renovate PRs one at a time, autonomously by default — verify monitoring/revert preconditions, LLM pre-check, merge, post-merge verification, and auto-revert on failure; interactive per-PR-approval mode available |
 | [sync-agent-rules](plugins/aoshimash-skills/skills/sync-agent-rules/) | Write the shared conventions from [the rule corpus](plugins/aoshimash-skills/rules/agent-rules.md) into the current repository's `AGENTS.md` — detect which rules apply from the files actually present, write only those into a delimited managed block, and open a PR; additive, so nothing is removed without confirmation |
+| [collect-agent-rules](plugins/aoshimash-skills/skills/collect-agent-rules/) | Promote hand-written conventions from your own repositories into [the rule corpus](plugins/aoshimash-skills/rules/agent-rules.md) — confirm which repositories to scan, read their `AGENTS.md` over the API without cloning, ignore managed blocks, propose the conventions that recur across repositories, and open a PR for the ones approved one at a time |
 
 ## Structure
 
@@ -108,7 +109,8 @@ The issue workflow draws from two sources and combines them with an issue-centri
 plugins/aoshimash-skills/
 ├── .claude-plugin/plugin.json    # Plugin manifest
 ├── rules/
-│   └── agent-rules.md            # Shared conventions corpus (read by sync-agent-rules)
+│   └── agent-rules.md            # Shared conventions corpus (read by sync-agent-rules,
+│                                 #   appended to by collect-agent-rules)
 └── skills/
     └── <skill-name>/
         ├── SKILL.md              # Skill definition (required)
