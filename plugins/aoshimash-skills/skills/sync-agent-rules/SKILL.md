@@ -264,44 +264,27 @@ Pick the target file, in this order:
 | `AGENTS.md` absent, but `CLAUDE.md` contains a `BEGIN` delimiter line | `CLAUDE.md`. A previous run wrote there on the user's instruction; the block's location *is* that recorded decision, so do not ask again. Test for the `BEGIN` line alone, not for a well-formed pair — a stray unmatched `BEGIN` must reach step 1 below and be refused, not be treated as "no block" and get a second one appended |
 | Otherwise | **Undecided** — resolved in Phase 6, after Phase 5 can still cancel the run |
 
-Then, on the chosen file:
+Then validate and parse the chosen file in four steps, specified in full in
+[references/block-format.md](references/block-format.md):
 
-1. **Validate the block.** Count the lines whose entire content, ignoring
-   surrounding whitespace, is exactly the `BEGIN` delimiter, and likewise for
-   `END`, **skipping fenced code regions** as Phase 1 does. Requiring the
-   delimiter to be the whole line stops a prose mention of it from being
-   miscounted; skipping fences stops a target file that *documents* this
-   mechanism with a fenced example from being treated as the real block — which
-   would replace the fence's contents and leave stray fence lines behind. Accept
-   only **zero** of each (no block yet) or **exactly one of each, `BEGIN` before
-   `END`**. Anything else — a `BEGIN` with no `END` (truncated file, deleted
-   marker) or two pairs (bad merge) — is a malformed block: **stop and report,
-   write nothing.** Never guess the missing boundary; treating an unterminated
-   block as running to end of file would destroy every hand-written section
-   below it.
-2. **Record the file's line ending** (LF or CRLF, by majority) and whether the
-   file ends with a newline. Phase 9 compares and Phase 10 writes in the file's
-   own line ending, so a CRLF checkout does not diff against an LF render on
-   every run.
-3. **Strip the generated preamble** from the top of the block: the
-   `## Shared Conventions` heading line if present, and the HTML comment
-   beginning `<!-- Managed by the sync-agent-rules skill` if present, together
-   with the blank lines around them. Phase 8 re-emits both verbatim. **Skipping
-   this step is what makes a second run produce a spurious diff**, because the
-   preamble would otherwise be captured as content and then duplicated.
-4. **Parse the remainder into an ordered list of entries, trimming each entry's
-   surrounding blank lines** exactly as Phase 1 trims a corpus body. An entry
-   carrying a `<!-- rule: <id> -->` marker is a **managed entry**; anything else
-   between the delimiters is a **foreign entry** — including a hand-written
-   paragraph that sits before the first `###` heading. A file with no delimiters
-   yields an empty list.
+1. **Validate the block** — count whole-line `BEGIN` and `END` delimiters,
+   skipping fenced regions as Phase 1 does. Accept only zero of each, or exactly
+   one of each with `BEGIN` first. Anything else is malformed: **stop and report,
+   write nothing.**
+2. **Record the file's line ending** (LF or CRLF, by majority) and whether it
+   ends with a newline. Phase 9 compares and Phase 10 writes in that ending.
+3. **Strip the generated preamble** — the `## Shared Conventions` heading and
+   the managed-by comment — with the blank lines around them. Phase 8 re-emits
+   both.
+4. **Parse the remainder into an ordered entry list, trimming each entry's
+   surrounding blank lines.** An entry carrying a `<!-- rule: <id> -->` marker is
+   a **managed entry**; anything else between the delimiters is a **foreign
+   entry**, including a hand-written paragraph above the first `###` heading.
 
-   The trim is not cosmetic. Phase 8 supplies the separator blank lines on emit,
-   so an entry parsed *with* its trailing blank line gains another one on every
-   render — the gap grows by one line per run and the block never reaches a fixed
-   point, breaking Principle 4. Managed entries escape this only because step 2 of
-   Phase 7 replaces their bodies wholesale; foreign entries are preserved as
-   parsed, so untrimmed input persists.
+Follow the reference rather than improvising: it records the failure each step
+prevents. Step 1 is what stops a malformed block from swallowing hand-written
+content below it, and steps 3 and 4 are each independently what keeps a second
+run from manufacturing a diff (Principle 4).
 
 ### Phase 5: Bootstrap when nothing is detected
 
@@ -351,74 +334,36 @@ satisfied: no block, no entries, and LF as the line ending.
 
 ### Phase 7: Merge into the managed block
 
-Build the new entry list from the parsed entries and the detected set:
+Build the new entry list from the parsed entries and the detected set, by the
+merge rules in [references/block-format.md](references/block-format.md):
 
-1. **Keep every existing entry, in its existing order.** This is Principle 3.
-2. For each managed entry whose id exists in the corpus: **replace its title and
-   body with the corpus version, in place.** This is how a corrected rule reaches
-   repositories that already carry it.
-3. A managed entry whose id is **no longer in the corpus** is orphaned. Ask the
-   user to choose (see Environment Adaptation) per orphan: **Keep** (default) /
+1. **Keep every existing entry, in its existing order** (Principle 3).
+2. **Refresh each managed entry whose id is still in the corpus** — title and
+   body replaced with the corpus version, in place. This is how a corrected rule
+   reaches repositories that already carry it.
+3. **A managed entry whose id is gone from the corpus is orphaned** — ask the
+   user to choose (see Environment Adaptation) per orphan, **Keep** (default) or
    **Remove**. Never remove without an explicit selection.
-4. **Foreign entries are kept verbatim, in place.** Do not reformat or relocate
-   them. List them in the pull request body so the user can see what is inside
-   the block but not managed.
-5. **Append detected rules that are not already present**, in corpus order,
-   after the existing entries.
+4. **Keep foreign entries verbatim, in place**, and list them in the pull
+   request body.
+5. **Append detected rules that are not already present**, in corpus order.
 
-A detected rule that is already present is simply refreshed by step 2 — it is
-not duplicated. Match entries on the id, never on the title or body text.
+Match entries on the id, never on the title or body text; a detected rule that
+is already present is refreshed by step 2, not duplicated.
 
 ### Phase 8: Render the block
 
-Render exactly this, with no variation — the byte-level recipe is what makes
-Phase 9's comparison meaningful:
+Render the block by the byte-level recipe in
+[references/block-format.md](references/block-format.md), with no variation: the
+delimiters, the regenerated preamble, one `### <title>` plus
+`<!-- rule: <id> -->` marker per entry, bodies copied verbatim, the fixed
+blank-line separators, and the target file's recorded line ending (Phase 4
+step 2). The reference also gives placement for the three cases — creating the
+file, appending to an existing file that has no block, and replacing an existing
+block in place.
 
-```markdown
-<!-- BEGIN aoshimash-agent-rules -->
-## Shared Conventions
-
-<!-- Managed by the sync-agent-rules skill (aoshimash/skills).
-     Source: plugins/aoshimash-skills/rules/agent-rules.md
-     Managed entries below are refreshed on every sync. Keep
-     repository-specific rules outside this block. -->
-
-### <title>
-<!-- rule: <id> -->
-
-<body>
-
-### <next title>
-<!-- rule: <next id> -->
-
-<body>
-
-<!-- END aoshimash-agent-rules -->
-```
-
-- The heading and the managed-by comment are the generated preamble from "The
-  Contract". Emit them exactly as above on every run — Phase 4 step 3 already
-  removed the previous copy, so they are never duplicated.
-- One blank line after each `<!-- rule: ... -->` marker, one blank line between a
-  body and the next `###` heading, one blank line before `<!-- END ... -->`.
-- Rule bodies are copied verbatim from the corpus, including their own
-  formatting. Do not re-wrap lines.
-- Foreign entries are emitted verbatim at their recorded position, separated from
-  their neighbours by a single blank line.
-- Use the target file's recorded line ending (Phase 4 step 2) throughout; LF for
-  a file being created.
-
-Placement:
-
-- **Creating the file** (Phase 6 rows 1–2, and row 3 options 1 and 3): the file
-  *is* the block — `<!-- BEGIN … -->` is line 1, with no leading blank line, and
-  the file ends with a single newline after `<!-- END … -->`.
-- **Appending to an existing file with no block**: if the file does not already
-  end with a newline, add one; then one blank line, then the block; then a
-  single trailing newline.
-- **Updating an existing block**: replace only the text between and including
-  the delimiters — which Phase 4 step 1 has already proven to be exactly one
-  well-formed pair. Everything outside them is untouched.
+The recipe being fixed is what makes Phase 9's comparison meaningful; any drift
+in spacing, ordering, or wrapping manufactures a diff on every run.
 
 ### Phase 9: Compare, and stop if in sync
 
@@ -489,6 +434,10 @@ a refusal.
 
 ## References
 
+- [references/block-format.md](references/block-format.md) — the managed-block
+  machinery in full: Phase 4's validate-and-parse steps, Phase 7's merge rules,
+  and Phase 8's render and placement recipe. Required reading for those three
+  phases; the summaries above are not sufficient on their own.
 - [../../rules/agent-rules.md](../../rules/agent-rules.md) — the corpus, in this
   repository. At runtime it is read from `aoshimash/skills` over the API
   (Phase 1), not from this path.
