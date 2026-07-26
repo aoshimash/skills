@@ -167,3 +167,58 @@ that order determines the order rules are appended in a target repository.
 - Do not maintain the pins by hand. Enable Renovate's
   [`helpers:pinGitHubActionDigests`](https://docs.renovatebot.com/presets-helpers/)
   preset so pinning and updating are automatic.
+
+## rule: implementation-time-decisions
+
+**Title:** Implementation-time decisions
+
+**Detect:** `**/AGENTS.md`, `**/CLAUDE.md`
+
+**Rule:**
+
+When implementing from a written task (an issue, ticket, or task description),
+decisions fall into two layers:
+
+- **Structural decisions** — the shape of a work split, anything that must stay
+  consistent across related tasks, anything with high reversal cost — belong to
+  the task's author and should already be recorded in the task. Follow recorded
+  decisions without re-litigating them. If a structural decision is missing and
+  the outcome materially changes the result, ask rather than guess.
+- **Local, reversible decisions** — naming, choices among roughly equivalent
+  designs, tactical implementation details — are the implementer's to make at
+  implementation time. Choose the option most consistent with existing
+  repository conventions, and log the decision.
+
+Log implementation-time decisions where a reviewer will see them:
+
+- Default: a `Decisions` / `Deviations` section in the pull-request body,
+  stating each decision and its rationale.
+- A constraint tied to a specific piece of code goes in a code comment next to
+  that code.
+- Commit a lightweight ADR under `docs/adr/` only when a decision contradicts
+  an existing rule or binds future work — most decisions do not clear this bar.
+
+When in doubt whether a decision is structural or local, treat it as structural.
+
+## rule: decision-storage-routing
+
+**Title:** Decision storage routing
+
+**Detect:** `**/AGENTS.md`, `**/CLAUDE.md`
+
+**Rule:**
+
+Never make a user answer the same question twice. Each answered question is
+recorded in the store matching its scope, and those stores are checked before
+asking anything:
+
+| Scope of the answer | Store |
+|---|---|
+| One task only | The task itself (issue/ticket body — and its parent, for context shared across subtasks) |
+| This repository | The repository's agent instructions (e.g. `AGENTS.md`) |
+| Personal preference across repositories | The user's own agent configuration (e.g. a user-level instruction file) |
+
+- Before asking the user a question, check all three stores — the answer may
+  already be recorded.
+- Immediately after receiving an answer, write it back to the matching store.
+- Record the decision and its rationale, not the conversation that produced it.

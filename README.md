@@ -64,20 +64,19 @@ create-issue                               implement-issue
 
 ### Design Philosophy
 
-The issue workflow draws from two sources and combines them with an issue-centric approach:
+The issue workflow draws from two sources, combines them with an issue-centric approach, and has since been revised for an autonomy-first workflow built on 2026-era models:
 
 **From [superpowers](https://github.com/obra/superpowers):**
-- Staged workflow with hard gates (no implementation before design approval)
 - Brainstorming quality — deep clarifying questions, multiple approaches with trade-offs
 - Subagent-driven parallel execution with git worktree isolation
 - Two-stage review — spec compliance before code quality, because they catch different classes of problems
-- "Boring implementation" test — if a task requires design judgment, it's not decomposed enough
 
 **From [Boris Tane's workflow](https://boristane.com/blog/how-i-use-claude-code/):**
 - Dedicated research phase before design — prevents implementations that ignore existing patterns, caching layers, or conventions
 - Plan as shared mutable state — a local markdown file the user annotates inline, not chat-based steering. Document-based iteration is more precise than conversational back-and-forth
 - Annotation cycle — the user adds `<!-- NOTE: ... -->` comments directly in the plan file, Claude addresses each one, repeat until clean. This is where the highest-value human input happens
-- "Implementation should be boring" — all creative decisions are resolved during planning, not during coding
+
+superpowers also contributed a staged workflow with hard approval gates, and both sources shared a "boring implementation" ideal — every creative decision settled during planning so that implementing is mechanical. Both ideas have been deliberately retired; see the autonomy-first revision below.
 
 **Issue-centric design (original):**
 - superpowers stores specs and plans in `docs/superpowers/` files. This works for solo use but creates friction in team settings — not everyone uses the same tools, and tool-specific files clutter the repo
@@ -85,10 +84,17 @@ The issue workflow draws from two sources and combines them with an issue-centri
 - This means a team member who doesn't use these skills can still read the issues, pick one up, and implement it — the workflow degrades gracefully
 
 **Reader-agnostic issues (original):**
-- An issue is read by humans and AI agents alike, and a good issue is the same for both: motivation (why), desired end state with binary acceptance criteria (what), and the design decisions and constraints behind them — never implementation steps, file-edit lists, or code examples (how)
+- An issue is read by humans and AI agents alike, and a good issue is the same for both: motivation (why), desired end state with binary acceptance criteria (what), and the structural design decisions and constraints behind them — never implementation steps, file-edit lists, or code examples (how)
 - Time passes between issue creation and implementation. Implementation detail rots in that gap — other changes land, files move, approaches get invalidated; design decisions and constraints do not. Issues record decisions, never steps
-- This deliberately departs from superpowers' "boring implementation" (mechanical instructions with code examples in the plan): here the boringness comes from tight scope, recorded decisions, and binary acceptance criteria — the "boring scope" test. The implementer (human or `implement-issue`) plans the how at implementation time, against the codebase as it exists then
+- The quality bar for an issue is tight scope, recorded structural decisions and constraints, and binary acceptance criteria. The implementer (human or `implement-issue`) plans the how at implementation time, against the codebase as it exists then
 - Findings from research that will help at implementation time (current state, gotchas, related code) still belong in the issue as supplementary background — they help humans and AI alike
+
+**Autonomy-first revision (2026, original):**
+- Earlier versions gated implementation behind plan approvals and required every design decision to be settled at issue-creation time. Current models plan natively and follow intent-level instructions reliably, while user round trips became the scarce resource — so pre-approval gates are replaced by autonomous execution reviewed post-hoc at the PR
+- Two-layer decision timing — structural decisions (shape of a split, cross-issue consistency, high reversal cost) are recorded in issues at creation time; local, reversible decisions are delegated to implementation time, guided by the decision principles in the [shared rules corpus](plugins/aoshimash-skills/rules/agent-rules.md), and logged in the PR. When in doubt, a decision belongs on the issue side
+- Never ask twice — before asking, check the decision stores (issue body, repository agent instructions, user-level configuration); every answer is written back to the store matching its scope
+- Review-first PRs — removing mid-run gates concentrates human judgment at the PR, so the PR body is ordered for the reviewer: decisions and risk areas first, acceptance criteria mapped to verification evidence, mechanical changes last. Machines finish before humans start: PRs stay draft until CI, the internal review gates, and repository-configured automated reviewers are done; human review comments are never auto-addressed
+- Informed by Anthropic's guidance for current models — [Prompting Claude Fable 5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5), [Claude Code best practices](https://code.claude.com/docs/en/best-practices), and [harness design for long-running apps](https://www.anthropic.com/engineering/harness-design-long-running-apps) — and the Claude Code team's published workflow ([How Boris uses Claude Code](https://howborisusesclaudecode.com/)). Full rationale and decision log: [#91](https://github.com/aoshimash/skills/issues/91)
 
 ## Skills
 
