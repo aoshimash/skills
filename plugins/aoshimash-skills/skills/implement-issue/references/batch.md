@@ -8,9 +8,21 @@ The per-issue implementation itself is NOT duplicated here: each issue is implem
 
 ## Phase B1: Dependency Graph
 
-### B1-1. Parse Dependencies
+### B1-1. Collect Dependencies
 
-For each issue, scan the body for dependency declarations:
+Dependencies come from two sources, and both must be read — the platform's own
+relationship records, then the issue body as a fallback for relationships that were
+only ever written in prose.
+
+**1. Platform relationship records (primary).** Read the structured relationships the
+tracker itself holds:
+
+- GitHub: the `blockedBy` field of `gh issue view`/`gh issue list --json` — see [platform-github.md](platform-github.md) "Platform-Level Issue Relationships" for fields, availability, and fallbacks.
+- GitLab: issue links via `glab api "projects/:id/issues/<iid>/links"` — see [platform-gitlab.md](platform-gitlab.md).
+- Backlog: no built-in blocking; body parsing is the only source — see [platform-backlog.md](platform-backlog.md).
+
+**2. Issue body (fallback).** Scan each body for dependency declarations, since an issue
+may state a dependency the platform never had registered.
 
 **Pattern matching (case-insensitive):**
 - `Blocked by: #N` or `Blocked by #N`
@@ -18,12 +30,12 @@ For each issue, scan the body for dependency declarations:
 - `After: #N` or `After #N`
 - Multiple: `Blocked by: #N, #M` or `Blocked by: #N and #M`
 
-**Platform-specific:**
-- GitHub: Check sub-issue `blocked-by` relationships via `gh issue view <N> --json`
-- GitLab: Check issue links via `glab api "projects/:id/issues/<iid>/links"`
-- Backlog: Parse issue body only (no built-in blocking)
-
-Build a mapping: `{ issueNumber → [blockedByIssueNumbers] }`
+Build a mapping from the **union** of both sources: `{ issueNumber → [blockedByIssueNumbers] }`.
+Dropping either source can drop a real edge and let a dependent issue start too early.
+Only blockers that are still open become edges — a closed blocker is already satisfied,
+whichever source named it.
+A blocker may be an open issue outside the batch set; keep it as a dependency and show it
+in the B1-3 plan, since the batch cannot satisfy it.
 
 ### B1-2. Build DAG
 
