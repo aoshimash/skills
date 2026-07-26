@@ -140,11 +140,23 @@ jobs:
 
       - name: Commit and push
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           LEVEL: ${{ steps.resolve.outputs.level }}
           REASON: ${{ steps.resolve.outputs.reason }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           git diff --quiet .claude-plugin/marketplace.json && exit 0
+
+          # Restore this workflow's own credentials before touching the remote.
+          # "Classify bump level" runs claude-code-action, which unsets the
+          # http.<server>/.extraheader that actions/checkout persisted and
+          # repoints origin at its own GitHub App token. That token cannot push
+          # here, so without this the push fails with "Invalid username or
+          # token" after every other step has already succeeded. Fetching still
+          # works anonymously on a public repository, which is why only the push
+          # breaks.
+          git remote set-url origin \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
