@@ -11,11 +11,12 @@ from the decision stores or by repository convention and **logged, not asked**.
 The same pipeline runs in one of two contexts:
 
 - **Direct** (Single mode) — the main agent executes this workflow itself. The
-  user exists but is interrupted for exactly two reasons: the single batched
-  question of step 1-3 (genuinely undecidable decisions only), and an
-  unresolvable Critical/High security finding (step 2-6, which blocks the
-  push). Everything else completes with concerns recorded in the PR and
-  surfaced in the recap.
+  user is interrupted for exactly three reasons: the single batched question of
+  step 1-3 (genuinely undecidable decisions only), an unresolvable
+  Critical/High security finding (step 2-6, which blocks the push), and the
+  batched harvesting confirmation of step 3-7 — which comes after the PR is
+  delivered and only when the run produced generalizable decisions. Everything
+  else completes with concerns recorded in the PR and surfaced in the recap.
 - **Orchestrated** (Batch mode) — an implementer executes this workflow with no
   user access, coordinated by the orchestrator in [batch.md](batch.md) (as a
   separate agent instance where the environment supports one, sequentially in
@@ -31,7 +32,8 @@ The same pipeline runs in one of two contexts:
 | Review gates (3-2) | Main agent is responsible for both stages (dispatch per review-gates.md) | Skipped here — the orchestrator runs them after the implementer reports |
 | Automated review response (3-4) | Main agent runs it | Skipped here — the orchestrator runs it per PR before the flip |
 | Draft → ready flip (3-5) | Main agent flips after gates + CI + automated review response | Orchestrator flips after gates + CI + automated review response |
-| Final report (3-7) | Chat recap | One status line to the orchestrator |
+| Decision harvesting (3-7) | Main agent runs it after the flip | Skipped here — the orchestrator runs it once for the whole batch (batch.md B3-1) |
+| Final report (3-8) | Chat recap | One status line to the orchestrator |
 
 ## Phase 1: Understand and Decide
 
@@ -271,7 +273,8 @@ the Gate Results section as each stage completes.
 
 **Orchestrated**: skip this step — the orchestrator runs the gates and
 re-invokes this implementer for fix rounds. Continue with 3-3 and 3-6, then
-report (3-7); never perform the 3-4 automated review response or the 3-5 flip.
+report (3-8); never perform the 3-4 automated review response, the 3-5 flip, or
+the 3-7 harvesting.
 
 ### 3-3. Monitor CI
 
@@ -321,7 +324,31 @@ and the automated review response (see batch.md B2-3).
 If the issue tracker supports comments (e.g. Backlog, or cross-platform setups
 where the PR is not auto-linked), post the PR/MR link on the issue.
 
-### 3-7. Report
+### 3-7. Harvest Generalizable Decisions
+
+The run's decisions are already logged where a reviewer of *this* issue will see
+them; the ones that are really rules belong somewhere a *later run* will see
+them. Scan them, and offer whatever generalizes for promotion into a durable
+store. See [harvesting.md](harvesting.md) for the full procedure. The contract it
+holds to:
+
+- **Silent by default.** Most runs produce no candidates, and the step then
+  produces nothing at all — no question, no recap section.
+- **Gated on a delivered PR.** It runs only when the PR/MR reached ready for
+  review; a run that ends with a draft skips it with one recap line.
+- **Exactly one batched confirmation**, covering every offered candidate, with
+  the exact rule text and destination path in the question. Nothing is written
+  to a durable store without it, and a decline is written nowhere.
+- **Repository scope means a separate PR/MR**, branched from the default branch
+  in its own worktree, touching only the agent instructions file. The
+  implementation PR/MR is never the vehicle for a rules change.
+- **User scope means an append** to the user's own agent configuration, reported
+  verbatim in the recap.
+
+**Orchestrated**: skip this step — the orchestrator runs it once for the whole
+batch (batch.md B3-1).
+
+### 3-8. Report
 
 **Direct — chat recap**, the session-side report. It must contain:
 
@@ -330,6 +357,10 @@ where the PR is not auto-linked), post the PR/MR link on the issue.
   rationale; the recap lists them).
 - **Issue write-backs**: every write performed against the issue (Design
   Decisions appended, status changes, comments).
+- **Promotions** (3-7): each promoted rule and where it went — the promotion
+  PR/MR URL, or the user-level file path with the exact appended text — plus
+  candidates skipped, already recorded, or not offered. Omitted entirely when
+  there were no candidates.
 - **Review focus**: the few places a human reviewer should look first.
 - **Gates**: one line per gate — self-review rounds/findings, security review,
   Stage 1, Stage 2, CI, and automated review (which reviewers were handled, how

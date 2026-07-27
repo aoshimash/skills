@@ -2,7 +2,7 @@
 
 This procedure is used in **Batch Mode** (see SKILL.md) to implement a set of issues — from a parent issue's sub-issues, a milestone, a label, or a manual list — in dependency order (in parallel where the environment allows), with worktree isolation and two-stage review per issue.
 
-The per-issue implementation itself is NOT duplicated here: each issue is implemented by running [workflow.md](workflow.md) in the **Orchestrated context** (see workflow.md's Invocation Contexts). This file covers only the orchestration around that: building the dependency graph, running the implementer for each issue, running review gates, responding to the repository's automated reviewers, flipping each draft PR to ready, and handling failures.
+The per-issue implementation itself is NOT duplicated here: each issue is implemented by running [workflow.md](workflow.md) in the **Orchestrated context** (see workflow.md's Invocation Contexts). This file covers only the orchestration around that: building the dependency graph, running the implementer for each issue, running review gates, responding to the repository's automated reviewers, flipping each draft PR to ready, handling failures, and harvesting the batch's decisions once at the end.
 
 **Separate agent instances are an optimization, not a requirement.** Where the environment supports separate agent instances (see Environment Adaptation in SKILL.md), the orchestrator runs each issue's implementer and each review gate as its own instance, and dispatches an entire dependency group at once for wall-clock parallelism. Where it does not, the orchestrator runs the same steps sequentially in dependency order in the current context. The dependency DAG, review gates, and failure cascade below are identical either way — only wall-clock parallelism is lost in the sequential case.
 
@@ -112,7 +112,7 @@ Run each issue's implementer with an instruction set that includes:
 1. The full issue body and issue number. When the batch source is a parent issue, also include the parent issue's body — its Background, Design Decisions, and Task Overview are shared context for every sub-issue.
 2. The absolute path to the worktree already created for it (step B2-1) — the implementer works there, it does not create its own.
 3. The absolute paths to this skill's [workflow.md](workflow.md) and the relevant `platform-*.md` guide, with the instruction:
-   > "Read these files, then execute workflow.md Phases 1–3 in the **Orchestrated context** inside the given worktree. Create the PR/MR as a draft and leave it a draft. Skip the review gates (3-2), the automated review response (3-4), and the ready flip (3-5) — the orchestrator does all three; do run CI monitoring (3-3) and the issue comment (3-6). Then return exactly one status line (`DONE` / `DONE_WITH_CONCERNS` / `NEEDS_CONTEXT` / `BLOCKED`) plus the PR/MR URL or failure details, per workflow.md step 3-7."
+   > "Read these files, then execute workflow.md Phases 1–3 in the **Orchestrated context** inside the given worktree. Create the PR/MR as a draft and leave it a draft. Skip the review gates (3-2), the automated review response (3-4), the ready flip (3-5), and decision harvesting (3-7) — the orchestrator does all four; do run CI monitoring (3-3) and the issue comment (3-6). Then return exactly one status line (`DONE` / `DONE_WITH_CONCERNS` / `NEEDS_CONTEXT` / `BLOCKED`) plus the PR/MR URL or failure details, per workflow.md step 3-8."
 4. The path to the project's agent instructions (e.g. CLAUDE.md, AGENTS.md), when the project has one.
 
 Resolve the absolute paths to `workflow.md` and the platform guide before starting the implementer (they live alongside this file in the skill's `references/` directory) — do not rely on the implementer inferring them. When running as a separate agent instance, pass this as its dispatch prompt; when running in the current context, follow it directly.
@@ -178,3 +178,23 @@ Batch Complete: N/M issues implemented
 ```
 
 For blocked issues, explain what went wrong and suggest next steps. If the issue tracker supports it, post a summary comment on the parent issue.
+
+### B3-1. Harvest Once for the Batch
+
+Then run decision harvesting ([harvesting.md](harvesting.md)) — **once for the
+whole batch**, not once per issue. Ten issues that each nudged the same
+convention are one candidate, and a batch's whole point is that the user is
+interrupted a bounded number of times.
+
+- The implementers skipped this step (B2-2), so read the decision log from each
+  PR/MR body's `Decisions & Deviations` section (platform guide) rather than from
+  the implementers' status lines.
+- Only issues whose PR/MR reached ready for review contribute; `BLOCKED`,
+  `SKIPPED`, `NEEDS_CONTEXT`, and still-draft PRs are out of scope, exactly as in
+  the Direct context. With no contributing PR the step is skipped, in one line of
+  this summary.
+- A candidate raised by several issues is offered once, phrased as the rule, with
+  the contributing issues named as its provenance.
+- Everything else — the single confirmation, the separate promotion PR/MR, the
+  user-level append, and the reporting — is unchanged from harvesting.md. Its
+  Promotions output joins this summary instead of a Direct-context recap.
