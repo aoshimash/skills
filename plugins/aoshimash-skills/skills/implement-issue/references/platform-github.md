@@ -205,9 +205,64 @@ gh pr create --draft --title "<title>" --body-file <body-file>
 gh pr edit <number> --body-file <body-file>
 ```
 
+## Automated Reviewers
+
+Used in workflow.md 3-4 ([automated-review.md](automated-review.md)) to detect
+the repository's automated reviewers, wait for them, and read their findings.
+
+**Detect (step A).** After the declared `## Automated Reviewers` section in the
+project's agent instructions, in order of signal strength:
+
+```bash
+# Workflows that run on pull_request events (read each one's `types:` — a
+# reviewer gated on ready_for_review cannot post while the PR is a draft)
+grep -rl "pull_request" .github/workflows/ 2>/dev/null
+
+# Review-posting jobs that already ran on this PR show up as checks
+gh pr checks <pr-number> --json name,workflow,bucket
+
+# Bot accounts requested as reviewers on this PR
+gh pr view <pr-number> --json reviewRequests
+
+# Bot reviewers seen on recent merged PRs (logins ending in `[bot]`)
+gh pr list --state merged --limit 10 --json number,reviews \
+  --jq '.[] | {number, reviewers: [.reviews[].author.login]}'
+```
+
+**Wait (step B).** A reviewer that runs as a check finishes when its check
+finishes — `gh pr checks --watch` (see [Monitor CI](#monitor-ci)) is the
+completion signal, no separate polling. For a reviewer with no check run, poll
+the endpoints below within the wall-clock cap.
+
+**Read findings (step C).** The same three comment surfaces the
+respond-to-pr-review skill uses; `user.type` is the authoritative bot flag
+(`"Bot"` / `"User"`):
+
+```bash
+# Reviews (APPROVE / CHANGES_REQUESTED / COMMENT, with their body)
+gh api repos/{owner}/{repo}/pulls/<pr-number>/reviews \
+  --jq '.[] | {id, state, body, user: .user.login, user_type: .user.type}'
+
+# Inline review comments (skip entries whose `in_reply_to_id` is non-null)
+gh api repos/{owner}/{repo}/pulls/<pr-number>/comments \
+  --jq '.[] | {id, path, line, position, body, user: .user.login, user_type: .user.type, in_reply_to_id}'
+
+# Conversation comments
+gh api repos/{owner}/{repo}/issues/<pr-number>/comments \
+  --jq '.[] | {id, body, user: .user.login, user_type: .user.type}'
+```
+
+An inline comment whose `position` is `null` is outdated — drop it.
+
+**Reply (step E).** Reply commands (inline-comment replies, general comments,
+optional thread resolution) are the respond-to-pr-review skill's, unchanged:
+see [`../../respond-to-pr-review/references/platform-github.md`](../../respond-to-pr-review/references/platform-github.md)
+"Post Replies".
+
 ## Mark PR Ready for Review
 
-Only after both review-gate stages pass and CI is green (workflow.md 3-4):
+Only after both review-gate stages pass, CI is green, and the automated review
+response has completed (workflow.md 3-5):
 
 ```bash
 gh pr ready <number>

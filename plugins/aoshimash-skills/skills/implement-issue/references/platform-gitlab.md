@@ -117,9 +117,42 @@ glab mr create --draft --title "<title>" --description "<body>"
 glab mr update <number> --description "<updated body>"
 ```
 
+## Automated Reviewers
+
+Used in workflow.md 3-4 ([automated-review.md](automated-review.md)) to detect
+the repository's automated reviewers, wait for them, and read their findings.
+
+**Detect (step A).** After the declared `## Automated Reviewers` section in the
+project's agent instructions:
+
+```bash
+# Pipeline jobs that run on merge request events (read each job's `rules:` —
+# a reviewer that only runs on the ready transition cannot post while draft)
+grep -n "merge_request_event" .gitlab-ci.yml 2>/dev/null
+
+# Accounts assigned as reviewers on this MR
+glab api "projects/:id/merge_requests/<mr-iid>" --jq '[.reviewers[].username]'
+```
+
+Bot-authored notes already on the MR are the third signal — see the note
+fetching below (`author.bot == true`).
+
+**Wait (step B).** A reviewer that runs as a pipeline job finishes when the
+pipeline finishes — `glab mr checks` (see [Monitor CI](#monitor-ci)) is the
+completion signal. For a reviewer that posts outside the pipeline, poll the
+notes endpoint within the wall-clock cap.
+
+**Read findings (step C) and reply (step E).** GitLab exposes every comment
+type as MR *notes*; the fetching, bot detection (`author.bot`), outdated-note
+detection, and reply/resolve commands are the respond-to-pr-review skill's,
+unchanged: see
+[`../../respond-to-pr-review/references/platform-gitlab.md`](../../respond-to-pr-review/references/platform-gitlab.md)
+("Fetch Comments", "Bot Detection", "Post Replies").
+
 ## Mark MR Ready for Review
 
-Only after both review-gate stages pass and CI is green (workflow.md 3-4):
+Only after both review-gate stages pass, CI is green, and the automated review
+response has completed (workflow.md 3-5):
 
 ```bash
 glab mr update <number> --ready
