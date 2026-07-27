@@ -35,10 +35,13 @@ parent issues, milestones, labels, or explicit lists.
 2. **Autonomous by default, decisions logged not asked** — There is no plan
    approval gate and no location question. Settled decisions are followed;
    local, reversible decisions are made by repository convention and logged in
-   the PR body (`Decisions & Deviations`). The only routine-flow stop is a
-   genuinely undecidable decision, asked as **one batched question** whose
-   answers are written back to the issue before implementation proceeds —
-   never ask twice.
+   the PR body (`Decisions & Deviations`). The only routine stop before the PR
+   is delivered is a genuinely undecidable decision, asked as **one batched
+   question** whose answers are written back to the issue before implementation
+   proceeds — never ask twice. Once the PR is delivered, the decisions that were
+   really rules are offered — in one batched confirmation, or none at all — for
+   promotion into a durable store, so a later run does not re-decide them (see
+   [references/harvesting.md](references/harvesting.md)).
 3. **Review-first PRs; machines finish before humans start** — The PR is
    created as a **draft** and flipped to ready-for-review only after CI passes,
    both review-gate stages pass, and the repository's own automated reviewers
@@ -74,6 +77,7 @@ below use capability terms; map them to your environment as follows.
 | **Separate agent instance** — run a task in a fresh context that has not seen this conversation | Subagent dispatch (e.g. Claude Code's Task tool) | Run sequentially in the current context; for verification, mark the result `SELF-REVIEWED` in the artifact it lands in (e.g. the PR body) |
 | **Model selection** — run a separate agent instance on a chosen model | Per-instance model override (e.g. Claude Code's Task tool `model` parameter, or an agent definition's `model` frontmatter) | Run every instance on the session's default model — only the reviewer-stronger-than-implementer recommendation (see [references/review-gates.md](references/review-gates.md)) is unavailable |
 | **Security review** — security-focused review of the pending diff | Dedicated command (e.g. Claude Code's `/security-review`) | Review the diff yourself against the checklist in [references/workflow.md](references/workflow.md) step 2-6 |
+| **User-level configuration** — a durable instruction store belonging to the user, outside any repository | User-level instruction file (e.g. `~/.claude/CLAUDE.md` on Claude Code) | No such store: cross-repository preferences cannot be promoted — offer repository scope or skip (see [references/harvesting.md](references/harvesting.md) C) |
 
 ## Phase 0: Setup and Mode Selection
 
@@ -135,9 +139,15 @@ its phases end to end without pausing between them:
    leftovers recorded), and flip the PR to ready only when gates, CI, and that
    response are done; otherwise it stays a draft with the unresolved state
    recorded.
-4. **Recap** — report the PR URL and state, every decision made, every issue
-   write-back performed, the review-focus areas, and one line per gate —
-   including which automated reviewers were handled and in how many rounds.
+4. **Harvest** — with the PR ready, offer the run's generalizable decisions for
+   promotion in **one** batched confirmation: a repository convention becomes a
+   separate PR against the agent instructions file, a cross-repository
+   preference an append to user-level configuration. No candidates, no
+   interaction — the usual outcome.
+5. **Recap** — report the PR URL and state, every decision made, every issue
+   write-back performed, any promotions made, the review-focus areas, and one
+   line per gate — including which automated reviewers were handled and in how
+   many rounds.
 
 Former mid-run stops (plan approval, location choice, per-decision questions,
 failing-check and self-review escalations) no longer exist: they either
@@ -176,9 +186,12 @@ See [references/batch.md](references/batch.md) for the full procedure.
    Update the DAG as issues complete; on failure, mark the issue `BLOCKED`,
    cascade `SKIPPED` to its transitive dependents, and continue with
    independent issues.
-3. **Summary** — present a status table (issue, title, status, PR) covering
-   DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED / SKIPPED, explain any
-   blockers, and optionally post a summary comment on the parent issue.
+3. **Summary and harvest** — present a status table (issue, title, status, PR)
+   covering DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED / SKIPPED,
+   explain any blockers, and optionally post a summary comment on the parent
+   issue. Then harvest generalizable decisions
+   ([references/harvesting.md](references/harvesting.md)) **once for the whole
+   batch** — a batch of ten issues still costs at most one confirmation.
 
 ## References
 
@@ -186,6 +199,7 @@ See [references/batch.md](references/batch.md) for the full procedure.
 - [references/batch.md](references/batch.md) — Batch mode dependency graph, dispatch, and failure handling
 - [references/review-gates.md](references/review-gates.md) — Two-stage review procedure (Stage 1 spec compliance, Stage 2 code quality, Stage 2.5 pattern propagation)
 - [references/automated-review.md](references/automated-review.md) — Responding to repository-configured automated (bot/AI) reviewers before the draft → ready flip
+- [references/harvesting.md](references/harvesting.md) — Post-PR promotion of generalizable decisions into repository agent instructions or user-level configuration
 - [references/platform-github.md](references/platform-github.md) — GitHub CLI commands
 - [references/platform-gitlab.md](references/platform-gitlab.md) — GitLab CLI commands
 - [references/platform-backlog.md](references/platform-backlog.md) — Backlog CLI commands (bee)

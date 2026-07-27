@@ -205,6 +205,15 @@ gh pr create --draft --title "<title>" --body-file <body-file>
 gh pr edit <number> --body-file <body-file>
 ```
 
+## Read PR Body (decision log)
+
+Used by Batch mode's harvesting step (batch.md B3-1) to read each PR's
+`Decisions & Deviations` section back out:
+
+```bash
+gh pr view <number> --json body --jq '.body'
+```
+
 ## Automated Reviewers
 
 Used in workflow.md 3-4 ([automated-review.md](automated-review.md)) to detect

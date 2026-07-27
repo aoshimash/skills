@@ -22,22 +22,25 @@ The plugin is only one distribution channel. Each skill under `plugins/aoshimash
 
 ## Issue Workflow
 
-`create-issue` and `implement-issue` cover the full issue lifecycle. Each adapts to scale: `create-issue` goes from a quick single issue to a researched, user-annotated design decomposed into an issue hierarchy; `implement-issue` goes from one interactive implementation to a dependency-ordered parallel batch. The issue tracker is the interface between them — either skill also works standalone, since a hand-written issue works with `implement-issue` and a `create-issue` issue can be implemented manually.
+`create-issue` and `implement-issue` cover the full issue lifecycle. Each adapts to scale: `create-issue` goes from a quick single issue to a researched, user-annotated design decomposed into an issue hierarchy; `implement-issue` goes from one autonomous implementation to a dependency-ordered parallel batch. The issue tracker is the interface between them — either skill also works standalone, since a hand-written issue works with `implement-issue` and a `create-issue` issue can be implemented manually.
 
 ```
 create-issue                               implement-issue
 ┌─────────────────────────────┐            ┌──────────────────────────────┐
 │ Lightweight Flow (default)  │            │ Single Mode (default)        │
-│  Analyze → One batched      │            │  Plan → Approve → Implement  │
-│  question round → Draft     │            │  → PR → Review gates         │
-│  → Self-eval → Approve      │            │                              │
-│                             │  Issues    │ Batch Mode (parent/milestone │
-│ Design Flow (escalated)     │ ────────→  │  /label/list)                │
-│  One plan file (research +  │  (tracker) │  Dependency graph            │
-│  design + open questions +  │            │  → Parallel worktrees        │
-│  split) → Annotation cycle  │            │  → Review gates + pattern    │
-│  → Approve → Issues         │            │    propagation → Summary     │
-│                             │            │                              │
+│  Analyze → One batched      │            │  Understand & decide         │
+│  question round → Draft     │            │  → Implement & verify        │
+│  → Self-eval → Approve      │            │  → Draft PR → review gates   │
+│                             │            │  → CI → automated reviewers  │
+│ Design Flow (escalated)     │  Issues    │  → Ready → Harvest decisions │
+│  One plan file (research +  │ ────────→  │                              │
+│  design + open questions +  │  (tracker) │ Batch Mode (parent/milestone │
+│  split) → Annotation cycle  │            │  /label/list)                │
+│  → Approve → Issues         │            │  Dependency graph            │
+│                             │            │  → Parallel worktrees        │
+│                             │            │  → Review gates + pattern    │
+│                             │            │    propagation → Summary     │
+│                             │            │  → Harvest (once per batch)  │
 └─────────────────────────────┘            └──────────────────────────────┘
 ```
 
@@ -49,9 +52,11 @@ create-issue                               implement-issue
 # Complex request → one plan file (research + design + open questions + split) → annotate → approve → create issue(s)
 
 > /implement-issue
-# Single issue → plan → approve → implement → PR → two-stage review
+# Single issue → understand & decide (no routine questions) → implement & verify
+#   → security review → draft PR → two-stage review gates → CI
+#   → automated reviewers → flip to ready → harvest decisions → recap
 # Parent issue / milestone / label / list → confirm batch → dependency graph
-#   → parallel worktrees → review gates → summary
+#   → parallel worktrees → review gates → summary → harvest once
 ```
 
 **Key properties:**
@@ -60,8 +65,12 @@ create-issue                               implement-issue
 - **Works with humans and AI** — Issues created by `create-issue` are readable and implementable by anyone. Issues written by hand work with `implement-issue`. A good issue is the same for both readers: it explains why and what — never how.
 - **Splitting is always proposed, never automatic** — `create-issue` defaults to a single issue; a parent + sub-issue (or nested grandchild) hierarchy is only created after the user confirms a Split Proposal.
 - **Annotation cycle** — in the Design Flow, plans are refined through inline notes in a local markdown file. The file is deleted after issues are created.
+- **Autonomous implementation, decisions logged not asked** — `implement-issue` runs from invocation to PR without routine questions. There is no plan-approval gate: decisions come from the issue, its parent, the repository's agent instructions, or user-level configuration, and land in the PR body instead of in chat. Only genuinely undecidable decisions stop the run, as one batched question whose answers are written back to the issue.
 - **Parallel execution** — in Batch mode, `implement-issue` resolves issue dependencies as a DAG and dispatches independent issues in parallel using git worktrees.
 - **Two-stage review, always** — every PR (single or batch) is reviewed for spec compliance (does it match the issue?) then code quality (is it well-written?). Pattern propagation across in-flight PRs only applies in Batch mode.
+- **Nothing unsafe leaves the machine** — a security review of the pending changes runs after checks and self-review pass and before the branch is pushed. Unresolved Critical/High findings block the push.
+- **Machines finish before humans start** — every PR opens as a **draft** and flips to ready-for-review only once the review gates pass, CI is green, and the repository's own automated reviewers have been responded to. A PR that can't clear them stays a draft with the unresolved state recorded. Human review comments are never auto-addressed — those go through `respond-to-pr-review`.
+- **Decisions are harvested after delivery** — once the PR is ready, decisions that generalize past the issue are offered for promotion into a durable store: the repository's agent instructions (as a separate PR) or user-level configuration. One batched confirmation, nothing written without it, and most runs produce no candidates at all.
 
 ### Design Philosophy
 
@@ -93,9 +102,9 @@ superpowers also contributed a staged workflow with hard approval gates, and bot
 **Autonomy-first revision (2026, original):**
 - Earlier versions gated implementation behind plan approvals and required every design decision to be settled at issue-creation time. Current models plan natively and follow intent-level instructions reliably, while user round trips became the scarce resource — so pre-approval gates are replaced by autonomous execution reviewed post-hoc at the PR
 - Two-layer decision timing — structural decisions (shape of a split, cross-issue consistency, high reversal cost) are recorded in issues at creation time; local, reversible decisions are delegated to implementation time, guided by the decision principles in the [shared rules corpus](plugins/aoshimash-skills/rules/agent-rules.md), and logged in the PR. When in doubt, a decision belongs on the issue side
-- Never ask twice — before asking, check the decision stores (issue body, repository agent instructions, user-level configuration); every answer is written back to the store matching its scope
+- Never ask twice — before asking, check the decision stores (issue body, repository agent instructions, user-level configuration); every answer is written back to the store matching its scope. The loop closes from the write side too: decisions the implementer made on its own are harvested once the PR is delivered, and the ones that generalize are offered for promotion into a durable store in one batched confirmation — a rule that binds every later run is the user's to approve, not the run's
 - Review-first PRs — removing mid-run gates concentrates human judgment at the PR, so the PR body is ordered for the reviewer: decisions and risk areas first, acceptance criteria mapped to verification evidence, mechanical changes last. Machines finish before humans start: PRs stay draft until CI, the internal review gates, and repository-configured automated reviewers are done; human review comments are never auto-addressed
-- This revision is the design contract the skills are being rewritten against; the workflow diagram and typical-usage examples above describe the skills as they are today and will be updated as the rewrites (tracked under [#91](https://github.com/aoshimash/skills/issues/91)) land
+- This revision is the design contract both skills were rewritten against — `implement-issue` in [#93](https://github.com/aoshimash/skills/issues/93), [#94](https://github.com/aoshimash/skills/issues/94), [#95](https://github.com/aoshimash/skills/issues/95), and `create-issue` in [#96](https://github.com/aoshimash/skills/issues/96) — and the diagram above describes them as they are today. All tracked under [#91](https://github.com/aoshimash/skills/issues/91)
 - Informed by Anthropic's published guidance at the time of this revision — [Prompting Claude Fable 5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5), [Claude Code best practices](https://code.claude.com/docs/en/best-practices), and [harness design for long-running apps](https://www.anthropic.com/engineering/harness-design-long-running-apps) — and the Claude Code team's published workflow ([How Boris uses Claude Code](https://howborisusesclaudecode.com/)). Full rationale and decision log: [#91](https://github.com/aoshimash/skills/issues/91)
 
 ## Skills
@@ -103,7 +112,7 @@ superpowers also contributed a staged workflow with hard approval gates, and bot
 | Skill | Description |
 |-------|-------------|
 | [create-issue](plugins/aoshimash-skills/skills/create-issue/) | Create well-structured issues on any platform (GitHub, GitLab, Backlog) with codebase analysis — from a quick single issue (one batched question round, one approval) to a designed issue hierarchy (one annotated plan file → parent + sub-issues, research kept as an issue comment) |
-| [implement-issue](plugins/aoshimash-skills/skills/implement-issue/) | Read issues, plan, implement, and open PRs with two-stage review — single-issue interactive by default, with batch mode (dependency graph, worktrees, parallel subagents) for parent issues / milestones / labels / lists |
+| [implement-issue](plugins/aoshimash-skills/skills/implement-issue/) | Read issues, implement autonomously, and open review-first draft PRs — two-stage review, pre-push security review, automated-reviewer response, flip to ready, then post-PR decision harvesting; batch mode (dependency graph, worktrees, parallel agents) for parent issues / milestones / labels / lists |
 | [analyze-sessions](plugins/aoshimash-skills/skills/analyze-sessions/) | Analyze Claude Code session history to detect recurring patterns and propose improvements to skills and settings.json |
 | [respond-to-pr-review](plugins/aoshimash-skills/skills/respond-to-pr-review/) | Process PR review comments one by one — explain, confirm actions, implement fixes, and post reply comments |
 | [merge-renovate-prs](plugins/aoshimash-skills/skills/merge-renovate-prs/) | Merge Renovate PRs one at a time, autonomously by default — verify monitoring/revert preconditions, LLM pre-check, merge, post-merge verification, and auto-revert on failure; interactive per-PR-approval mode available |

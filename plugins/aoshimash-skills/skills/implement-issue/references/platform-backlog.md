@@ -91,7 +91,7 @@ git push -u origin <branch-name>
 
 ## Create Pull Request
 
-Backlog PRs are created through the code hosting platform (GitHub/GitLab), not through Backlog itself. Detect the code hosting platform from the git remote URL and use that platform's guide — including its draft creation, automated-reviewer, and ready-for-review flip commands. Automated reviewers are a code-hosting concern; Backlog has no part in workflow.md 3-4.
+Backlog PRs are created through the code hosting platform (GitHub/GitLab), not through Backlog itself. Detect the code hosting platform from the git remote URL and use that platform's guide — including its draft creation, automated-reviewer, ready-for-review flip, and PR-body read commands. Automated reviewers are a code-hosting concern; Backlog has no part in workflow.md 3-4. Nor in the repository-scoped promotion of workflow.md 3-7, whose PR also belongs to the code hosting platform.
 
 ## Update Issue Status
 

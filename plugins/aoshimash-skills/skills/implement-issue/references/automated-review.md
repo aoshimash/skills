@@ -169,7 +169,7 @@ human reviewer can adjudicate them directly.
   or `Automated review: none configured`, or `… — deferred (runs after the ready flip)`.
 - **Risk Areas** (PR body): one entry per remaining finding, with a link to the
   comment.
-- **Recap** (workflow.md 3-7): which automated reviewers were handled and how
+- **Recap** (workflow.md 3-8): which automated reviewers were handled and how
   many rounds were used.
 
 Then the flip (workflow.md 3-5). Anything a reviewer posts after it — including

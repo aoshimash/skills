@@ -211,3 +211,29 @@
 | 2026-03-22 | Case 4 (No PR) | with_skill 100% / without_skill 50% | without_skill lacked structured next step (pre-refactor) |
 | 2026-04-08 | Case 1 (PR #44) | with_skill 5/6 criteria passed | Devin bot comments on refactored skill. Bot tone correct, grouping correct, batch approval worked. Verification Gate criterion not testable (old skill version loaded from marketplace). |
 | 2026-04-08 | Case 2-3, 5-8 | Not tested | Require specific PR scenarios (out-of-scope comments, informational-only, verification gate mismatch, GitLab MR) not available in current environment |
+| 2026-07-27 | Case 8 (GitLab MR) | Desk-check — Fail → Fixed | Every documented `glab api ... --jq` invocation would have exited with "unknown flag"; corrected to `jq` pipes (see below) |
+
+### 2026-07-27 — `glab api` has no `--jq` flag (fact correction)
+
+`platform-gitlab.md` documented five `glab api ... --jq '<expr>'` invocations
+(project ID, MR notes, approvals, and the two discussions lookups). `glab api`
+registers no `--jq`/`-q` flag, so each of those commands exits with an unknown-flag
+error before reaching the API — Case 8 could not have passed as written.
+
+**Corrected fact.** `glab api` registers exactly `--hostname`, `-X/--method`,
+`-F/--field`, `-f/--raw-field`, `--form`, `-H/--header`, `-i/--include`,
+`--paginate`, `--input`, `--silent`, and `--output` — and nothing else. JSON
+filtering is a `jq` pipe over the raw response
+(`glab api "<endpoint>" | jq -r '<expr>'`); the two lookups that pass `--arg nid`
+now pass it to `jq`, where it belongs. `jq` was added to the guide's
+Prerequisites, since it is now a required binary rather than a convenience.
+
+**Primary source.** `internal/commands/api/api.go` in the GitLab CLI source,
+fetched 2026-07-27:
+<https://gitlab.com/gitlab-org/cli/-/raw/main/internal/commands/api/api.go>.
+`glab` is not installed in this environment, so the flag set was verified against
+that source only, not by running the command; all five replacement filters were
+run for real on jq 1.8.2 against sample notes/discussions/approvals payloads.
+The likely origin of the defect is
+`gh api`, which *does* provide `--jq` — the GitHub guide's `--jq` usages are
+correct and were left unchanged.
