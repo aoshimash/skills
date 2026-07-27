@@ -28,15 +28,16 @@ The plugin is only one distribution channel. Each skill under `plugins/aoshimash
 create-issue                               implement-issue
 ┌─────────────────────────────┐            ┌──────────────────────────────┐
 │ Lightweight Flow (default)  │            │ Single Mode (default)        │
-│  Gather → Analyze → Draft   │            │  Plan → Approve → Implement  │
-│  → Self-eval → Create       │            │  → PR → Review gates         │
+│  Analyze → One batched      │            │  Plan → Approve → Implement  │
+│  question round → Draft     │            │  → PR → Review gates         │
+│  → Self-eval → Approve      │            │                              │
+│                             │  Issues    │ Batch Mode (parent/milestone │
+│ Design Flow (escalated)     │ ────────→  │  /label/list)                │
+│  One plan file (research +  │  (tracker) │  Dependency graph            │
+│  design + open questions +  │            │  → Parallel worktrees        │
+│  split) → Annotation cycle  │            │  → Review gates + pattern    │
+│  → Approve → Issues         │            │    propagation → Summary     │
 │                             │            │                              │
-│ Design Flow (escalated)     │  Issues    │ Batch Mode (parent/milestone │
-│  Research → Design          │ ────────→  │  /label/list)                │
-│  → Annotation cycle         │  (tracker) │  Dependency graph            │
-│  → Split Proposal (asks)    │            │  → Parallel worktrees        │
-│  → Issue hierarchy          │            │  → Review gates + pattern    │
-│                             │            │    propagation → Summary     │
 └─────────────────────────────┘            └──────────────────────────────┘
 ```
 
@@ -44,8 +45,8 @@ create-issue                               implement-issue
 
 ```
 > /create-issue
-# Simple request → gather info → analyze codebase → draft → self-eval → create
-# Complex request → research → design → annotate plan → propose a split → create issue(s)
+# Simple request → analyze codebase → one batched question round → draft → approve → create
+# Complex request → one plan file (research + design + open questions + split) → annotate → approve → create issue(s)
 
 > /implement-issue
 # Single issue → plan → approve → implement → PR → two-stage review
@@ -80,7 +81,7 @@ superpowers also contributed a staged workflow with hard approval gates, and bot
 
 **Issue-centric design (original):**
 - superpowers stores specs and plans in `docs/superpowers/` files. This works for solo use but creates friction in team settings — not everyone uses the same tools, and tool-specific files clutter the repo
-- Instead, the issue tracker is the single shared artifact. `create-issue`'s Design Flow uses local files only temporarily during the annotation cycle, then converts everything to issues and deletes the files
+- Instead, the issue tracker is the single shared artifact. `create-issue`'s Design Flow uses one local plan file only during the annotation cycle, then converts everything to issues — the research findings stay as a comment on the parent issue, and the file is deleted
 - This means a team member who doesn't use these skills can still read the issues, pick one up, and implement it — the workflow degrades gracefully
 
 **Reader-agnostic issues (original):**
@@ -101,7 +102,7 @@ superpowers also contributed a staged workflow with hard approval gates, and bot
 
 | Skill | Description |
 |-------|-------------|
-| [create-issue](plugins/aoshimash-skills/skills/create-issue/) | Create well-structured issues on any platform (GitHub, GitLab, Backlog) with codebase analysis — from a quick single issue to a designed issue hierarchy (research → design → annotation cycle → parent + sub-issues) |
+| [create-issue](plugins/aoshimash-skills/skills/create-issue/) | Create well-structured issues on any platform (GitHub, GitLab, Backlog) with codebase analysis — from a quick single issue (one batched question round, one approval) to a designed issue hierarchy (one annotated plan file → parent + sub-issues, research kept as an issue comment) |
 | [implement-issue](plugins/aoshimash-skills/skills/implement-issue/) | Read issues, plan, implement, and open PRs with two-stage review — single-issue interactive by default, with batch mode (dependency graph, worktrees, parallel subagents) for parent issues / milestones / labels / lists |
 | [analyze-sessions](plugins/aoshimash-skills/skills/analyze-sessions/) | Analyze Claude Code session history to detect recurring patterns and propose improvements to skills and settings.json |
 | [respond-to-pr-review](plugins/aoshimash-skills/skills/respond-to-pr-review/) | Process PR review comments one by one — explain, confirm actions, implement fixes, and post reply comments |

@@ -7,7 +7,7 @@
 ## Detect Platform
 
 Check in order:
-1. CLAUDE.md `## Issue Tracker` section with `platform: backlog`
+1. The project's agent instructions (e.g. CLAUDE.md, AGENTS.md): an `## Issue Tracker` section with `platform: backlog`
 2. Ask the user
 
 ## Create Issue
@@ -81,6 +81,29 @@ Backlog does not have built-in dependency/blocking relationships. Use these alte
 1. **Mention in issue body**: Include `Blocked by: PROJ-123` in the issue description.
 2. **Use milestones**: Group related issues under a milestone for ordering.
 
+## Comment on an Issue (research comment)
+
+Used in [issue-creation.md](issue-creation.md) step 7 to attach the Design
+Flow's research findings to the parent issue:
+
+```bash
+bee issue comment <issue_key> --body "<comment body>"
+```
+
+Optional flags: `--notify <id>` (repeatable), `--attachment <id>`
+(repeatable), `--list` to read existing comments.
+
+Backlog comments use Backlog's own markup rather than HTML, so post the
+research findings as a plain comment titled
+`Research findings (create-issue, YYYY-MM-DD)` instead of the collapsed
+`<details>` form.
+
+## Issue Templates
+
+No repository-level issue template applies on Backlog. If the project requires
+a fixed issue format, record that format in the project's agent instructions
+and use it as the skeleton.
+
 ## List Issues
 
 ```bash
@@ -92,7 +115,7 @@ To list child issues of a parent:
 bee issue list -p <project_key> --parent-issue <parent_issue_id>
 ```
 
-## CLAUDE.md Config Example
+## Agent-Instructions Config Example
 
 ```markdown
 ## Issue Tracker

@@ -7,14 +7,30 @@
 ## Detect Platform
 
 Check in order:
-1. CLAUDE.md `## Issue Tracker` section with `platform: gitlab`
+1. The project's agent instructions (e.g. CLAUDE.md, AGENTS.md): an `## Issue Tracker` section with `platform: gitlab`
 2. Git remote URL contains `gitlab.com` or a known GitLab instance
+
+## Check for Issue Templates
+
+Used in SKILL.md Step 1. GitLab stores project description templates in
+`.gitlab/issue_templates/` (Markdown files, one per template):
+
+```bash
+ls .gitlab/issue_templates/ 2>/dev/null
+```
+
+Read the chosen template and fill it yourself, then pass the composed body via
+`--description`. `glab issue create --template <name>` pre-populates the
+description from that directory for interactive creation and is not used here.
 
 ## Create Issue
 
 ```bash
 glab issue create --title "<title>" --description "<body>" [--label "<label>"] [--assignee "<user>"]
 ```
+
+Set `--description "-"` only when an editor is wanted; this skill always
+supplies the composed body directly.
 
 ## Create Child Issue (Epic/Parent Relationship)
 
@@ -64,7 +80,19 @@ glab api --method POST "projects/:id/issues/<B-iid>/links" \
 glab issue list [--label "<label>"] [--milestone "<milestone>"]
 ```
 
-## CLAUDE.md Config Example
+## Comment on an Issue (research comment)
+
+Used in [issue-creation.md](issue-creation.md) step 7 to attach the Design
+Flow's research findings to the parent issue:
+
+```bash
+glab issue note <issue-id> --message "<comment body>"
+```
+
+`glab issue note <issue-id>` with no message opens an editor instead. GitLab
+renders HTML in comments, so the collapsed `<details>` form applies here.
+
+## Agent-Instructions Config Example
 
 ```markdown
 ## Issue Tracker
