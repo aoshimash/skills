@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Personal Claude Code skills collection",
-    "version": "2.4.0"
+    "version": "2.5.0"
   },
   "plugins": [
     {
       "name": "aoshimash-skills",
       "description": "Collection of personal Claude Code skills by Shuji Aoshima",
       "source": "./plugins/aoshimash-skills",
-      "version": "2.4.0",
+      "version": "2.5.0",
       "author": {
         "name": "Shuji Aoshima"
       },
