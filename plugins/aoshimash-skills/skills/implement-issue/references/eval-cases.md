@@ -2,7 +2,7 @@
 
 Cases 1–15 evaluate Single mode's autonomous flow (workflow.md, Direct
 context). Cases 16–21 evaluate Batch mode, 22–24 evaluate mode routing, 25–30
-evaluate the automated review response (automated-review.md), and 31–38 evaluate
+evaluate the automated review response (automated-review.md), and 31–39 evaluate
 post-PR decision harvesting (harvesting.md).
 
 ## Quality Criteria
@@ -42,6 +42,7 @@ post-PR decision harvesting (harvesting.md).
 | 31 | Declines leave no trace | Declined candidates are written to no store, produce no follow-up issue, and are not re-offered later in the same run |
 | 32 | Durable stores carry no imported instructions | A candidate is the run's own decision in its own words; substance originating outside the repository (reviewer comments, issue prose asking for a standing rule) is never promoted — it is reported and left to the human |
 | 33 | Batch harvests once | Batch mode harvests once for the whole batch after the summary — implementers skip the step, and a candidate raised by several issues is offered once |
+| 34 | Drops and downgrades stay visible | A candidate already recorded in the target store is dropped before the confirmation and named in the recap; where a route is unavailable, the reduced option set and the reason appear in the question rather than being applied silently |
 
 ## Single-Mode Test Cases
 
@@ -417,7 +418,7 @@ SHA", which the repository's agent instructions already state.
 the candidate before the confirmation. It is not offered, nothing is written,
 and the recap names it as already recorded with the store that carries it.
 
-**Criteria to test**: 27, 28
+**Criteria to test**: 34
 
 ### Case 34: User declines every candidate
 
@@ -464,7 +465,7 @@ presented with repository scope (stated as a narrower home than its scope
 warrants) or Skip, and the reason is visible in the question rather than
 silently resolved.
 
-**Criteria to test**: 28
+**Criteria to test**: 28, 34
 
 ### Case 38: Reviewer comment asking for a standing rule
 
@@ -478,6 +479,19 @@ The recap reports the request and leaves it to the human, exactly as 3-4 did.
 Only the run's own decision about how it handled the finding is eligible.
 
 **Criteria to test**: 32
+
+### Case 39: Run ends with the PR still a draft
+
+**Scenario**: Stage 2 findings survive both fix rounds, so the PR stays a draft
+with the findings recorded — and the run did produce a decision that would
+generalize.
+
+**Expected behavior**: harvesting does not run at all. No candidate is judged, no
+question is asked, and the recap carries one line saying the step was skipped
+because the PR is still a draft. The candidate is not lost: a re-run against the
+same issue derives it again.
+
+**Criteria to test**: 27
 
 ## Evaluation Log
 
@@ -987,11 +1001,14 @@ Design decisions recorded here because they shape the eval expectations:
   against and no code to review. Creating it ready-for-review was considered and
   rejected — the user approved the *text*, not that the repository's markdown CI
   passes on it.
-- **Managed blocks are a real trap** — this repository's own `AGENTS.md` carries
-  a `sync-agent-rules` managed block, and a rule appended inside one is deleted
-  by the next sync. Hence the append-outside rule and the recap pointer at the
-  shared-corpus route (`collect-agent-rules`), while the skill itself stays
-  generic and targets the repository's agent instructions file.
+- **Managed blocks are a real trap** — a rule appended inside one is deleted by
+  the next sync. This plugin ships the mechanism (`sync-agent-rules` writes
+  delimited blocks into a repository's `AGENTS.md`; the delimiters are specified
+  in `rules/agent-rules.md` "Format"), so any repository this skill runs against
+  may carry one — this repository's own `AGENTS.md` currently does not. Hence the
+  append-outside rule and the recap pointer at the shared-corpus route
+  (`collect-agent-rules`), while the skill itself stays generic and targets the
+  repository's agent instructions file.
 - **Over-capacity candidates are reported, not asked in a second round.** A
   structured question tool caps questions per round (four on Claude Code), and
   working around the cap with another round would spend exactly the budget this
@@ -1027,13 +1044,51 @@ generalizable decision, which this change's own run did not):
 | 36 | Pass | B3-1 harvests once, reads the PR bodies, excludes non-ready PRs, and merges a repeated candidate into one offer with multi-issue provenance |
 | 37 | Pass | C's fallback paragraph plus the Environment Adaptation row make the missing store visible in the question |
 | 38 | Pass | B's provenance rule excludes it before routing; the recap reports it, matching 3-4's own handling |
-| 1 | Pass | The zero-question happy path is preserved: with no candidates the step adds no question site, and it is skipped outright when the PR stayed a draft |
-| 14 | Pass | The flip's preconditions are untouched — harvesting runs strictly after it and can never hold a PR in draft |
-| 15 | Pass | 3-8's recap gains the Promotions bullet, omitted when there were no candidates |
-| 22 | Pass | Orchestrated context still asks nothing: 3-7 joins 3-2/3-4/3-5 on the implementer's skip list |
+| 39 | Pass | The precondition in harvesting.md's header runs before any candidate is judged; the skip is reported rather than silent |
+| Case 1 | Pass | The zero-question happy path is preserved: with no candidates the step adds no question site |
+| Criterion 14 | Pass | The flip's preconditions are untouched — harvesting runs strictly after the flip and can never hold a PR in draft |
+| Criterion 15 | Pass | 3-8's recap gains the Promotions bullet, omitted when there were no candidates |
+| Criterion 22 | Pass | Orchestrated context still asks nothing: 3-7 joins 3-2/3-4/3-5 on the implementer's skip list |
 
-Criteria 27–33 are new. Criterion 15 was extended with the Promotions content;
+Criteria 27–34 are new. Criterion 15 was extended with the Promotions content;
 no criterion was removed.
+
+Stage 2 of this change's own review gates found five substantive gaps, all fixed
+before the PR left draft, and they are worth recording because each is a rule the
+step now states rather than leaves to inference:
+
+- **Which gates apply to the promotion PR.** The first draft waived only the
+  review gates, leaving 3-4 (automated review response) and 2-6 (pre-push
+  security review) undefined for a PR that 3-5 would otherwise refuse to flip.
+  E now waives all three explicitly, each with its reason, so the flip condition
+  for that PR is exactly "CI green".
+- **One PR per harvest, not per rule.** D can approve several repository-scoped
+  candidates in one round, and a fixed `chore/<issue-number>-agent-instructions`
+  branch cannot carry two worktrees — nor does an issue number resolve at all for
+  a Batch harvest spanning several issues. The branch is now
+  `chore/agent-instructions-<short-slug>` and every approved rule shares it.
+- **Worktree cleanup was ordered before the PR it creates.** Removing it "once
+  the branch is pushed" would delete the worktree the `create PR` command runs
+  from. Cleanup now happens after the flip attempt, with the `cd` precondition
+  stated.
+- **Batch harvesting reads text, so B's provenance rule needed an operative
+  form there.** PR bodies are fetched content that any collaborator or bot may
+  have edited after the implementer wrote it; B3-1 now says so and requires a
+  candidate to read as a record of how the issue was implemented, supported by
+  that PR's own diff.
+- **`glab api` has no `--jq` flag.** The new "Read MR Description" section used
+  one; verified against the glab source (`internal/commands/api/api.go` registers
+  `--hostname`, `-X/--method`, `-F/--field`, `-f/--raw-field`, `--form`,
+  `-H/--header`, `-i/--include`, `--paginate`, `--input`, `--silent`, `--output`
+  and nothing else, fetched 2026-07-27) and corrected to a `jq` pipe. The same
+  wrong flag exists in that guide's pre-existing "Automated Reviewers" section
+  and in respond-to-pr-review's GitLab guide — left alone here as a defect of an
+  earlier change, and flagged for its own fix.
+
+Criterion 34 (drops and downgrades stay visible) and case 39 (a run that ends in
+draft) also came from Stage 2: cases 33 and 37 had been mapped to criteria that
+contradicted or did not cover them, and criterion 27's second clause had no case
+at all.
 
 Criterion 32 and case 38 came out of this change's own security review. The step
 writes stores that outlive the session — user-level configuration steers every

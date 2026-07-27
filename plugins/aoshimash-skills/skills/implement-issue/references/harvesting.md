@@ -100,9 +100,14 @@ agent instructions (separate PR)** / **Append to my user-level configuration** /
 Each question carries the whole decision, so one answer settles it:
 
 - the **exact rule text** that would be written, verbatim;
-- the **exact destination path**, including the case where the file would be
-  created;
+- the **exact destination path** of every route offered for that candidate —
+  including the case where the file would be created — so no option hides where
+  it writes;
 - one line of provenance — which decision in this run produced it.
+
+The option set is per candidate, not fixed: C has already decided which routes
+are legitimate for it, and only those are offered (a candidate with no user-level
+store available is offered repository scope or Skip, with the downgrade stated).
 
 State the PR/MR URL and its ready state in the text accompanying the
 confirmation. The user should not be asked to rule on durable rules before being
@@ -129,14 +134,21 @@ diff cannot contain implementation changes.
 ```bash
 git fetch origin
 root="$(git rev-parse --path-format=absolute --git-common-dir)/.."
+grep -qxF '.worktrees/' "$root/.git/info/exclude" 2>/dev/null || echo '.worktrees/' >> "$root/.git/info/exclude"
 git worktree add "$root/.worktrees/<branch-name>" -b <branch-name> origin/<default-branch>
 ```
 
-The `.worktrees/` exclude entry from workflow.md 2-1 already covers the
-directory; resolving through `--git-common-dir` is what makes the command work
-unchanged from inside the implementation worktree.
+Resolving through `--git-common-dir` is what makes those commands work unchanged
+from inside the implementation worktree. The exclude line is repeated here rather
+than assumed from workflow.md 2-1, because 2-1 skips it whenever the run reused a
+worktree the host environment had already prepared.
 
-Branch: `chore/<issue-number>-agent-instructions`.
+**One PR per harvest, not per rule.** Every repository-scoped candidate the user
+approved in this round goes into the same branch and the same PR — they are all
+rules, a reviewer reads them together, and one branch name cannot serve two
+worktrees anyway. Branch: `chore/agent-instructions-<short-slug>`, the slug
+naming the rules rather than an issue, so the same scheme works for a Batch
+harvest whose candidates came from several issues.
 
 **Target file.** The file the repository already uses for agent conventions —
 the one read in 1-2. When both a neutral file and a product-specific one exist
@@ -150,15 +162,33 @@ such block, and when the repository is set up that way, point the recap at the
 shared-corpus route (this plugin's `collect-agent-rules` skill) as the durable
 home for the rule.
 
-Then: commit `docs: record <rule> in the agent instructions` with
-`Refs #<issue-number>`; push; and create the PR/MR **as a draft** like every PR
-this skill opens — title under 70 characters with no Conventional Commit prefix,
-body stating the rule, the decision that produced it, and
-`Relates to #<issue-number>`, never `Closes`. Watch CI (3-3) and flip it to ready
-when green (3-5). **The review gates do not apply**: there is no issue whose spec
-to check it against and no code to review. If CI fails, or the repository has no
-CI, the PR stays a draft and the recap says so. Remove the promotion worktree
-(`git worktree remove`) once the branch is pushed.
+Then commit — `docs: record <rule(s)> in the agent instructions`, with a `Refs
+#<issue-number>` line per contributing issue — push, and create the PR/MR **as a
+draft** like every PR this skill opens: title under 70 characters with no
+Conventional Commit prefix, body stating each rule, the decision that produced
+it, and `Relates to #<issue-number>` for every contributing issue, never
+`Closes`.
+
+**Which gates apply.** Only CI: watch it (3-3) and flip the PR to ready when
+green (3-5). The rest of the pipeline is waived deliberately, and the recap says
+that it was:
+
+- **Review gates (3-2) do not apply** — there is no issue whose spec to check the
+  diff against, and no code to review.
+- **The automated review response (3-4) does not apply** — this PR carries no
+  derived implementation, and its whole content is text the user approved
+  verbatim minutes earlier. Whatever the repository's reviewers post on it
+  belongs to the human review cycle (respond-to-pr-review), like anything posted
+  after a flip.
+- **A separate security review (2-6) is not run** — the diff is one documentation
+  file whose exact content the user just read and approved, which is a stronger
+  guarantee than a review of machine-written code. The provenance rule in **B**
+  is what keeps that content trustworthy; it is not optional.
+
+If CI fails, or the repository has none, the PR stays a draft and the recap says
+so. Once the PR exists and the flip has been attempted, `cd` out of the promotion
+worktree and remove it (`git worktree remove`) — never before, since the PR is
+created from that worktree's branch.
 
 The implementation PR/MR is not edited to mention this one — its
 `Decisions & Deviations` already records the decision itself, and the recap

@@ -121,10 +121,11 @@ glab mr update <number> --description "<updated body>"
 
 Used by Batch mode's harvesting step (batch.md B3-1) to read each MR's
 `Decisions & Deviations` section back out. The `description` attribute of the
-[merge requests API](https://docs.gitlab.com/api/merge_requests/):
+[merge requests API](https://docs.gitlab.com/api/merge_requests/). `glab api`
+registers no `--jq` flag (unlike `gh api`), so filter with a pipe:
 
 ```bash
-glab api "projects/:id/merge_requests/<iid>" --jq '.description'
+glab api "projects/:id/merge_requests/<iid>" | jq -r '.description'
 ```
 
 ## Automated Reviewers
