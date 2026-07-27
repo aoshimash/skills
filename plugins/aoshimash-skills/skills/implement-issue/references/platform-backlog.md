@@ -58,17 +58,24 @@ Backlog does not have built-in blocking relationships. Parse the issue body for:
 - `Blocked by: PROJ-123`
 - `Depends on: PROJ-456`
 
-## Create Branch and Worktree
+## Read Issue Comments (research comment)
 
-**New branch or current-branch flows (Single mode):**
+workflow.md 1-1 looks for a research comment attached by the create-issue
+Design Flow. If the installed `bee` version does not expose issue comments,
+skip the research comment and research fresh — do not guess at flags.
+
+## Write Back Design Decisions to the Issue
+
+Backlog write-backs (workflow.md 1-3) are recorded as an issue **comment**
+rather than a description edit, using the verified comment command:
 
 ```bash
-git fetch origin
-git checkout <default-branch> && git pull
-git checkout -b <branch-name>
+bee issue comment PROJ-123 -b "Design Decisions (added <date>): <decisions and rationale>"
 ```
 
-**Worktree flow (Single mode default, and always in Batch mode):**
+## Create Branch and Worktree
+
+**Worktree flow (the default in both modes):**
 
 ```bash
 git fetch origin
@@ -84,7 +91,7 @@ git push -u origin <branch-name>
 
 ## Create Pull Request
 
-Backlog PRs are created through the code hosting platform (GitHub/GitLab), not through Backlog itself. Detect the code hosting platform from the git remote URL and use the appropriate CLI.
+Backlog PRs are created through the code hosting platform (GitHub/GitLab), not through Backlog itself. Detect the code hosting platform from the git remote URL and use that platform's guide — including its draft creation and ready-for-review flip commands.
 
 ## Update Issue Status
 

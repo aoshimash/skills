@@ -2,7 +2,7 @@
 
 This procedure is used in **Batch Mode** (see SKILL.md) to implement a set of issues — from a parent issue's sub-issues, a milestone, a label, or a manual list — in dependency order (in parallel where the environment allows), with worktree isolation and two-stage review per issue.
 
-The per-issue implementation itself is NOT duplicated here: each issue is implemented by running [workflow.md](workflow.md) in **Autonomous mode** (see workflow.md's Execution Modes table). This file covers only the orchestration around that: building the dependency graph, running the implementer for each issue, running review gates, and handling failures.
+The per-issue implementation itself is NOT duplicated here: each issue is implemented by running [workflow.md](workflow.md) in the **Orchestrated context** (see workflow.md's Invocation Contexts). This file covers only the orchestration around that: building the dependency graph, running the implementer for each issue, running review gates, flipping each draft PR to ready, and handling failures.
 
 **Separate agent instances are an optimization, not a requirement.** Where the environment supports separate agent instances (see Environment Adaptation in SKILL.md), the orchestrator runs each issue's implementer and each review gate as its own instance, and dispatches an entire dependency group at once for wall-clock parallelism. Where it does not, the orchestrator runs the same steps sequentially in dependency order in the current context. The dependency DAG, review gates, and failure cascade below are identical either way — only wall-clock parallelism is lost in the sequential case.
 
@@ -100,7 +100,7 @@ Run each issue's implementer with an instruction set that includes:
 1. The full issue body and issue number. When the batch source is a parent issue, also include the parent issue's body — its Background, Design Decisions, and Task Overview are shared context for every sub-issue.
 2. The absolute path to the worktree already created for it (step B2-1) — the implementer works there, it does not create its own.
 3. The absolute paths to this skill's [workflow.md](workflow.md) and the relevant `platform-*.md` guide, with the instruction:
-   > "Read these files, then execute workflow.md Phases 1–3 in **Autonomous mode** inside the given worktree. Stop after creating the PR/MR and monitoring CI (workflow.md step 3-2) — do not run the review gates yourself, the orchestrator runs them. Return exactly one status line (`DONE` / `DONE_WITH_CONCERNS` / `NEEDS_CONTEXT` / `BLOCKED`) plus the PR/MR URL or failure details, per workflow.md's Report Status step."
+   > "Read these files, then execute workflow.md Phases 1–3 in the **Orchestrated context** inside the given worktree. Create the PR/MR as a draft and leave it a draft. Skip the review gates (3-2) and the ready flip (3-4) — the orchestrator does both; do run CI monitoring (3-3) and the issue comment (3-5). Then return exactly one status line (`DONE` / `DONE_WITH_CONCERNS` / `NEEDS_CONTEXT` / `BLOCKED`) plus the PR/MR URL or failure details, per workflow.md step 3-6."
 4. The project's CLAUDE.md path.
 
 Resolve the absolute paths to `workflow.md` and the platform guide before starting the implementer (they live alongside this file in the skill's `references/` directory) — do not rely on the implementer inferring them. When running as a separate agent instance, pass this as its dispatch prompt; when running in the current context, follow it directly.
@@ -115,6 +115,7 @@ After each issue's PR/MR is created (and the implementer has reported):
    Where the environment supports model selection, run reviewers on a model at least as capable as the implementer's — see review-gates.md "Reviewer model".
 3. Stage 2.5: **Pattern Propagation** — if a `rule-violation-instance` is found, scan other in-flight PRs for the same pattern and offer to propagate the fix (see [review-gates.md](review-gates.md)). This stage only runs in Batch mode, when 2+ issues are in flight.
 4. If issues are found at Stage 1 or 2 → re-run the implementer to fix → re-review (max 2 fix rounds per stage).
+5. **Flip draft to ready** — when both stages pass and the PR/MR's CI is green, mark it ready for review (see the platform guide). A PR whose gates or CI never passed stays a draft with the unresolved state recorded in its body, and the issue is reported `DONE_WITH_CONCERNS`.
 
 Run each reviewer as a separate agent instance with fresh context where the environment supports one; otherwise self-review and mark the gate result `SELF-REVIEWED` — see review-gates.md's "Reviewer Dispatch" note for the exact procedure and marker semantics.
 
@@ -145,6 +146,7 @@ After each issue completes (regardless of status):
   git worktree remove .worktrees/<branch-name>
   ```
 - If BLOCKED: keep the worktree for debugging. Inform the user of the path.
+- If NEEDS_CONTEXT: the implementer stopped before making changes — remove the worktree.
 
 ## Phase B3: Summary
 

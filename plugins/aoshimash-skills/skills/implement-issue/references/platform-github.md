@@ -138,14 +138,7 @@ source would drop a real edge.
 
 ## Create Branch
 
-**New branch or current-branch flows (Single mode):**
-
-```bash
-git checkout main && git pull
-git checkout -b <branch-name>
-```
-
-**Worktree flow (Single mode default, and always in Batch mode):**
+**Worktree flow (the default in both modes):**
 
 ```bash
 git fetch origin
@@ -159,22 +152,55 @@ git worktree add .worktrees/<branch-name> -b <branch-name> origin/<default-branc
 git push -u origin <branch-name>
 ```
 
-## Create Pull Request
+## Read Issue Comments (research comment)
+
+Used in workflow.md 1-1 to find a research comment attached by the create-issue
+Design Flow:
 
 ```bash
-gh pr create --title "<title>" --body "$(cat <<'EOF'
-## Summary
-<bullets>
+gh issue view <number> --comments
+```
 
-Closes #<issue-number>
+Structured: `gh issue view <number> --json comments`.
 
-## Changes
-<file-level changes>
+## Write Back Design Decisions to the Issue
 
-## Test Plan
-<verification checklist>
-EOF
-)"
+Used in workflow.md 1-3 to append batched-question answers to the issue's
+`## Design Decisions` section (create the section if absent):
+
+```bash
+gh issue view <number> --json body --jq '.body' > <tmpfile>
+# append the new decisions under "## Design Decisions" in <tmpfile>
+gh issue edit <number> --body-file <tmpfile>
+```
+
+## Check for a PR Template
+
+A repository template, when present, is the PR body skeleton (workflow.md 3-1).
+Look for `.github/PULL_REQUEST_TEMPLATE.md`, `PULL_REQUEST_TEMPLATE.md`,
+`docs/PULL_REQUEST_TEMPLATE.md`, or a `.github/PULL_REQUEST_TEMPLATE/` directory.
+
+## Create Draft Pull Request
+
+PRs are always created as drafts (workflow.md 3-1); the body sections come from
+workflow.md 3-1 (or the repository's PR template when one exists):
+
+```bash
+gh pr create --draft --title "<title>" --body-file <body-file>
+```
+
+## Update PR Body (gate results)
+
+```bash
+gh pr edit <number> --body-file <body-file>
+```
+
+## Mark PR Ready for Review
+
+Only after both review-gate stages pass and CI is green (workflow.md 3-4):
+
+```bash
+gh pr ready <number>
 ```
 
 ## Link PR to Issue

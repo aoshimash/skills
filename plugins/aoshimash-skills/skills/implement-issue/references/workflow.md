@@ -1,188 +1,123 @@
 # Workflow Detail
 
-## Execution Modes
+The canonical implementation pipeline: understand the issue, resolve decisions,
+implement, verify, and deliver a review-first draft PR/MR that is flipped to
+ready once the machines are done. The pipeline is **autonomous**: it runs from
+invocation to report without routine user interaction. Decisions are resolved
+from the decision stores or by repository convention and **logged, not asked**.
 
-This pipeline runs in one of two modes:
+## Invocation Contexts
 
-- **Interactive** (Single mode) — the main agent executes this workflow directly, with the user present. This is the default.
-- **Autonomous** (Batch mode) — the implementer executes this workflow with no access to the user, coordinated by the orchestrator described in [batch.md](batch.md). The orchestrator runs the implementer as a separate agent instance where the environment supports one, or in the current context sequentially where it does not; either way this workflow is identical. Every point below that normally asks the user has an Autonomous-mode replacement instead.
+The same pipeline runs in one of two contexts:
 
-| Step | Interactive | Autonomous |
+- **Direct** (Single mode) — the main agent executes this workflow itself. The
+  user exists but is interrupted for exactly two reasons: the single batched
+  question of step 1-3 (genuinely undecidable decisions only), and an
+  unresolvable Critical/High security finding (step 2-6, which blocks the
+  push). Everything else completes with concerns recorded in the PR and
+  surfaced in the recap.
+- **Orchestrated** (Batch mode) — an implementer executes this workflow with no
+  user access, coordinated by the orchestrator in [batch.md](batch.md) (as a
+  separate agent instance where the environment supports one, sequentially in
+  the current context otherwise). Anything Direct would ask the user becomes a
+  terminal status instead.
+
+| Divergence point | Direct | Orchestrated |
 |---|---|---|
-| 1-1 missing/vague issue fields | Ask the user, or propose criteria and confirm | Stop and report status `NEEDS_CONTEXT` with what is missing |
-| 1-3 design decisions | User choice gate with numbered options (decisions already recorded in the issue or its parent are settled — do not re-ask) | Follow design decisions recorded in the issue or its parent (Background, Design Decisions); for decisions not recorded, choose the option most consistent with project conventions and note the choice in the PR body; if genuinely undecidable, stop and report `NEEDS_CONTEXT` |
-| 1-6 plan approval | Present as text + user choice gate (Approve / Request changes / Abort) | No gate — the plan stays internal to the implementer and is not presented for approval |
-| 2-1 working environment | The choice made in Phase 0 Setup (Worktree / New branch / Current branch) | Always the worktree the orchestrator already created before dispatch |
-| 2-3 checks fail after 3 attempts | Escalate via user choice gate (continue / skip / abandon) | Stop and report status `BLOCKED` with the error |
-| 2-4 self-review needs human judgment | Escalate via user choice gate | Note the concern in the PR description, continue, and report status `DONE_WITH_CONCERNS` |
-| 3-2 unfixable CI failure | Note in the PR description, tell the user | Note in the PR description and report status `DONE_WITH_CONCERNS` |
+| Undecidable decision / missing critical field (1-1, 1-3) | One batched question; answers written back to the issue | Stop, report `NEEDS_CONTEXT` |
+| Working environment (2-1) | Worktree by default; reuse one already prepared for this run | Always the worktree the orchestrator created |
+| Checks still failing after 3 attempts (2-4) | Record the failure in the PR body, continue; the PR stays draft | Stop, report `BLOCKED` |
+| Unresolved Critical/High security finding (2-6) | Stop before pushing, report to the user | Stop before pushing, report `BLOCKED` |
+| Review gates (3-2) | Main agent is responsible for both stages (dispatch per review-gates.md) | Skipped here — the orchestrator runs them after the implementer reports |
+| Draft → ready flip (3-4) | Main agent flips after gates + CI pass | Orchestrator flips after gates + CI pass |
+| Final report (3-6) | Chat recap | One status line to the orchestrator |
 
-Every step below is written from the Interactive perspective by default; where behavior diverges, an "Autonomous mode" note follows the step, keyed to the table above.
+## Phase 1: Understand and Decide
 
-## Phase 1: Plan
+### 1-1. Read the Issue
 
-### 1-1. Parse the Issue
+Extract from the issue body: summary, motivation, background/constraints,
+proposal (desired end state), and acceptance criteria.
 
-Extract and organize the following from the issue body:
+**Parent context.** If the issue references a parent (`Parent: #N` line or a
+platform-level parent link), fetch the parent and read its Background, Design
+Decisions, and Task Overview — decisions recorded there bind this task.
 
-| Field | What to look for |
-|---|---|
-| **Summary** | 1–2 sentence overview at the top |
-| **Motivation** | Why this matters (user need, business goal, pain point) |
-| **Background** | Current state, constraints, business rules, related code paths |
-| **Proposal** | Desired end state (what, not how) |
-| **Acceptance Criteria** | Binary pass/fail conditions for completion |
-| **References** | Links, screenshots, related issues |
+**Research comment.** Check the issue (and its parent) for an attached research
+comment — the create-issue Design Flow persists its research findings as an
+issue comment. If one exists, read it first and re-verify only the **delta**
+against the current code (what changed since the comment's date) instead of
+re-researching from scratch. See the platform guide for how to read comments;
+if the platform's CLI does not expose comments, research fresh.
 
-**Parent context**: If the issue references a parent (a `Parent: #N` line in the body, or a platform-level parent link), fetch the parent issue and read its Background, Design Decisions, and Task Overview — they are shared context for every sub-issue. Design decisions recorded there apply to this task.
-
-If any critical field is missing or ambiguous:
-- **Missing**: Ask the user to provide it.
-- **Vague** (e.g., "it should work well"): Propose 2–3 concrete, binary-testable criteria and ask the user to confirm or adjust. Do not proceed until acceptance criteria are specific enough to verify.
-
-**Autonomous mode**: do not ask the user. If a critical field is missing or too vague to act on, stop immediately and return status `NEEDS_CONTEXT` with a specific description of what is missing.
+**Missing or vague critical fields** (no acceptance criteria, or criteria like
+"works well" that cannot be verified): draft concrete, binary-testable
+criteria yourself from the motivation and proposal. If the issue is too vague
+even for that — the intent itself is ambiguous — treat it as an undecidable
+decision: Direct context folds it into the batched question of 1-3;
+Orchestrated context stops with `NEEDS_CONTEXT` and a specific description of
+what is missing.
 
 ### 1-2. Analyze the Codebase
 
-Based on issue context, investigate:
+Investigate what the issue touches: related files and patterns, project
+conventions (agent instructions, existing code), dependencies and their
+constraints, test conventions, and any project commands (checks, auto-fix,
+codegen).
 
-1. **Related files** — Grep/Glob for keywords, class names, routes, or components mentioned in the issue.
-2. **Architecture patterns** — Identify the project's conventions (directory structure, naming, frameworks, abstraction layers).
-3. **Dependencies** — Check what modules/packages are involved; note version constraints.
-4. **Test patterns** — Find existing tests to understand testing conventions (framework, location, naming).
-5. **CLAUDE.md** — Read project-level CLAUDE.md for coding standards, preferred libraries, and workflow rules.
-6. **Existing branches** — Check for branches that reference the issue number (e.g., `git branch -a | grep <issue-number>`). If a partial implementation exists, note what is already done and ask the user whether to continue from it or start fresh.
+**Existing branches**: check for branches referencing the issue number. If a
+stale partial implementation exists, default to a fresh start from the default
+branch and note the branch and the choice under Decisions in the PR body.
 
-Record findings as structured notes for use in the plan.
+### 1-3. Resolve Decisions
 
-### 1-3. Resolve Design Decisions
+Decisions are resolved in this order, and only the last category ever reaches
+the user:
 
-Decisions already recorded in the issue or its parent (e.g., a Design Decisions table, constraints in Background) are settled — follow them, do not re-ask. They were typically resolved with the user when the issue was designed.
+1. **Settled** — recorded in a decision store: the issue body, its parent's
+   body (Design Decisions, Background), the repository's agent instructions,
+   or user-level configuration. Follow them as written; never re-ask, never
+   re-litigate.
+2. **Local and reversible** — naming, choices among roughly equivalent designs,
+   tactical details. Decide now: choose the option most consistent with
+   existing repository conventions, and log the decision and rationale in the
+   PR body's Decisions section. A constraint tied to one piece of code goes in
+   a code comment; commit a lightweight ADR under `docs/adr/` only when a
+   decision contradicts an existing rule or binds future work.
+3. **Genuinely undecidable** — no store records it, no convention points one
+   way, and the outcome materially changes the result (structural shape,
+   irreversibility, cross-task consistency).
+   - **Direct**: collect **all** such decisions and ask them as **one batched
+     question** (user choice, numbered options with a recommendation per
+     decision). Immediately append the answers to the issue's `## Design
+     Decisions` section (create it if absent) using the platform guide's
+     write-back command, then proceed. This is the only routine-flow stop.
+   - **Orchestrated**: stop and report `NEEDS_CONTEXT` listing the decisions.
 
-Before drafting the plan, identify any remaining decisions that require human judgment. Examples:
+When in doubt whether a decision is undecidable or merely local, treat it as
+local and log it — the PR review is the safety net.
 
-- Multiple valid architectural approaches (e.g., REST vs GraphQL, new table vs extend existing)
-- Trade-offs between simplicity and extensibility
-- Ambiguous requirements that could be interpreted differently
-- Technology or library choices not dictated by CLAUDE.md
-- Scope boundaries (what's "good enough" for this issue)
+### 1-4. Plan Internally
 
-For each decision point, ask the user to choose (see Environment Adaptation) from numbered options:
+Form an implementation plan before editing: files to change and how, new
+dependencies, edge cases, how each acceptance criterion will be verified, and
+what is explicitly out of scope. The plan is working state, not a deliverable —
+there is no approval gate and it is not presented for review. Its visible
+residue is the PR body: the AC → evidence mapping and the Decisions section.
 
-1. **Present options** (2–4 choices) with:
-   - A short label for each option
-   - Pros and cons or key trade-offs in the description
-   - Mark the recommended option with "(Recommended)" in its label
-2. **Wait for the user's choice** before proceeding.
+**On Claude Code specifically:** plan mode is opt-in only — enter it solely
+when the user explicitly asked for a plan gate in this run; never by default.
+An unrequested plan gate converts an autonomous run back into a round trip.
 
-**Handling "Other" free-text responses:**
+## Phase 2: Implement and Verify
 
-When the user selects "Other" and provides free-text input, treat their text as the chosen approach. Incorporate it directly into the plan — do NOT re-present a new set of multiple-choice options. Only re-ask if the free-text is genuinely ambiguous (e.g., too vague to determine a concrete implementation direction, or contradicts constraints). If re-asking, quote the user's text and explain specifically what needs clarification.
+### 2-1. Prepare the Working Environment
 
-If no design decisions require human input, skip this step and proceed to 1-4.
+**Direct**: work in a git worktree by default — do not ask. If the session was
+already started on a branch or worktree prepared for this issue (e.g. by the
+host environment), use it as-is and note the branch name under Decisions if it
+deviates from the naming convention below.
 
-**Autonomous mode**: do not present a user choice. Follow design decisions recorded in the issue or its parent (Background, Design Decisions). For decisions not recorded there, choose the option most consistent with existing project conventions, and note the choice and its rationale in the PR body so a human reviewer can revisit it. If the decision is genuinely undecidable (no recorded decision, no convention to lean on, and the outcome materially changes the result), stop and return status `NEEDS_CONTEXT`.
-
-### 1-4. Draft Implementation Plan
-
-Create a plan with this structure:
-
-```
-## Implementation Plan for #<issue-number>
-
-### Summary
-1-2 sentence description of the approach.
-
-### Files to Change
-For each file, describe:
-- **Path**: `path/to/file`
-- **Action**: Create / Modify / Delete
-- **Changes**: What will be added, changed, or removed and why
-
-### New Dependencies (if any)
-- Package name, version, why needed
-
-### Edge Cases & Risks
-- List potential issues and how to handle them
-
-### Verification
-How each acceptance criterion will be verified:
-- Criterion 1 → verification method
-- Criterion 2 → verification method
-
-### Out of Scope
-Explicitly list things NOT included to prevent scope creep.
-```
-
-### 1-5. Self-Evaluate the Plan
-
-Before presenting, verify:
-
-| # | Check | Pass condition |
-|---|---|---|
-| 1 | Covers all acceptance criteria | Every criterion has a verification method |
-| 2 | Stays in scope | No changes unrelated to the issue |
-| 3 | Follows project conventions | Consistent with CLAUDE.md and existing patterns |
-| 4 | Files list is complete | No missing files needed for the change |
-| 5 | Risks identified | Non-obvious edge cases documented |
-
-If any check fails, revise the plan before presenting.
-
-### 1-6. Present and Get Approval
-
-Present the plan as regular **text output**. Clearly state:
-
-- What will change and why
-- Any assumptions or decisions made
-- Questions or trade-offs requiring user input
-
-Then collect approval via a user choice (see Environment Adaptation):
-
-```
-User choice with options:
-- "Approve" — Proceed with implementation.
-- "Request changes" — Revise the plan based on feedback.
-- "Abort" — Cancel the implementation.
-```
-
-**If the user selects "Request changes"** (or provides feedback via "Other"):
-1. Read the user's feedback carefully.
-2. Treat the feedback as specific change requests — incorporate them directly into the revised plan. Do NOT re-present new multiple-choice options based on the feedback. If the user wrote "do X instead of Y", revise the plan to do X.
-3. Re-present the revised plan.
-4. Ask for approval again via a user choice with the same options.
-5. Repeat until the user approves or aborts.
-
-Only re-ask for clarification if the feedback is genuinely ambiguous (e.g., contradicts other requirements, or is too vague to act on). If re-asking, quote the user's text and explain specifically what needs clarification.
-
-**On Claude Code specifically:** do not use plan mode (`EnterPlanMode`/`ExitPlanMode`) for this approval — its approval UI can cause accidental rejections with no way to provide feedback, leading to abandoned sessions.
-
-**Autonomous mode**: skip this step entirely. There is no user to present the plan to — the plan drafted in 1-4 is used directly as the internal basis for implementation, without a gate.
-
-## Phase 2: Implement
-
-### 2-1. Prepare Working Environment
-
-Use the implementation location chosen in Phase 0 Setup.
-
-**Autonomous mode**: the working environment is always the worktree the orchestrator created before starting this implementer — skip the branching below and `cd` into that worktree path.
-
-Branch naming convention (for new branch and worktree):
-
-```
-<type>/<issue-number>-<short-description>
-```
-
-Examples:
-- `feat/42-add-user-search`
-- `fix/108-login-timeout`
-- `refactor/55-extract-auth-module`
-
-Type is inferred from issue labels or content:
-- Bug → `fix/`
-- Feature → `feat/`
-- Technical task / refactor → `refactor/` or `chore/`
-
-**If "Worktree"** (default): Fetch latest, then create a worktree from the default branch. Keep the worktree directory out of version control with a local git exclude (`.git/info/exclude` is per-clone, so it never appears in the PR the way editing `.gitignore` would):
 ```bash
 git fetch origin
 grep -qxF '.worktrees/' .git/info/exclude 2>/dev/null || echo '.worktrees/' >> .git/info/exclude
@@ -190,205 +125,193 @@ git worktree add .worktrees/<branch-name> -b <branch-name> origin/<default-branc
 cd .worktrees/<branch-name>
 ```
 
-**If "New branch"**: Fetch latest and create a branch from the default branch:
-```bash
-git fetch origin
-git checkout origin/<default-branch>
-git checkout -b <branch-name>
-```
+**Orchestrated**: `cd` into the worktree the orchestrator already created —
+never create one.
 
-**If "Current branch"**: Verify the branch is clean (`git status`). Continue on the current branch.
+Branch naming: `<type>/<issue-number>-<short-description>` — type from the
+issue's label or content (`fix/`, `feat/`, `refactor/`, `chore/`).
 
-### 2-1b. Update Issue Status
+### 2-2. Update Issue Status
 
-If the issue tracker supports status updates (e.g., Backlog), update the issue status to "In Progress" after preparing the working environment and before starting implementation. See the platform-specific guide for the command.
+If the issue tracker supports status updates (e.g. Backlog), set the issue to
+"In Progress" now — after decisions are resolved, before code changes. See the
+platform guide.
 
-This step is placed here (after plan approval) rather than in Phase 0, so the issue is not marked "In Progress" if the plan is rejected or abandoned.
+### 2-3. Implement
 
-### 2-2. Implement Changes
+Implement the plan. Guidelines:
 
-Follow the approved plan file by file. For each file:
+- **Follow existing patterns** — match surrounding code in naming, structure,
+  and idiom.
+- **Stay in scope** — no refactoring or "improvements" beyond the issue.
+- **No over-engineering** — the simplest solution that satisfies the
+  acceptance criteria.
+- **Secure by default** — validate input, avoid injection, handle errors at
+  system boundaries.
+- **Regenerate derived files** — if sources that drive code generation changed
+  (schemas, protos, OpenAPI), run the project's regeneration command before
+  checks.
 
-1. Read the file first to understand current state.
-2. Make the planned changes.
-3. Keep changes minimal — only what the plan specifies.
+### 2-4. Run Project Checks (loop, max 3 attempts)
 
-Guidelines:
+Run the auto-fix commands the project defines (formatters, linters with
+`--fix`) once, then loop the project's check suite (tests, lint, type check,
+build): run, fix failures, re-run — until green or 3 attempts are spent.
 
-- **Follow existing patterns** — Match the style of surrounding code (naming, indentation, abstractions).
-- **No unrelated changes** — Do not refactor, clean up, or "improve" code outside the plan scope.
-- **No over-engineering** — Implement the simplest solution that satisfies the acceptance criteria.
-- **Secure by default** — Validate user input, avoid injection vulnerabilities, handle errors at system boundaries.
-- **Regenerate derived files** — If source files that drive code generation were modified (e.g., API schemas, proto files, OpenAPI specs), run the project's regeneration command (check CLAUDE.md) before running checks. Skip if no such command is defined.
+**Still failing after 3 attempts** — **Direct**: stop fixing, record exactly
+what fails and what was tried in the PR body's Risk Areas, and continue; CI
+will fail, so the PR remains a draft and the recap flags it prominently.
+**Orchestrated**: stop and report `BLOCKED` with the failing checks and
+attempts.
 
-### 2-3. Run Project Checks (loop until all pass)
+If the project defines no checks, note that in the PR body.
 
-Check CLAUDE.md for project-specific commands. Common checks:
+### 2-5. Self-Review (loop, max 3 rounds)
 
-| Check | Typical command |
-|---|---|
-| Tests | `npm test`, `pytest`, `go test ./...`, etc. |
-| Lint | `npm run lint`, `ruff check`, `golangci-lint run`, etc. |
-| Type check | `tsc --noEmit`, `mypy .`, etc. |
-| Build | `npm run build`, `go build ./...`, etc. |
-| Format | `prettier --write`, `ruff format`, `gofmt`, etc. |
+Review the full diff (`git diff`) for: logic errors and edge cases, missing
+error handling at boundaries, drift from the issue's decisions and acceptance
+criteria, and convention violations. Fix what has a clear correct solution,
+re-run checks after fixes, re-review. A concern that would previously have
+been escalated (ambiguous business rule, UX trade-off) is resolved by
+convention like any local decision and logged — or, if truly undecidable, it
+belongs in 1-3's batched question, which has already passed: record it under
+Risk Areas instead and let the reviewer rule.
 
-For typed languages (TypeScript, Python with mypy, Go, etc.), always include type-check and build in the check suite to catch type errors locally before pushing.
-
-**Step 0 (once): Auto-fix** — Before entering the check loop, run any auto-fix commands defined in CLAUDE.md (e.g., formatters, linters with `--fix`). This resolves mechanically fixable issues without burning loop attempts. Skip if no auto-fix commands are defined.
-
-| Auto-fix | Typical command |
-|---|---|
-| Format | `prettier --write .`, `ruff format .`, `gofmt -w .`, etc. |
-| Lint fix | `eslint --fix`, `ruff check --fix`, etc. |
-
-Run whatever the project defines. **Loop (max 3 attempts):**
-
-1. Run all checks.
-2. If any fail, fix the issue and re-run all checks.
-3. Repeat until all checks pass or 3 attempts are reached.
-
-If a fix requires a design decision (e.g., how to handle an unexpected edge case), ask the user to choose (see Environment Adaptation) from numbered options with a recommendation and wait for the user's choice.
-
-**If checks still fail after 3 attempts**: Stop and escalate to the user via a user choice (see Environment Adaptation) presenting:
-- Which checks are still failing and what was tried
-- Options: continue trying, skip the failing check, or abandon the implementation
-
-**Autonomous mode**: do not present a user choice. Stop and return status `BLOCKED` with which checks are failing and what was tried.
-
-If the project has no defined checks, skip this step but note it when creating the PR.
-
-### 2-4. AI Self-Review (loop until clean)
-
-After all project checks pass, review the full diff of changes:
-
-```bash
-git diff
-```
-
-Check for:
-- Logic errors, off-by-one, null/undefined risks
-- Security issues (injection, auth bypass, data exposure)
-- Missing error handling at system boundaries
-- Inconsistency with the approved plan
-- Code that doesn't follow project conventions
-
-**Loop (max 3 rounds):**
-
-1. Review the diff.
-2. If issues found:
-   - Fix issues that have a clear correct solution.
-   - If a fix requires human judgment (e.g., ambiguous requirements, UX trade-offs, business logic), ask the user to choose (see Environment Adaptation) from numbered options with a recommendation. Wait for the user's choice.
-3. After fixes, re-run project checks (Step 2-3) to ensure fixes don't break anything.
-4. Re-review the diff.
-5. Repeat until no issues remain or 3 review rounds are reached.
-
-**If issues remain after 3 rounds**: Stop and ask the user to choose (see Environment Adaptation), presenting the remaining issues. Let the user decide whether to:
-- Proceed with known issues
-- Fix manually
-- Abandon the implementation
-
-**Autonomous mode**: do not present a user choice. Note the remaining concerns in the PR description and continue — this issue will be reported as status `DONE_WITH_CONCERNS`.
-
-**After self-review completes**, output a visible summary before proceeding to commit:
+After the loop, output one visible line:
 
 ```
 Self-review complete: N round(s), N issue(s) found, N fixed, N remaining
 ```
 
-Interactive mode: this is shown to the user directly. Autonomous mode: this line is included in the implementer's final report to the orchestrator. This ensures self-review is verifiable and the result is visible at a glance either way.
+### 2-6. Security Review (before any push)
 
-### 2-5. Commit
+The push is the leak boundary — a secret or exploitable defect that leaves the
+machine cannot be recalled by a later fix commit. After checks and self-review
+pass and **before pushing anything**, run a security review of the pending
+changes (see the Security review capability in SKILL.md's Environment
+Adaptation; on Claude Code, run `/security-review`). At minimum it must cover:
+secrets or credentials in the diff, injection, authn/authz changes, data
+exposure, unsafe deserialization, and SSRF.
 
-Write a Conventional Commit message referencing the issue:
+- **Critical/High findings**: fix, re-run checks, re-review — max 2 rounds. If
+  a Critical/High finding remains, **do not push**: Direct reports it to the
+  user and stops; Orchestrated reports `BLOCKED`.
+- **Lower-severity findings**: fix or record under Risk Areas.
+- Record the outcome (tool used, findings, resolution) — it goes in the PR
+  body's Gate Results.
+
+### 2-7. Commit
+
+Conventional Commit referencing the issue:
 
 ```
 <type>: <description>
 
-<body explaining what and why>
+<what changed and why>
 
 Refs #<issue-number>
 ```
 
-Example:
-```
-feat: add user search endpoint
-
-Implement full-text search for users by name and email.
-Search uses existing pg_trgm index for performance.
-
-Refs #42
-```
-
-Guidelines:
-- Subject line under 72 characters.
-- Body explains **what** changed and **why**, not the obvious **how**.
-- Reference the issue with `Refs #N`. Use `Closes #N` only in the PR body, not the commit.
+Subject under 72 characters; use `Closes #N` only in the PR body, never the
+commit.
 
 ## Phase 3: Pull/Merge Request
 
-### 3-0. Detect Code Hosting Platform
+### 3-1. Push and Create a Draft PR/MR
 
-The code hosting platform (for PRs) is independent of the issue tracker. Detect from the git remote URL:
+Detect the code hosting platform from the git remote (it may differ from the
+issue tracker — e.g. Backlog issues + GitHub PRs), push the branch, and create
+the PR/MR **as a draft** (see the platform guide; title under 70 characters,
+no Conventional Commit prefix). Draft status is the "machines still working"
+signal: it is removed only in 3-4.
 
-- `github.com` → GitHub (use `gh` CLI)
-- `gitlab.com` or known GitLab instance → GitLab (use `glab` CLI)
-
-This allows cross-platform setups (e.g., Backlog for issue tracking + GitHub for code hosting).
-
-### 3-1. Push and Create PR/MR
-
-Push and create the PR/MR using the **code hosting** platform's CLI. See the platform-specific guide for exact commands.
-
-PR/MR body format:
+**PR/MR body — ordered for the reviewer.** Human judgment concentrated at the
+PR is the trade for autonomous execution, so the body leads with what needs
+judgment and ends with what doesn't:
 
 ```markdown
-## Summary
-<1-3 bullet points describing what changed>
+## Decisions & Deviations
+<implementation-time decisions with rationale; deviations from the issue text;
+"None" if none — the section is always present>
 
-Closes #<issue-number>
+## Risk Areas
+<what deserves reviewer attention: unresolved concerns, failing checks,
+subtle changes; "None" if none>
+
+## Acceptance Criteria → Evidence
+- [x] <criterion> — <how it was verified: test name, command output, diff ref>
+
+## Gate Results
+- Self-review: <N rounds, N found, N fixed>
+- Security review: <tool, findings, resolution>
+- Spec compliance (Stage 1): <pending → result>
+- Code quality (Stage 2): <pending → result>
+- CI: <pending → result>
 
 ## Changes
-- <file-level description of changes>
+<mechanical file-level list — last, it needs the least judgment>
 
-## Test Plan
-- [ ] <how each acceptance criterion was verified>
-- [ ] <any manual testing steps>
+Closes #<issue-number>
 ```
 
-### 3-1b. Review Gates
+**Repository PR/MR templates take precedence.** When the repository defines a
+template, the template is the skeleton: fill its sections, map the content
+above into semantically matching sections, and append whatever has no match as
+clearly delimited sections after the template body. Review-first ordering
+yields to template order; the chat recap always carries the decisions-first
+reading path regardless.
 
-After the PR/MR is created, every issue — Interactive or Autonomous — goes through the two-stage review described in [review-gates.md](review-gates.md): Stage 1 spec compliance, then Stage 2 code quality.
+### 3-2. Review Gates
 
-**Interactive mode**: the main agent runs both stages itself and fixes/pushes directly; there is no separate reviewer to dispatch. See review-gates.md's single-issue notes for the escalation path when fixes don't converge.
+**Direct**: run Stage 1 (spec compliance) then Stage 2 (code quality) per
+[review-gates.md](review-gates.md), fixing and pushing between rounds. Update
+the Gate Results section as each stage completes.
 
-**Autonomous mode**: the implementer does NOT run the review gates itself. Stop after 3-2 (CI monitoring) and report status back to the orchestrator, which runs the reviewer for each stage (as a separate agent instance where available, or self-review with a `SELF-REVIEWED` marker otherwise — see [review-gates.md](review-gates.md)) and re-invokes this implementer for fix rounds if needed. Stage 2.5 (pattern propagation) only ever runs in Autonomous/batch mode, coordinated by the orchestrator across all in-flight issues — never in Interactive mode.
+**Orchestrated**: skip this step — the orchestrator runs the gates and
+re-invokes this implementer for fix rounds. Continue with 3-3 and 3-5, then
+report (3-6); never perform the 3-4 flip.
 
-### 3-2. Monitor CI
+### 3-3. Monitor CI
 
-After the PR/MR is created, verify that CI passes. See the platform-specific guide for the exact command.
+Watch the PR/MR checks (see the platform guide). On failure: investigate, push
+a fix commit if fixable (max 1 fix round), re-watch. If not fixable or CI is
+not configured, record it under Risk Areas and in Gate Results.
 
-**Loop (max 1 fix attempt):**
+### 3-4. Flip Draft to Ready
 
-1. Run the CI monitoring command and wait for all checks to complete.
-2. If all checks pass → proceed to 3-3.
-3. If a check fails:
-   - Investigate the failure. Common causes: missed auto-fix, stale generated file, type error caught only in CI.
-   - If fixable: push a fix commit and re-run CI monitoring.
-   - If not fixable or CI is not configured: note the failure in the PR description and proceed.
+Only when **both** review-gate stages pass **and** CI is green, mark the PR/MR
+ready for review (see the platform guide). If either never passes within its
+fix rounds, the PR **stays a draft** with the unresolved state recorded in
+Gate Results / Risk Areas — a draft with honest concerns beats a "ready" PR
+that isn't.
 
-**Autonomous mode**: same investigate/fix loop, but if the failure is not fixable within the 1 retry, note it in the PR description and continue — this issue will be reported as status `DONE_WITH_CONCERNS` rather than proceeding silently as if nothing happened.
+**Orchestrated**: the orchestrator performs this flip after it runs the gates
+(see batch.md B2-3).
 
-### 3-3. Comment on Issue
+### 3-5. Comment on the Issue
 
-If the issue tracker supports comments (e.g., Backlog), post a comment on the issue with the PR/MR link. This is especially useful for cross-platform setups where the PR is not automatically linked to the issue.
+If the issue tracker supports comments (e.g. Backlog, or cross-platform setups
+where the PR is not auto-linked), post the PR/MR link on the issue.
 
-### 3-4. Report Status
+### 3-6. Report
 
-**Interactive mode**: return the PR/MR URL to the user directly, along with a plain-language summary of the outcome (equivalent to one of the statuses below).
+**Direct — chat recap**, the session-side report. It must contain:
 
-**Autonomous mode**: return exactly one of the following statuses to the orchestrator, plus the PR/MR URL or failure details:
-- `DONE` — PR created, CI passing, review gates not yet run (orchestrator runs them next)
-- `DONE_WITH_CONCERNS` — PR created but with noted concerns (unfixable CI failure, unresolved self-review issue, or an undecidable design decision that was resolved by convention)
-- `NEEDS_CONTEXT` — missing or too-vague information, cannot proceed (see 1-1, 1-3)
-- `BLOCKED` — failed after retries, with error details (see 2-3)
+- **PR**: URL and state — ready for review, or still draft and why.
+- **Decisions**: every implementation-time decision made (the PR body has the
+  rationale; the recap lists them).
+- **Issue write-backs**: every write performed against the issue (Design
+  Decisions appended, status changes, comments).
+- **Review focus**: the few places a human reviewer should look first.
+- **Gates**: one line per gate — self-review rounds/findings, security review,
+  Stage 1, Stage 2, CI.
+
+**Orchestrated — one status line** to the orchestrator, plus the PR/MR URL or
+failure details:
+
+- `DONE` — draft PR created, CI passing; gates not yet run (orchestrator runs them)
+- `DONE_WITH_CONCERNS` — draft PR created with concerns recorded (unfixable CI
+  failure, remaining self-review issue)
+- `NEEDS_CONTEXT` — undecidable decision or missing critical field (1-1, 1-3)
+- `BLOCKED` — checks failed after retries (2-4) or unresolved Critical/High
+  security finding (2-6)
