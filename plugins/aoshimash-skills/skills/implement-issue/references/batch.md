@@ -100,7 +100,7 @@ Run each issue's implementer with an instruction set that includes:
 1. The full issue body and issue number. When the batch source is a parent issue, also include the parent issue's body — its Background, Design Decisions, and Task Overview are shared context for every sub-issue.
 2. The absolute path to the worktree already created for it (step B2-1) — the implementer works there, it does not create its own.
 3. The absolute paths to this skill's [workflow.md](workflow.md) and the relevant `platform-*.md` guide, with the instruction:
-   > "Read these files, then execute workflow.md Phases 1–3 in the **Orchestrated context** inside the given worktree. Create the PR/MR as a draft and leave it a draft. Stop after monitoring CI (workflow.md step 3-3) — do not run the review gates or flip the PR to ready yourself, the orchestrator does both. Return exactly one status line (`DONE` / `DONE_WITH_CONCERNS` / `NEEDS_CONTEXT` / `BLOCKED`) plus the PR/MR URL or failure details, per workflow.md step 3-6."
+   > "Read these files, then execute workflow.md Phases 1–3 in the **Orchestrated context** inside the given worktree. Create the PR/MR as a draft and leave it a draft. Skip the review gates (3-2) and the ready flip (3-4) — the orchestrator does both; do run CI monitoring (3-3) and the issue comment (3-5). Then return exactly one status line (`DONE` / `DONE_WITH_CONCERNS` / `NEEDS_CONTEXT` / `BLOCKED`) plus the PR/MR URL or failure details, per workflow.md step 3-6."
 4. The project's CLAUDE.md path.
 
 Resolve the absolute paths to `workflow.md` and the platform guide before starting the implementer (they live alongside this file in the skill's `references/` directory) — do not rely on the implementer inferring them. When running as a separate agent instance, pass this as its dispatch prompt; when running in the current context, follow it directly.
@@ -146,6 +146,7 @@ After each issue completes (regardless of status):
   git worktree remove .worktrees/<branch-name>
   ```
 - If BLOCKED: keep the worktree for debugging. Inform the user of the path.
+- If NEEDS_CONTEXT: the implementer stopped before making changes — remove the worktree.
 
 ## Phase B3: Summary
 

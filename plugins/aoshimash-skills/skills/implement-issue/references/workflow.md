@@ -267,8 +267,9 @@ reading path regardless.
 [review-gates.md](review-gates.md), fixing and pushing between rounds. Update
 the Gate Results section as each stage completes.
 
-**Orchestrated**: skip — stop after 3-3 and report; the orchestrator runs the
-gates and re-invokes this implementer for fix rounds.
+**Orchestrated**: skip this step — the orchestrator runs the gates and
+re-invokes this implementer for fix rounds. Continue with 3-3 and 3-5, then
+report (3-6); never perform the 3-4 flip.
 
 ### 3-3. Monitor CI
 

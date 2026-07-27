@@ -9,7 +9,7 @@ Every PR/MR goes through two review stages before being marked as done — wheth
 
 These are separate concerns. Spec compliance prevents over-building and under-building. Code quality catches bugs and style issues. Combining them into one review loses signal.
 
-**Single mode note**: with only one issue in flight, the main agent runs both stages itself (there is no separate orchestrator/reviewer split). Stage 2.5 (pattern propagation) never runs in Single mode — there are no other in-flight PRs to scan.
+**Single mode note**: with only one issue in flight there is no orchestrator — the main agent is responsible for both stages: run each as a separate fresh-context agent instance where the environment supports one (see Reviewer Dispatch), otherwise review directly with the `SELF-REVIEWED` marker. Stage 2.5 (pattern propagation) never runs in Single mode — there are no other in-flight PRs to scan.
 
 **Batch mode note**: the orchestrator runs a fresh reviewer per stage per issue, and Stage 2.5 is active whenever a rule violation is found with 2+ issues in flight.
 
@@ -31,7 +31,7 @@ Review with:
 - The PR diff (`git diff origin/<default-branch>...<branch-name>`)
 - Instructions below
 
-**Batch mode**: run a dedicated reviewer with the above context — a separate agent instance where available, otherwise self-review with the `SELF-REVIEWED` marker (see Reviewer Dispatch above). **Single mode**: the main agent performs this review directly on the diff it just produced.
+**Batch mode**: the orchestrator runs a dedicated reviewer with the above context — a separate agent instance where available, otherwise self-review with the `SELF-REVIEWED` marker (see Reviewer Dispatch above). **Single mode**: the main agent runs the review the same way — a separate fresh-context instance where available, direct self-review with the marker otherwise.
 
 ### Review Criteria
 
@@ -82,7 +82,7 @@ Review with:
 - Project conventions (CLAUDE.md path)
 - Instructions below
 
-**Batch mode**: run a dedicated reviewer — a separate agent instance where available, otherwise self-review with the `SELF-REVIEWED` marker (see Reviewer Dispatch above). **Single mode**: the main agent performs this review directly.
+**Batch mode**: the orchestrator runs a dedicated reviewer — a separate agent instance where available, otherwise self-review with the `SELF-REVIEWED` marker (see Reviewer Dispatch above). **Single mode**: the main agent runs the review the same way — a separate fresh-context instance where available, direct self-review with the marker otherwise.
 
 ### Review Criteria
 

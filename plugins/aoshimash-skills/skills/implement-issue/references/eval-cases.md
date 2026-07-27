@@ -279,7 +279,7 @@ fixes one AC miss.
 directly; Stage 2.5 not run; the recap's gate lines show the fix round; ready
 flip after gates and CI pass.
 
-**Criteria to test**: 12, 14, 15, 22
+**Criteria to test**: 12, 14, 15
 
 ### Case 24: Parent issue, user picks "only this issue"
 
@@ -583,8 +583,8 @@ see that skill's own evaluation log entry for the same date.
 
 Wholesale rewrite per the settled decisions in #91/#93: Single mode is now a
 single autonomous flow with zero routine interactions. Criteria and cases 1–24
-above were rewritten for the new flow; the entries below this one evaluate the
-pre-rewrite interactive skill and are historical.
+above were rewritten for the new flow; the log entries **above this one**
+evaluate the pre-rewrite interactive skill and are historical.
 
 Structural changes:
 

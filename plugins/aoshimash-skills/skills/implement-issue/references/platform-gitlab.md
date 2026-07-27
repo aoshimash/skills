@@ -100,6 +100,12 @@ workflow.md 3-1 (or the repository's MR template when one exists):
 glab mr create --draft --title "<title>" --description "<body>"
 ```
 
+## Update MR Description (gate results)
+
+```bash
+glab mr update <number> --description "<updated body>"
+```
+
 ## Mark MR Ready for Review
 
 Only after both review-gate stages pass and CI is green (workflow.md 3-4):
@@ -123,6 +129,14 @@ glab mr checks
 
 ```bash
 glab issue note <number> --message "<comment>"
+```
+
+## Reopen Issue
+
+Used by Phase 0's closed-issue check ("Reopen and implement"):
+
+```bash
+glab issue reopen <number>
 ```
 
 ## CLAUDE.md Config Example
