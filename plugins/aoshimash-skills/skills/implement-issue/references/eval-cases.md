@@ -1121,6 +1121,13 @@ A second Stage 2 round on the fixed text found four more, all fixed:
 - **Case 40** covers criterion 28's over-capacity clause, which had no case — the
   same gap case 39 closed for criterion 27.
 
+A confirmation pass on those fixes returned PASS with two Minor regressions the
+fixes themselves had introduced, both corrected: dropping the word "routine" from
+the batched-question phrasing made it contradict the security escalation of 2-6
+(which also stops before the PR is delivered), and E's cleanup block reused a
+`$root` set in a fenced block 55 lines earlier, which does not survive between
+separate command invocations — it is re-derived in place now.
+
 Criterion 32 and case 38 came out of this change's own security review. The step
 writes stores that outlive the session — user-level configuration steers every
 later run in every repository — while one of its inputs (step A input 1) can

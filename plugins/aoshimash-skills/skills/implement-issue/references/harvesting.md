@@ -192,9 +192,13 @@ and remove it — never before, since the commit, the push, and the PR are all
 created from inside it:
 
 ```bash
+root="$(git rev-parse --path-format=absolute --git-common-dir)/.."
 cd "$root"
 git worktree remove ".worktrees/<branch-name>"
 ```
+
+`root` is re-derived rather than reused: these are separate command invocations,
+so a variable set in the earlier block is not in scope here.
 
 The implementation PR/MR is not edited to mention this one — its
 `Decisions & Deviations` already records the decision itself, and the recap
