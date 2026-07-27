@@ -1138,3 +1138,41 @@ worded rule reads as approvable. Hence B's provenance rule: what is promotable i
 the decision the run made in its own words, never a request the run merely read,
 and such requests are reported to the human exactly as `automated-review.md` D
 already requires.
+
+### 2026-07-27 — `glab api` has no `--jq` flag (fact correction)
+
+The "Automated Reviewers" section of `platform-gitlab.md` documented reviewer
+detection as `glab api "projects/:id/merge_requests/<mr-iid>" --jq
+'[.reviewers[].username]'`. `glab api` registers no `--jq`/`-q` flag, so that
+command exits with an unknown-flag error before reaching the API: step A's
+second detection signal (accounts assigned as reviewers on the MR) could not
+have worked on GitLab as written, leaving detection to the `.gitlab-ci.yml` grep
+and bot-authored notes alone. Case 25's GitLab path fails on the previous text
+and passes on the corrected text.
+
+**Corrected fact.** `glab api` registers exactly `--hostname`, `-X/--method`,
+`-F/--field`, `-f/--raw-field`, `--form`, `-H/--header`, `-i/--include`,
+`--paginate`, `--input`, `--silent`, and `--output` — and nothing else. JSON
+filtering is a `jq` pipe over the raw response
+(`glab api "<endpoint>" | jq -r '<expr>'`), the same pattern the "Read MR
+Description" section uses. `jq` was added to the guide's Prerequisites, since it
+is now a required binary rather than a convenience. The filter itself also
+changed shape, in the spirit of the hardening commit `d551ac0`: emit one
+username per line (`.reviewers[]?.username`) rather than a JSON array, which
+`-r` cannot flatten, and let `[]?` absorb an MR whose `reviewers` is null.
+
+**Primary source.** `internal/commands/api/api.go` in the GitLab CLI source,
+fetched 2026-07-27:
+<https://gitlab.com/gitlab-org/cli/-/raw/main/internal/commands/api/api.go>.
+`glab` is not installed in this environment, so the flag set was verified against
+that source only, not by running the command; the replacement filter was run for
+real on jq 1.8.2 against a sample MR payload (populated, null, and absent
+`reviewers`). This is the fix the harvesting entry above flagged and deferred:
+its Stage 2 gate caught the same flag in the new "Read MR Description" section
+and corrected it there, leaving the two pre-existing occurrences for a change of
+their own. The automated-review entry's claim that its pass added "no unverified
+CLI flags" to the GitLab guide holds for the endpoints and for `glab mr checks`,
+but the `--jq` flag carried over from the `gh` commands verified alongside them
+went unchecked. The matching defect in respond-to-pr-review's GitLab guide was
+corrected in the same change; the GitHub guides' `--jq` usages are correct
+(`gh api` does provide the flag) and were left unchanged.

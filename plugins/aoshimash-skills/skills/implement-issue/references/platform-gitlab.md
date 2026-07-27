@@ -3,6 +3,8 @@
 ## Prerequisites
 
 - `glab` CLI installed and authenticated (`glab auth status`)
+- `jq` installed — `glab api` registers no `--jq`/`-q` flag (unlike `gh api`), so
+  JSON filtering is a `jq` pipe over the raw response
 
 ## Detect Platform
 
@@ -141,8 +143,9 @@ project's agent instructions:
 # a reviewer that only runs on the ready transition cannot post while draft)
 grep -n "merge_request_event" .gitlab-ci.yml 2>/dev/null
 
-# Accounts assigned as reviewers on this MR
-glab api "projects/:id/merge_requests/<mr-iid>" --jq '[.reviewers[].username]'
+# Accounts assigned as reviewers on this MR (`glab api` registers no `--jq`
+# flag, unlike `gh api` — filter with a pipe)
+glab api "projects/:id/merge_requests/<mr-iid>" | jq -r '.reviewers[]?.username'
 ```
 
 Bot-authored notes already on the MR are the third signal — see the note

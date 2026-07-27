@@ -3,6 +3,8 @@
 ## Prerequisites
 
 - `glab` CLI installed and authenticated (`glab auth status`)
+- `jq` installed — `glab api` registers no `--jq`/`-q` flag (unlike `gh api`), so
+  every filter below is a `jq` pipe over the raw JSON response
 
 ## Detect Platform
 
@@ -22,7 +24,7 @@ Extract: `iid` (MR number), `title`, `web_url`.
 Get project ID (needed for API calls):
 
 ```bash
-glab api "projects/:id" --jq '.id'
+glab api "projects/:id" | jq -r '.id'
 ```
 
 ## Fetch Comments
@@ -33,7 +35,7 @@ GitLab uses a unified "notes" system for all comment types on MRs. Notes are dif
 
 ```bash
 glab api "projects/:id/merge_requests/{mr_iid}/notes?sort=asc" \
-  --jq '.[] | {id, body, author: .author.username, bot: .author.bot, type, system, resolvable, resolved, position}'
+  | jq '.[] | {id, body, author: .author.username, bot: .author.bot, type, system, resolvable, resolved, position}'
 ```
 
 ### Classify notes into comment types
@@ -51,7 +53,7 @@ GitLab uses approvals rather than review states. To check if a reviewer has requ
 
 ```bash
 glab api "projects/:id/merge_requests/{mr_iid}/approvals" \
-  --jq '{approved_by: [.approved_by[].user.username], approvals_required: .approvals_required, approvals_left: .approvals_left}'
+  | jq '{approved_by: [.approved_by[].user.username], approvals_required: .approvals_required, approvals_left: .approvals_left}'
 ```
 
 If a reviewer has NOT approved and has left resolvable comments → treat as equivalent to REQUEST_CHANGES for criticality tagging.
@@ -62,7 +64,7 @@ Check if the position still maps to a valid diff location using the discussions 
 
 ```bash
 glab api "projects/:id/merge_requests/{mr_iid}/discussions" \
-  --jq --arg nid "{note_id}" '.[] | select(.notes[0].id == ($nid | tonumber)) | .notes[0].position'
+  | jq --arg nid "{note_id}" '.[] | select(.notes[0].id == ($nid | tonumber)) | .notes[0].position'
 ```
 
 If `position` is null or references a line no longer in the current diff, the comment is outdated.
@@ -85,7 +87,7 @@ Find the discussion ID for the note:
 
 ```bash
 glab api "projects/:id/merge_requests/{mr_iid}/discussions" \
-  --jq --arg nid "{note_id}" '.[] | select(.notes[].id == ($nid | tonumber)) | .id'
+  | jq -r --arg nid "{note_id}" '.[] | select(.notes[].id == ($nid | tonumber)) | .id'
 ```
 
 Post a reply to the discussion:
