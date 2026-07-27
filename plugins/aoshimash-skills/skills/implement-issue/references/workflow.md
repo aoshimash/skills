@@ -28,7 +28,7 @@ The same pipeline runs in one of two contexts:
 | Working environment (2-1) | Worktree by default; reuse one already prepared for this run | Always the worktree the orchestrator created |
 | Checks still failing after 3 attempts (2-4) | Record the failure in the PR body, continue; the PR stays draft | Stop, report `BLOCKED` |
 | Unresolved Critical/High security finding (2-6) | Stop before pushing, report to the user | Stop before pushing, report `BLOCKED` |
-| Review gates (3-2) | Main agent runs both stages itself | Skipped here — the orchestrator runs them after the implementer reports |
+| Review gates (3-2) | Main agent is responsible for both stages (dispatch per review-gates.md) | Skipped here — the orchestrator runs them after the implementer reports |
 | Draft → ready flip (3-4) | Main agent flips after gates + CI pass | Orchestrator flips after gates + CI pass |
 | Final report (3-6) | Chat recap | One status line to the orchestrator |
 

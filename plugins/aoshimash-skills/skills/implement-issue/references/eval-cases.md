@@ -275,9 +275,10 @@ asked even though Single mode itself is autonomous.
 **Scenario**: A standalone issue implemented in Single mode; Stage 1 finds and
 fixes one AC miss.
 
-**Expected behavior**: main agent runs both gates itself, fixes and pushes
-directly; Stage 2.5 not run; the recap's gate lines show the fix round; ready
-flip after gates and CI pass.
+**Expected behavior**: the main agent is responsible for both gates
+(dispatching fresh-context reviewers where supported, per review-gates.md) and
+fixes and pushes directly; Stage 2.5 not run; the recap's gate lines show the
+fix round; ready flip after gates and CI pass.
 
 **Criteria to test**: 12, 14, 15
 
@@ -601,9 +602,9 @@ Structural changes:
   gains a **Security review** capability row; plan mode is opt-in only.
 - `review-gates.md`: Single-mode "ask the user" escalations replaced with
   record-in-PR + stay-draft; the flow diagram ends at the ready flip.
-- `batch.md`: implementer instruction updated (draft PR, stop after CI
-  monitoring at 3-3); the orchestrator now also flips PRs to ready (B2-3
-  step 5).
+- `batch.md`: implementer instruction updated (draft PR; run CI monitoring
+  (3-3) and the issue comment (3-5), skip the gates and the ready flip); the
+  orchestrator now also flips PRs to ready (B2-3 step 5).
 - Platform guides: verified draft/ready/write-back/comment commands added
   (`gh` verified locally on 2.x; `glab` flags verified against the official
   CLI docs; Backlog write-backs use the already-verified comment command
