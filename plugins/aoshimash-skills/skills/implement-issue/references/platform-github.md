@@ -216,7 +216,7 @@ project's agent instructions, in order of signal strength:
 ```bash
 # Workflows that run on pull_request events (read each one's `types:` — a
 # reviewer gated on ready_for_review cannot post while the PR is a draft)
-grep -l "pull_request" .github/workflows/*.yml .github/workflows/*.yaml
+grep -rl "pull_request" .github/workflows/ 2>/dev/null
 
 # Review-posting jobs that already ran on this PR show up as checks
 gh pr checks <pr-number> --json name,workflow,bucket
@@ -245,7 +245,7 @@ gh api repos/{owner}/{repo}/pulls/<pr-number>/reviews \
 
 # Inline review comments (skip entries whose `in_reply_to_id` is non-null)
 gh api repos/{owner}/{repo}/pulls/<pr-number>/comments \
-  --jq '.[] | {id, path, line, body, user: .user.login, user_type: .user.type, in_reply_to_id}'
+  --jq '.[] | {id, path, line, position, body, user: .user.login, user_type: .user.type, in_reply_to_id}'
 
 # Conversation comments
 gh api repos/{owner}/{repo}/issues/<pr-number>/comments \

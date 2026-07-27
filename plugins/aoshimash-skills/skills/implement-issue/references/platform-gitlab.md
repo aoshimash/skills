@@ -128,7 +128,7 @@ project's agent instructions:
 ```bash
 # Pipeline jobs that run on merge request events (read each job's `rules:` —
 # a reviewer that only runs on the ready transition cannot post while draft)
-grep -n "merge_request_event" .gitlab-ci.yml
+grep -n "merge_request_event" .gitlab-ci.yml 2>/dev/null
 
 # Accounts assigned as reviewers on this MR
 glab api "projects/:id/merge_requests/<mr-iid>" --jq '[.reviewers[].username]'
