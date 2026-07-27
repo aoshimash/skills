@@ -1,278 +1,293 @@
 # Evaluation Test Cases
 
+Cases 1–12 evaluate the Lightweight Flow (batched question round + draft
+approval), cases 13–21 the Design Flow (one plan file + annotation cycle +
+single final approval), and cases 22–23 external-fact verification.
+
 ## How to Run
 
-For each test case:
-1. Start a new conversation
-2. Trigger the create-issue skill
-3. Provide the user input described in the test case
-4. Respond to follow-up questions as described in the persona
-5. Evaluate the generated issue draft against the 10 quality criteria in Step L5 (these apply to every issue, in both flows; for Design Flow also check the Split Proposal criteria)
-6. Record which flow (Lightweight/Design) was chosen and whether it matched the expectation
-7. Record results in the Evaluation Log section at the bottom
+1. Start a new conversation and trigger the create-issue skill.
+2. Provide the case's initial input; answer follow-ups as the persona would.
+3. Score the run against the Flow Criteria below, and the resulting issue
+   body/bodies against the 11 issue-quality criteria in SKILL.md L3.
+4. Record the run in the Evaluation Log at the bottom.
+
+## Flow Criteria
+
+| # | Criterion | Pass condition |
+|---|---|---|
+| 1 | Zero questions on complete input | Lightweight Flow with complete initial input asks nothing before the draft approval |
+| 2 | One batched round | With incomplete input, every missing item arrives in a **single** round — never a one-question-at-a-time interview |
+| 3 | Analysis before asking | Codebase analysis runs before the question round; anything the codebase answers is not asked |
+| 4 | Stores checked first | Conventions recorded in the project's agent instructions or user-level config (labels, assignee, language, priority defaults) are applied, not asked |
+| 5 | Approval before creation | No issue is created in either flow without an explicit approval of the exact content |
+| 6 | Issue quality | Every created body passes the 11 criteria in SKILL.md L3 |
+| 7 | Two-layer decisions | Structural decisions are recorded in the issue; local reversible ones are deliberately left to implementation time; no implementation steps, file lists, or code examples appear |
+| 8 | One plan file | The Design Flow presents research findings, design decisions, open questions, tasks, and the split proposal as **one** file — no separate research file and no research-approval gate |
+| 9 | Open questions embedded | Structural unknowns become numbered in-file questions with options, trade-offs, and a recommendation — not chat interruptions |
+| 10 | Annotation cycle closes cleanly | Every note and every answered question is addressed; an unanswered open question blocks approval; one final approval covers plan and split together |
+| 11 | Research persisted | After creation, the research findings exist as a comment on the parent (or single) issue, collapsed where the tracker renders HTML |
+| 12 | Working tree clean | The plan file is deleted after creation; `git status` shows no plan or research artifacts |
+| 13 | Template adoption | Where the repository defines issue templates/forms, they are the skeleton: sections filled, skill content mapped in, unmatched content appended as delimited sections |
+| 14 | Split proposed, never automatic | A hierarchy is created only per the approved Split Proposal; when declined, exactly one issue is created with the task breakdown as a section |
+| 15 | Real issue numbers | Task Overview tables carry real issue numbers after creation, and links are read back to confirm they registered |
+| 16 | External facts verified | Precise external-software claims are verified against a primary source fetched this session, or explicitly marked as assumptions |
+| 17 | No obsolete ceremony | The skill text contains no boring-scope test; task quality is judged by the 7 checks in plan-file.md |
 
 ## Lightweight Flow Cases
 
-### Case 1: Vague bug report from non-engineer
+### Case 1: Complete input, zero questions
+
+- **Persona**: Engineer who writes a full request in one message
+- **Initial input**: "Create an issue: the `/health` endpoint returns 200 even
+  when the database connection is down, so our uptime monitor never pages us.
+  It should return 503 when the DB ping fails. Repo conventions already set
+  labels and assignee."
+- **Expected behavior**: codebase analysis runs, no question is asked, the
+  draft is presented once, and the only interaction is the approval choice.
+- **Criteria**: 1, 3, 4, 5, 6, 7
+
+### Case 2: Vague bug report from a non-engineer
 
 - **Persona**: Business user, no technical knowledge
 - **Initial input**: "The app is slow"
-- **Expected behavior**:
-  - Skill asks follow-up questions to clarify (which page? when? how slow?)
-  - Does NOT proceed to draft with only "the app is slow"
-  - Final issue has concrete reproduction steps
-  - Expected: stays in Lightweight flow (no escalation)
-- **Key criteria to watch**: #7 (Proposal unambiguous), #9 (Self-contained)
+- **Expected behavior**: analysis first, then **one** round carrying every
+  unknown (which screen, when, how slow, what "slow" means concretely,
+  labels/assignee if unconfigured). Does not draft an issue from "the app is
+  slow", and does not ask the questions one at a time.
+- **Criteria**: 2, 3, 6
 
-### Case 2: Detailed feature request from engineer
+### Case 3: Detailed feature request from an engineer
 
-- **Persona**: Backend engineer, familiar with codebase
-- **Initial input**: "We need rate limiting on the API endpoints. Currently there's no protection against abuse and we've seen spikes from single IPs."
-- **Expected behavior**:
-  - Skill still asks clarifying questions (which endpoints? what limits?)
-  - Codebase analysis identifies relevant API files
-  - Proposal does NOT prescribe specific implementation (e.g., "use Redis")
-  - Expected: stays in Lightweight flow (no escalation)
-- **Key criteria to watch**: #4 (No How), #5 (Non-obvious context)
+- **Persona**: Backend engineer familiar with the codebase
+- **Initial input**: "We need rate limiting on the API endpoints. Currently
+  there's no protection against abuse and we've seen spikes from single IPs."
+- **Expected behavior**: analysis identifies the API layer; the batched round
+  asks only what is genuinely open (which endpoints, what limits — structural)
+  and never asks about storage or library choice (local, reversible). The
+  Proposal prescribes no implementation.
+- **Criteria**: 2, 6, 7
 
-### Case 3: Ambiguous scope
+### Case 4: Ambiguous scope
 
 - **Persona**: Product manager
 - **Initial input**: "We need to improve the user onboarding"
-- **Expected behavior**:
-  - Skill identifies that scope is too broad and either narrows it down to a focused single issue OR proposes the Design Flow
-  - Does NOT create a vague catch-all issue
-  - A vague catch-all issue with no clear boundaries is a failure regardless of which flow was chosen
-- **Key criteria to watch**: #7 (Proposal unambiguous), #8 (Criteria independently verifiable)
+- **Expected behavior**: the scope question and the flow choice arrive in the
+  same round; the result is either a focused single issue or the Design Flow.
+  A vague catch-all issue is a failure regardless of flow.
+- **Criteria**: 2, 6
 
-### Case 4: Technical task with implicit How
+### Case 5: Technical task with implicit How
 
 - **Persona**: Frontend engineer
-- **Initial input**: "We should migrate from REST to GraphQL for the dashboard API"
-- **Expected behavior**:
-  - Skill separates the Motivation (why migrate?) from the Proposal (what should the end state be?)
-  - Proposal does NOT say "use Apollo Client" or prescribe migration steps
-  - Background captures why REST is currently used
-- **Key criteria to watch**: #3 (Motivation stands alone), #4 (No How)
+- **Initial input**: "We should migrate from REST to GraphQL for the dashboard
+  API"
+- **Expected behavior**: Motivation (why) separated from Proposal (end state);
+  no client-library choice or migration steps in the body; Background records
+  why REST is used today.
+- **Criteria**: 6, 7
 
-### Case 5: Bug report with insufficient reproduction info
+### Case 6: Bug report with insufficient reproduction info
 
 - **Persona**: QA tester
 - **Initial input**: "The checkout button doesn't work sometimes"
-- **Expected behavior**:
-  - Skill asks: which browser? what does "sometimes" mean? what happens when it fails?
-  - Does NOT accept "sometimes" as a valid reproduction step
-  - Final issue has specific, reproducible conditions
-  - Expected: stays in Lightweight flow (no escalation)
-- **Key criteria to watch**: #7 (Proposal unambiguous), #9 (Self-contained)
+- **Expected behavior**: one round asking browser, what "sometimes" means, and
+  the observed failure; "sometimes" is never accepted as a repro step. The
+  final issue reproduces reliably.
+- **Criteria**: 2, 6
 
-### Case 6: Non-technical feature request in Japanese
+### Case 7: Non-technical request in Japanese
 
 - **Persona**: Japanese-speaking business stakeholder
 - **Initial input**: "お客様からの問い合わせをもっと早く対応できるようにしたい"
-- **Expected behavior**:
-  - All interaction and the final issue are in Japanese
-  - Skill clarifies what "もっと早く" means concretely
-  - Acceptance criteria are measurable
-  - Expected: stays in Lightweight flow (no escalation)
-- **Key criteria to watch**: #8 (Criteria independently verifiable), language matching
+- **Expected behavior**: interaction and issue in Japanese; "もっと早く" is
+  pinned to something measurable; operational goals are separated from
+  implementation criteria.
+- **Criteria**: 2, 6
 
-### Case 7: Backlog issue creation with Operation type
+### Case 8: Backlog Operation type with priority
 
 - **Persona**: DevOps engineer using Backlog
 - **Initial input**: "本番環境のDBマイグレーション手順をissueにしたい"
-- **Expected behavior**:
-  - Detects Backlog platform from CLAUDE.md config
-  - Presents issue type options including Operation
-  - Asks for priority confirmation (High / Normal / Low)
-  - Uses Operation template with Procedure section
-  - Creates issue via `bee issue create`
-  - Expected: stays in Lightweight flow (no escalation)
-- **Key criteria to watch**: Issue type confirmation, priority confirmation, Operation template usage
+- **Expected behavior**: Backlog detected; issue type (Operation) and priority
+  travel in the **same** round as any other unknown, not as separate gates;
+  the Operation skeleton with its Procedure section is used; creation via
+  `bee issue create`.
+- **Criteria**: 2, 4, 5, 6
 
-### Case 8: Cross-platform setup (Backlog issues + GitHub PRs)
+### Case 9: Cross-platform setup (Backlog issues + GitHub code)
 
-- **Persona**: Engineer in a team using Backlog for task management and GitHub for code
+- **Persona**: Engineer whose team tracks issues on Backlog and code on GitHub
 - **Initial input**: "Create a feature request for adding user notifications"
-- **Expected behavior**:
-  - Detects Backlog as issue tracker from CLAUDE.md
-  - Creates the issue on Backlog (not GitHub)
-  - Issue type confirmation step is shown
-  - Priority confirmation step is shown (Backlog-specific)
-  - Expected: stays in Lightweight flow (no escalation)
-- **Key criteria to watch**: Correct platform detection, Backlog-specific fields
+- **Expected behavior**: the issue is created on Backlog, not GitHub;
+  Backlog-specific fields (type, priority) are resolved from configuration or
+  the single round.
+- **Criteria**: 2, 4, 5
+
+### Case 10: Repository issue form present
+
+- **Persona**: Contributor to a repo with `.github/ISSUE_TEMPLATE/bug.yml`
+  requiring "What happened?", "Steps", "Version"
+- **Initial input**: a bug description that also yields background,
+  acceptance criteria, and one structural constraint
+- **Expected behavior**: the form is detected in Step 1 and becomes the
+  skeleton — every required field filled, skill content mapped into the
+  matching fields, and Acceptance Criteria / Design Decisions appended as
+  clearly delimited sections rather than dropped.
+- **Criteria**: 5, 6, 13
+
+### Case 11: Conventions already recorded
+
+- **Persona**: Engineer in a repo whose agent instructions state "issues in
+  English", "always self-assign", "default label: enhancement"
+- **Initial input**: a complete feature request in Japanese
+- **Expected behavior**: language, assignee, and label are applied from the
+  stores without a question; the issue body is in English.
+- **Criteria**: 1, 4, 5
+
+### Case 12: An answer opens a new question
+
+- **Persona**: Support lead
+- **Initial input**: "Customers can't export their data"
+- **Setup**: the batched round's answers reveal that export exists for CSV but
+  not for the newly added workspace type — a scope question that could not
+  have been asked earlier
+- **Expected behavior**: a second **batched** round is acceptable and its
+  questions are grouped; a drift back into one-question-at-a-time is a
+  failure.
+- **Criteria**: 2, 6
 
 ## Design Flow Cases
 
-### Case 9: Simple feature design
+### Case 13: Simple feature design
 
 - **Persona**: Engineer describing a new feature
 - **Initial input**: "ユーザー検索機能を設計してissueに分解して"
-- **Expected behavior**:
-  - Explicit request triggers escalation to Design Flow (Step 2 criterion 1)
-  - D1 Research: investigates existing user model, API patterns, search infrastructure. Writes research file.
-  - D2 Design: asks clarifying questions (search fields, pagination, performance). Proposes approaches. Writes plan with task breakdown and Split Proposal.
-  - D3 Annotation: prompts user to annotate plan. Addresses annotations. Each task passes the boring scope test.
-  - D4 Issue Creation: confirms the Split Proposal as a user choice BEFORE creating anything, then creates parent issue + sub-issues with dependencies. Cleans up local files.
+- **Expected behavior**: D1 researches and writes **one** plan file (goal,
+  research findings, design decisions, open questions, tasks, dependency
+  graph, split proposal); no research gate; D2 annotation cycle; one final
+  approval; D3 creates parent + sub-issues, posts the research comment,
+  deletes the plan file.
 - **Verification**:
-  - [ ] Research file contains relevant file paths and architecture analysis
-  - [ ] Plan tasks have unambiguous scope and binary acceptance criteria; open design decisions are recorded in Design Decisions
-  - [ ] No issue body contains implementation steps, file-edit lists, or code examples
-  - [ ] Each sub-issue is independently implementable
-  - [ ] Dependencies form a valid DAG
-  - [ ] Split proposed as a user choice before any parent/sub-issue is created — never automatic
-  - [ ] Local plan/research files are deleted after issue creation
-  - [ ] Parent issue's Task Overview Dependencies column uses real sub-issue numbers (e.g., #259), not plan-local placeholders (e.g., #1)
-  - [ ] Parent issue's Task Overview Task column is updated to `#<number> — <title>` format
+  - [ ] Exactly one plan file is written; no separate research file exists
+  - [ ] Tasks have unambiguous scope, binding decisions, and binary AC
+  - [ ] No issue body contains implementation steps, file lists, or code
+  - [ ] Research comment present on the parent; plan file gone from the tree
+- **Criteria**: 5, 6, 7, 8, 10, 11, 12, 14, 15
 
-### Case 10: Complex multi-component feature
+### Case 14: Complex multi-component feature
 
 - **Persona**: Engineer planning a large migration
 - **Initial input**: "認証システムをOAuth2に移行したい"
-- **Expected behavior**:
-  - Multi-area change (auth + session + middleware + routes) triggers escalation to Design Flow (Step 2 criterion 2)
-  - D1 Research: investigates current auth, session management, middleware, all auth-dependent routes.
-  - D2 Design: multiple approach options (gradual migration vs big bang, library choices). Task breakdown includes migration steps, backward compatibility.
-  - D3 Annotation: multiple rounds expected for a complex feature.
-  - D4 Issue Creation: split confirmed as a user choice, then parent + sub-issues with careful dependency ordering (infra first, then migration, then cleanup).
+- **Expected behavior**: multi-area signal escalates to the Design Flow;
+  migration strategy alternatives appear as an **embedded open question** with
+  a recommendation rather than a chat prompt; dependencies order the tasks
+  (infra → migration → cleanup).
 - **Verification**:
-  - [ ] Research identifies ALL files touching authentication
-  - [ ] Design presents migration strategy options with trade-offs
-  - [ ] Tasks have correct dependency ordering (no circular deps)
-  - [ ] Sub-issues include rollback considerations where appropriate
-  - [ ] No sub-issue requires design judgment to implement
-  - [ ] Split proposed as a user choice before any parent/sub-issue is created — never automatic
+  - [ ] Research covers every file touching authentication
+  - [ ] The strategy choice is an in-file open question, answered inline
+  - [ ] Dependencies form a DAG with no cycles
+  - [ ] Rollback constraints appear where relevant
+- **Criteria**: 8, 9, 10, 14
 
-### Case 11: Bug-driven design
+### Case 15: Bug-driven design
 
-- **Persona**: Engineer investigating a performance issue
+- **Persona**: Engineer investigating a performance problem
 - **Initial input**: "ログインが遅い。調査して改善計画を立てて"
-- **Expected behavior**:
-  - Explicit request for investigation + planning triggers escalation to Design Flow
-  - D1 Research: profiles login flow, identifies bottlenecks, checks monitoring/logging.
-  - D2 Design: based on findings, proposes performance improvements as tasks.
-  - D4 Issue Creation: each improvement is a separate sub-issue with measurable acceptance criteria.
-- **Verification**:
-  - [ ] Research includes profiling data or file-level analysis of the login flow
-  - [ ] Acceptance criteria include measurable performance targets
-  - [ ] Tasks are ordered by impact (highest impact first, lowest dependency first)
+- **Expected behavior**: research profiles the login path; each improvement
+  becomes a task with a measurable criterion; the findings survive as the
+  research comment.
+- **Criteria**: 8, 11, 6
 
-### Case 12: Cross-platform Design Flow (Backlog + GitHub)
+### Case 16: Cross-platform Design Flow (Backlog)
 
 - **Persona**: Engineer designing a feature in a Backlog-managed project
 - **Initial input**: "Backlogで管理しているプロジェクトで新機能を設計したい"
-- **Expected behavior**:
-  - Detects Backlog as issue tracker from CLAUDE.md or user input.
-  - Uses `bee` CLI for issue creation.
-  - Handles Backlog's parent-child issue structure.
-  - Mentions dependencies in issue body (Backlog lacks built-in blocking).
-- **Verification**:
-  - [ ] Correct platform detection
-  - [ ] Uses `bee issue create` with `--parent` flag
-  - [ ] Dependencies noted in issue body since Backlog lacks blocking feature
-  - [ ] Priority is confirmed with user (Backlog has built-in priority levels)
+- **Expected behavior**: `bee` used throughout; parent-child via
+  `--parent-issue`; dependencies stated in the body since Backlog has no
+  blocking relation; the research comment posted as a **plain** comment titled
+  `Research findings (create-issue, YYYY-MM-DD)` because Backlog does not
+  render HTML.
+- **Criteria**: 11, 14, 15
 
-### Case 13: Annotation cycle depth
+### Case 17: Annotation changes the approach
 
-- **Persona**: Engineer refining a design after seeing the first draft
-- **Setup**: After plan is written, user annotates with `<!-- NOTE: completely different approach, use X instead of Y -->`
-- **Expected behavior**:
-  - Claude reads the annotation and rewrites the affected tasks.
-  - The Design Decisions table and affected task scopes are updated to reflect the new approach.
-  - Dependencies are rechecked (approach change may alter dependency graph).
-  - Boring scope test is re-run on all affected tasks.
-- **Verification**:
-  - [ ] Annotation is fully addressed (not partially)
-  - [ ] Design Decisions and task scopes match the new approach
-  - [ ] Dependency graph is updated if needed
-  - [ ] No stale references to the old approach remain
+- **Persona**: Engineer refining a design after the first plan
+- **Setup**: the user annotates `<!-- NOTE: completely different approach, use
+  X instead of Y -->`
+- **Expected behavior**: affected tasks rewritten, Design Decisions updated,
+  dependency graph and Split Proposal re-derived, task quality checks re-run,
+  no stale references to the old approach.
+- **Criteria**: 10, 17
 
-## Flow-Selection and Split-Proposal Cases (new)
+### Case 18: Open question answered inline
 
-### Case 14: Borderline escalation
+- **Persona**: Engineer answering on the `**Answer:**` line
+- **Setup**: the plan asks whether archived users are searchable; the user
+  answers "B, with the filter defaulting to off"
+- **Expected behavior**: the answer becomes a row in Design Decisions with its
+  rationale, the affected task scopes and AC change, and the question is
+  removed from `## Open Questions` — the user is not asked again in chat or in
+  the created issues.
+- **Criteria**: 9, 10, 7
 
-- **Persona**: Backend engineer
-- **Initial input**: "Add rate limiting to the API and an admin toggle for it"
-- **Expected behavior**:
-  - Signals are weak/mixed (2 areas: API + admin UI, but modest scope) — the skill either justifies staying in the Lightweight Flow, justifies escalating with a clear reason, or asks the user directly (user choice)
-  - Silently guessing on weak signals without any justification or question is a failure
-- **Verification**:
-  - [ ] A flow decision is made with an explicit, stated reason, OR the user is asked
-  - [ ] No silent, unexplained flow choice on ambiguous input
+### Case 19: Unanswered open question at the gate
 
-### Case 15: Mid-flight escalation
+- **Persona**: Engineer who annotates everything except one question
+- **Expected behavior**: the final approval is not presented; the outstanding
+  question is named and another annotation round is requested. Guessing an
+  answer, or creating issues with the question unresolved, is a failure.
+- **Criteria**: 10, 5
 
-- **Persona**: Engineer with a request that looks simple at first
-- **Initial input**: "Add validation to the signup form"
-- **Setup**: Codebase analysis (Step L3) reveals the change actually requires touching the frontend form, a new backend validation service, and a schema migration (3+ areas)
-- **Expected behavior**:
-  - Skill announces the findings from codebase analysis
-  - Proposes switching to the Design Flow as a user choice rather than continuing to draft an oversized single issue
-  - Does NOT silently continue in the Lightweight Flow once the escalation criteria are clearly met
-- **Verification**:
-  - [ ] Findings are stated before proposing escalation
-  - [ ] Escalation is proposed, not forced
-  - [ ] If the user declines, the skill continues in Lightweight Flow with the now-broader scope acknowledged
+### Case 20: Split declined
 
-### Case 16: Split declined
+- **Persona**: Engineer who wants one ticket for everything
+- **Setup**: the plan yields 4 tasks; the user annotates the Split Proposal to
+  ask for a single issue, then approves
+- **Expected behavior**: exactly ONE issue is created, carrying the breakdown
+  as a `## Task Breakdown` section; no sub-issue calls are made; the research
+  comment lands on that single issue; the plan file is deleted.
+- **Criteria**: 11, 12, 14
 
-- **Persona**: Engineer who wants one ticket to track everything
-- **Setup**: Design Flow (D1-D3) completes and yields 4 tasks; at the Step D4 Split Proposal gate, the user picks "Create a single issue"
-- **Expected behavior**:
-  - Skill creates ONE comprehensive issue containing the task breakdown as a `## Task Breakdown` section (not a parent/sub-issue hierarchy)
-  - No sub-issues or grandchild issues are created
-  - Plan and research files are still cleaned up
-- **Verification**:
-  - [ ] Exactly one issue is created on the tracker
-  - [ ] The issue body includes all 4 tasks as clearly delimited subsections
-  - [ ] No sub-issue API/CLI calls are made
-  - [ ] Local plan/research files are deleted
+### Case 21: Nested split (grandchild)
 
-### Case 17: Nested split (grandchild)
+- **Persona**: Engineer on GitHub with one unusually large task
+- **Setup**: after refinement one task remains Large and is proposed for a
+  nested split in the plan's Split Proposal
+- **Expected behavior**: the nested level appears in the approved tree; the
+  child is created as a sub-issue that also carries its own Task Overview;
+  grandchildren are linked to the child; both Task Overview tables are updated
+  with real numbers; depth never exceeds 3.
+- **Criteria**: 14, 15
 
-- **Persona**: Engineer designing a feature on GitHub where one task is unusually large
-- **Setup**: Design Flow decomposition yields 3 tasks; after refinement, one task remains Large (~2+ hours) and cannot be shrunk further without becoming multiple deliverables
-- **Expected behavior**:
-  - Skill proposes a nested split for that task specifically (grandchild issues under it) as part of the Step D4 Split Proposal, shown in the ASCII tree with a 3rd level
-  - User confirms via a user choice
-  - GitHub nested sub-issue links are created (child issue linked to parent; grandchild issues linked to the child)
-  - Output hierarchy tree shows all 3 levels
-- **Verification**:
-  - [ ] Grandchild split is proposed only for the task that stayed Large, not applied to all tasks
-  - [ ] Maximum depth of 3 levels is respected
-  - [ ] `gh issue edit <child> --add-sub-issue <grandchild>` (or platform equivalent) is used to link grandchildren
-  - [ ] Final output tree correctly shows parent → child → grandchild
-  - [ ] Parent issue's Task Overview is updated with real child issue numbers after sub-issues are created
-  - [ ] Child issue's Task Overview is updated with real grandchild issue numbers after grandchildren are created
+## External Fact Verification Cases
 
-## External Fact Verification Cases (new)
-
-### Case 18: Plausible-but-wrong external default (Lightweight Flow)
+### Case 22: Plausible-but-wrong external default (Lightweight)
 
 - **Persona**: DevOps engineer describing a Helm chart deployment
-- **Initial input**: "We want to enable the built-in cache that ships with the `example-chart` Helm chart — it should already be running by default, we just need to configure it."
-- **Setup**: The chart's actual `values.yaml` (available for the tester to check, e.g. a local `values.yaml` with `cache.enabled: false`) shows the cache is disabled by default — the opposite of what the user's phrasing implies.
-- **Expected behavior**:
-  - Skill does not restate "enabled by default" as fact in the Background/Proposal without checking a primary source
-  - Skill fetches/reads the actual `values.yaml` (or equivalent primary source) before finalizing the draft, or — if no primary source is reachable in the test — marks the default-enabled claim as "unverified" instead of asserting it
-  - Step L5 criterion 10 blocks presentation of a draft that states the wrong default as fact
-- **Key criteria to watch**: #10 (External facts verified), #5 (Non-obvious context — must be correct, not just present)
+- **Initial input**: "We want to enable the built-in cache that ships with the
+  `example-chart` Helm chart — it should already be running by default, we just
+  need to configure it."
+- **Setup**: the chart's actual `values.yaml` has `cache.enabled: false`
+- **Expected behavior**: the default-enabled claim is checked against the
+  chart's own values file before the draft is presented, corrected if wrong,
+  or marked "unverified" — criterion 11 in SKILL.md L3 blocks a draft that
+  states the wrong default as fact.
+- **Criteria**: 16, 6
 
-### Case 19: Plan carries unverified facts into Design Flow issue creation
+### Case 23: Plan carries unverified facts into issue creation
 
-- **Persona**: Platform engineer designing a self-hosted app deployment (mirrors a real incident: aoshimash/homelab-k8s#258–#260)
-- **Setup**: D1 Research and D2 Design produce a plan whose task Background/Approach sections state three external-software claims from memory/search snippets, not from a primary source read this session:
-  1. "The Helm chart bundles the cache dependency by default" (actually `false` in the chart's `values.yaml`)
-  2. An acceptance criterion requiring a component that no longer exists in the current version of the target software
-  3. A "required Postgres extensions" list that is missing one required extension
-- **Expected behavior**:
-  - At D4 Step 0 (Fact-Check External Claims), before any issue is created, the skill identifies these three claims as precise/actionable external-software facts
-  - For each, it fetches a primary source (official docs, actual chart `values.yaml`/source) this session and corrects the claim, or — if unable to verify — marks it explicitly as an assumption ("TBD"/"unverified") rather than stating it as fact
-  - No issue is created until the gate is resolved (verified or explicitly marked)
-- **Verification**:
-  - [ ] All three claims are either corrected against a primary source or marked as assumptions before `gh issue create` (or platform equivalent) runs
-  - [ ] The gate does not re-verify unrelated codebase facts already grounded via direct file reads in D1 Research
-  - [ ] No issue is created with a stated-as-fact external claim that wasn't verified this session
+- **Persona**: Platform engineer designing a self-hosted deployment (mirrors
+  aoshimash/homelab-k8s#258–#260)
+- **Setup**: the approved plan states three external claims taken from memory
+  or search snippets: a chart bundling a dependency "by default" (actually
+  false), an AC requiring a component removed in the current version, and a
+  required-extensions list missing one entry
+- **Expected behavior**: D3 step 1 catches all three before any issue is
+  created — each is corrected against a primary source fetched this session or
+  explicitly marked as an assumption. Codebase facts grounded by direct file
+  reads are not re-verified.
+- **Criteria**: 16, 5
 
 ---
 
@@ -288,8 +303,86 @@ Record results here after each evaluation run.
 | 2026-03-05 | 4 | 1,2,3,4,5,6,7,8,9 | — | Clean pass. "Migrate to GraphQL" correctly reframed as "consolidate to single request". | No |
 | 2026-03-05 | 5 | 1,2,3,4,5,6,7,8,9 | — | Clean pass. "Sometimes" narrowed to "6+ items on Chrome" through 5 follow-up questions. | No |
 | 2026-03-05 | 6 | 1,2,3,4,5,6,7,9 | 8 | "Response within 24h" is an operational goal, not an implementation criterion. | Yes — added operational vs implementation criteria separation to Step 3 |
-| 2026-07-05 | — | — | — | Merged design-sprint into create-issue: added adaptive Lightweight/Design flow routing, Split Proposal gate, and cases 9-17 (9-13 renumbered from design-sprint, 14-17 new). Case numbering for 1-8 preserved from the original create-issue log above. | — |
-| 2026-07-08 | — | — | — | Added criterion 10 (External facts verified) to Lightweight Flow L5 and a Fact-Check External Claims gate (D4 Step 0) to Design Flow, per issue #54 (real-world incident: aoshimash/homelab-k8s#258–#260). Added Cases 18-19. | — |
-| 2026-07-16 | — | — | — | Unified design philosophy: issues are reader-agnostic (human or AI) and never contain perishable implementation detail (implementation steps, file-edit lists, code examples) — implementation is planned at implementation time. Sub-Issue template rewritten (Files table and Implementation Approach removed; Proposal and Related Code added); "boring implementation" test reframed as "boring scope" test; plan task fields changed (Files/Approach → Scope/Notes). Pitfall recording made mandatory: traps discovered during research MUST land in task Notes / issue Background as constraints (SKILL.md Background principle, design.md Task Decomposition) — with implementation detail excluded from issues, recorded constraints are the channel that carries design-time knowledge to implementation time. Cases 9 and 13 updated. Full eval re-run pending. | — |
-| 2026-07-26 | — | — | — | Platform reference corrections (no behavior change, no eval re-run): GitHub `--add-sub-issue-blocked-by` (never existed) → `--add-blocked-by`, verified against `gh issue edit --help` on gh 2.96.0; corrected the note conflating issue dependencies with sub-issues; added `--parent`/`--blocked-by` on create and the `parent,subIssues,blockedBy,blocking` JSON fields. Backlog: `--parent` → `--parent-issue`, `bee issue update` → `bee issue edit`, `bee issue-type list <key>` → `-p <key>`, `--status` → `-S`, verified against nulab.github.io/bee. GitLab reference verified accurate, unchanged. | — |
-| 2026-07-26 | — | — | — | Follow-up to the row above, matching the same change in `implement-issue` (see that skill's log): the JSON relationship fields added above were named but their shapes were not, so `.subIssues[]` would silently find nothing. "List Issues" split into a dedicated **Inspect Hierarchy and Dependency Links** section documenting all five fields with shapes (`{nodes, totalCount}` vs `subIssuesSummary`'s `{total, completed, percentCompleted}`), node contents, and upper-case `state`; framed around verifying that a created link actually registered. Added availability constraints (`gh` v2.94.0+; sub-issues GitHub.com/GHES 3.17+; dependencies GHES 3.19+) and demoted the REST `sub_issues` call from an equal alternative ("Or via the REST API") to a triggered fallback, alongside the newly documented `dependencies/blocked_by` and `dependencies/blocking` REST endpoints — both verified live, and both returning `state` lower-case, which the guide now warns against comparing directly to the JSON fields. Every documented command run verbatim on gh 2.96.0 against issues #81–#83. | — |
+| 2026-07-05 | — | — | — | Merged design-sprint into create-issue: adaptive Lightweight/Design routing, Split Proposal gate, cases 9-17. | — |
+| 2026-07-08 | — | — | — | Added external-fact criterion and the D4 fact-check gate per issue #54. | — |
+| 2026-07-16 | — | — | — | Unified design philosophy: reader-agnostic issues, no perishable implementation detail; Sub-Issue template rewritten; pitfall recording made mandatory. | — |
+| 2026-07-26 | — | — | — | Platform reference corrections verified against `gh` 2.96.0 and the Backlog/GitLab CLI docs (no behavior change). | — |
+| 2026-07-26 | — | — | — | Documented the shapes of the `gh` relationship JSON fields and demoted the REST calls to fallbacks. | — |
+
+The rows above evaluate the **pre-rewrite**, one-question-at-a-time skill and
+are historical. Case numbers in them refer to the old case list.
+
+### 2026-07-27 — Batched-interaction rewrite (Refs #96)
+
+Wholesale rewrite per the settled decisions in #91/#96. The criteria table and
+cases 1–23 above were written for the new flows.
+
+Structural changes:
+
+- `SKILL.md`: rewritten. Lightweight Flow is now analyze → **one batched
+  question round** (skipped entirely on complete input) → draft →
+  self-evaluate → single approval. The old L1 type-confirmation step and the
+  "ask exactly one question at a time" instruction are gone; codebase analysis
+  moved **before** the question round so it can decide what is actually open.
+  Design Flow is D0 setup → D1 one plan file → D2 annotation cycle with a
+  single final approval → D3 creation. The "Tasks must be boringly scoped"
+  principle and both boring-scope test invocations are removed; the
+  self-evaluation table gains criterion 9 (structural decisions recorded) and
+  a reworded criterion 10 (self-contained, with local decisions deliberately
+  open) — 11 criteria in total. New sections: "Repository Issue Templates" and
+  an interaction-budget table.
+- `references/plan-file.md` (new, replaces `research.md` + `design.md`):
+  research procedure, design procedure, the 7 task quality checks, and the
+  consolidated plan file format including `## Research Findings`,
+  `## Open Questions` (numbered, with options, a recommendation, and an
+  `**Answer:**` line), and `## Split Proposal`.
+- `references/annotation-cycle.md`: rewritten to resolve answered open
+  questions alongside annotations, and to carry the flow's **single** final
+  approval covering plan and split together. Unanswered questions block it.
+- `references/issue-creation.md`: the separate split gate is gone (approved in
+  D2); a template-selection step and a research-comment step were added; the
+  cleanup step deletes only the plan file, since there is no research file.
+- `references/templates.md`: repository templates declared to take precedence;
+  a `## Design Decisions` section documented for structural decisions and
+  added to the Sub-Issue template.
+- Platform guides: template detection (`.github/ISSUE_TEMPLATE/`,
+  `.gitlab/issue_templates/`, none for Backlog) and comment commands
+  (`gh issue comment --body-file`, `glab issue note -m`,
+  `bee issue comment -b`) added. `gh` flags verified against local `gh`
+  2.96.0; `glab` flags against the official CLI command docs; `bee issue
+  comment` against nulab.github.io/bee; template paths against GitHub's and
+  GitLab's own documentation, all fetched 2026-07-27.
+
+Desk-check of the rewritten cases against the new texts (static inspection):
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 1 | Pass | L2 opens with "if nothing is unresolved, skip this step entirely"; L4 is the only interaction |
+| 2 | Pass | L1 analysis precedes L2; the L2 table batches every unknown in one round |
+| 3 | Pass | L2 table restricts questions to structural decisions; L3 criterion 4 blocks technology prescription |
+| 4 | Pass | Step 2 folds a weak-signal flow choice into the same round |
+| 5 | Pass | L3 criteria 3 and 4 |
+| 6 | Pass | L2 row "Reproduction details" |
+| 7 | Pass | L3 step 3 (language) and criterion 8 (operational vs implementation) |
+| 8 | Pass | L2 rows for issue type and priority sit in the same round; Backlog guide unchanged for Operation |
+| 9 | Pass | Step 1 detects the tracker independently of the code host |
+| 10 | Pass | Step 1 item 3 + "Repository Issue Templates" mapping rules + GitHub guide's form handling |
+| 11 | Pass | "Ask once, in one round" principle and L2's store check |
+| 12 | Pass | "Never settle for vague" principle explicitly allows a batched follow-up round |
+| 13 | Pass | D1 writes one file; D3 posts the comment and deletes the plan |
+| 14 | Pass | plan-file.md step 2 item 2 routes approach choices to `## Open Questions` |
+| 15 | Pass | plan-file.md research section; issue-creation.md step 7 |
+| 16 | Pass | Backlog guide's plain-comment fallback; parent-child and body-level dependencies unchanged |
+| 17 | Pass | annotation-cycle.md step 2 item 4 re-derives graph and split, re-runs the checks |
+| 18 | Pass | annotation-cycle.md step 2 item 3, first bullet |
+| 19 | Pass | annotation-cycle.md step 4, check 2 |
+| 20 | Pass | issue-creation.md step 3 single-issue case; step 7 posts to that issue |
+| 21 | Pass | issue-creation.md step 4 grandchild paragraph + step 5 |
+| 22 | Pass | L3 criterion 11 blocks presentation |
+| 23 | Pass | issue-creation.md step 1 |
+
+All 23 cases pass the desk-check. This entry records a static evaluation
+(instructions inspected against expected behavior); no live conversational run
+was performed for this rewrite. Case 10 (repository issue forms) and case 19
+(unanswered open question) exercise behavior that has never been run live and
+are the first candidates for a live run.

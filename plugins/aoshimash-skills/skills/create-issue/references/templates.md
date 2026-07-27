@@ -1,5 +1,21 @@
 # Issue Templates
 
+These are the skill's own skeletons, used when the repository defines none.
+**When the repository defines issue templates or forms, they take precedence**
+— fill their sections and map the content below into the ones that match, per
+SKILL.md "Repository Issue Templates". The templates here then serve only as
+the checklist of what the body must still convey.
+
+**Design Decisions.** Any structural decision that binds the work — a choice
+with high reversal cost, or one that must stay consistent across sibling
+issues — goes in a `## Design Decisions` section as a
+`| Decision | Choice | Rationale |` table. Add the section to any template
+below when such decisions exist (the Parent Issue and Sub-Issue templates
+carry it already). Local, reversible decisions are deliberately not recorded:
+they belong to implementation time. implement-issue treats recorded decisions
+as settled, never re-asks them, and appends its own answers to the same
+section.
+
 ## Table of Contents
 
 - [Bug Report](#bug-report)
@@ -231,7 +247,7 @@ Used in the Design Flow to represent an entire feature/initiative that has been 
 <!-- Links to related issues, docs, or external resources -->
 ```
 
-> **Note**: The Task Overview table is written with plan-local numbers at creation time (`#1`, `#2`, etc. in the Dependencies column). Step 3.5 of [issue-creation.md](issue-creation.md) updates the table with real issue numbers after sub-issues are created.
+> **Note**: The Task Overview table is written with plan-local numbers at creation time (`#1`, `#2`, etc. in the Dependencies column). Step 5 of [issue-creation.md](issue-creation.md) updates the table with real issue numbers after sub-issues are created.
 
 ---
 
@@ -266,6 +282,15 @@ Parent: #<parent-issue-number>
 
 - [ ] <criterion 1>
 - [ ] <criterion 2>
+
+## Design Decisions
+
+<!-- Structural decisions that bind this task and are not already recorded -->
+<!-- on the parent. Omit the section when there are none. -->
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| ... | ... | ... |
 
 ## Dependencies
 

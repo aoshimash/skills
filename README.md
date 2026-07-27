@@ -28,15 +28,15 @@ The plugin is only one distribution channel. Each skill under `plugins/aoshimash
 create-issue                               implement-issue
 ┌─────────────────────────────┐            ┌──────────────────────────────┐
 │ Lightweight Flow (default)  │            │ Single Mode (default)        │
-│  Gather → Analyze → Draft   │            │  Understand & decide         │
-│  → Self-eval → Create       │            │  → Implement & verify        │
-│                             │            │  → Draft PR → review gates   │
-│ Design Flow (escalated)     │            │  → CI → automated reviewers  │
-│  Research → Design          │  Issues    │  → Ready → Harvest decisions │
-│  → Annotation cycle         │ ────────→  │                              │
-│  → Split Proposal (asks)    │  (tracker) │ Batch Mode (parent/milestone │
-│  → Issue hierarchy          │            │  /label/list)                │
-│                             │            │  Dependency graph            │
+│  Analyze → One batched      │            │  Understand & decide         │
+│  question round → Draft     │            │  → Implement & verify        │
+│  → Self-eval → Approve      │            │  → Draft PR → review gates   │
+│                             │            │  → CI → automated reviewers  │
+│ Design Flow (escalated)     │  Issues    │  → Ready → Harvest decisions │
+│  One plan file (research +  │ ────────→  │                              │
+│  design + open questions +  │  (tracker) │ Batch Mode (parent/milestone │
+│  split) → Annotation cycle  │            │  /label/list)                │
+│  → Approve → Issues         │            │  Dependency graph            │
 │                             │            │  → Parallel worktrees        │
 │                             │            │  → Review gates + pattern    │
 │                             │            │    propagation → Summary     │
@@ -48,8 +48,8 @@ create-issue                               implement-issue
 
 ```
 > /create-issue
-# Simple request → gather info → analyze codebase → draft → self-eval → create
-# Complex request → research → design → annotate plan → propose a split → create issue(s)
+# Simple request → analyze codebase → one batched question round → draft → approve → create
+# Complex request → one plan file (research + design + open questions + split) → annotate → approve → create issue(s)
 
 > /implement-issue
 # Single issue → understand & decide (no routine questions) → implement & verify
@@ -90,7 +90,7 @@ superpowers also contributed a staged workflow with hard approval gates, and bot
 
 **Issue-centric design (original):**
 - superpowers stores specs and plans in `docs/superpowers/` files. This works for solo use but creates friction in team settings — not everyone uses the same tools, and tool-specific files clutter the repo
-- Instead, the issue tracker is the single shared artifact. `create-issue`'s Design Flow uses local files only temporarily during the annotation cycle, then converts everything to issues and deletes the files
+- Instead, the issue tracker is the single shared artifact. `create-issue`'s Design Flow uses one local plan file only during the annotation cycle, then converts everything to issues — the research findings stay as a comment on the parent issue, and the file is deleted
 - This means a team member who doesn't use these skills can still read the issues, pick one up, and implement it — the workflow degrades gracefully
 
 **Reader-agnostic issues (original):**
@@ -104,14 +104,14 @@ superpowers also contributed a staged workflow with hard approval gates, and bot
 - Two-layer decision timing — structural decisions (shape of a split, cross-issue consistency, high reversal cost) are recorded in issues at creation time; local, reversible decisions are delegated to implementation time, guided by the decision principles in the [shared rules corpus](plugins/aoshimash-skills/rules/agent-rules.md), and logged in the PR. When in doubt, a decision belongs on the issue side
 - Never ask twice — before asking, check the decision stores (issue body, repository agent instructions, user-level configuration); every answer is written back to the store matching its scope. The loop closes from the write side too: decisions the implementer made on its own are harvested once the PR is delivered, and the ones that generalize are offered for promotion into a durable store in one batched confirmation — a rule that binds every later run is the user's to approve, not the run's
 - Review-first PRs — removing mid-run gates concentrates human judgment at the PR, so the PR body is ordered for the reviewer: decisions and risk areas first, acceptance criteria mapped to verification evidence, mechanical changes last. Machines finish before humans start: PRs stay draft until CI, the internal review gates, and repository-configured automated reviewers are done; human review comments are never auto-addressed
-- This revision is the design contract the skills are being rewritten against. `implement-issue` has been rewritten against it ([#93](https://github.com/aoshimash/skills/issues/93), [#94](https://github.com/aoshimash/skills/issues/94), [#95](https://github.com/aoshimash/skills/issues/95)) and the diagram above describes it as it is today; `create-issue` still runs its pre-revision flow until [#96](https://github.com/aoshimash/skills/issues/96) lands. Both are tracked under [#91](https://github.com/aoshimash/skills/issues/91)
+- This revision is the design contract both skills were rewritten against — `implement-issue` in [#93](https://github.com/aoshimash/skills/issues/93), [#94](https://github.com/aoshimash/skills/issues/94), [#95](https://github.com/aoshimash/skills/issues/95), and `create-issue` in [#96](https://github.com/aoshimash/skills/issues/96) — and the diagram above describes them as they are today. All tracked under [#91](https://github.com/aoshimash/skills/issues/91)
 - Informed by Anthropic's published guidance at the time of this revision — [Prompting Claude Fable 5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5), [Claude Code best practices](https://code.claude.com/docs/en/best-practices), and [harness design for long-running apps](https://www.anthropic.com/engineering/harness-design-long-running-apps) — and the Claude Code team's published workflow ([How Boris uses Claude Code](https://howborisusesclaudecode.com/)). Full rationale and decision log: [#91](https://github.com/aoshimash/skills/issues/91)
 
 ## Skills
 
 | Skill | Description |
 |-------|-------------|
-| [create-issue](plugins/aoshimash-skills/skills/create-issue/) | Create well-structured issues on any platform (GitHub, GitLab, Backlog) with codebase analysis — from a quick single issue to a designed issue hierarchy (research → design → annotation cycle → parent + sub-issues) |
+| [create-issue](plugins/aoshimash-skills/skills/create-issue/) | Create well-structured issues on any platform (GitHub, GitLab, Backlog) with codebase analysis — from a quick single issue (one batched question round, one approval) to a designed issue hierarchy (one annotated plan file → parent + sub-issues, research kept as an issue comment) |
 | [implement-issue](plugins/aoshimash-skills/skills/implement-issue/) | Read issues, implement autonomously, and open review-first draft PRs — two-stage review, pre-push security review, automated-reviewer response, flip to ready, then post-PR decision harvesting; batch mode (dependency graph, worktrees, parallel agents) for parent issues / milestones / labels / lists |
 | [analyze-sessions](plugins/aoshimash-skills/skills/analyze-sessions/) | Analyze Claude Code session history to detect recurring patterns and propose improvements to skills and settings.json |
 | [respond-to-pr-review](plugins/aoshimash-skills/skills/respond-to-pr-review/) | Process PR review comments one by one — explain, confirm actions, implement fixes, and post reply comments |
