@@ -29,8 +29,9 @@ The same pipeline runs in one of two contexts:
 | Checks still failing after 3 attempts (2-4) | Record the failure in the PR body, continue; the PR stays draft | Stop, report `BLOCKED` |
 | Unresolved Critical/High security finding (2-6) | Stop before pushing, report to the user | Stop before pushing, report `BLOCKED` |
 | Review gates (3-2) | Main agent is responsible for both stages (dispatch per review-gates.md) | Skipped here — the orchestrator runs them after the implementer reports |
-| Draft → ready flip (3-4) | Main agent flips after gates + CI pass | Orchestrator flips after gates + CI pass |
-| Final report (3-6) | Chat recap | One status line to the orchestrator |
+| Automated review response (3-4) | Main agent runs it | Skipped here — the orchestrator runs it per PR before the flip |
+| Draft → ready flip (3-5) | Main agent flips after gates + CI + automated review response | Orchestrator flips after gates + CI + automated review response |
+| Final report (3-7) | Chat recap | One status line to the orchestrator |
 
 ## Phase 1: Understand and Decide
 
@@ -223,7 +224,7 @@ Detect the code hosting platform from the git remote (it may differ from the
 issue tracker — e.g. Backlog issues + GitHub PRs), push the branch, and create
 the PR/MR **as a draft** (see the platform guide; title under 70 characters,
 no Conventional Commit prefix). Draft status is the "machines still working"
-signal: it is removed only in 3-4.
+signal: it is removed only in 3-5.
 
 **PR/MR body — ordered for the reviewer.** Human judgment concentrated at the
 PR is the trade for autonomous execution, so the body leads with what needs
@@ -247,6 +248,7 @@ subtle changes; "None" if none>
 - Spec compliance (Stage 1): <pending → result>
 - Code quality (Stage 2): <pending → result>
 - CI: <pending → result>
+- Automated review: <pending → reviewer(s), N round(s), M addressed, K remaining | none configured>
 
 ## Changes
 <mechanical file-level list — last, it needs the least judgment>
@@ -268,8 +270,8 @@ reading path regardless.
 the Gate Results section as each stage completes.
 
 **Orchestrated**: skip this step — the orchestrator runs the gates and
-re-invokes this implementer for fix rounds. Continue with 3-3 and 3-5, then
-report (3-6); never perform the 3-4 flip.
+re-invokes this implementer for fix rounds. Continue with 3-3 and 3-6, then
+report (3-7); never perform the 3-4 automated review response or the 3-5 flip.
 
 ### 3-3. Monitor CI
 
@@ -277,23 +279,49 @@ Watch the PR/MR checks (see the platform guide). On failure: investigate, push
 a fix commit if fixable (max 1 fix round), re-watch. If not fixable or CI is
 not configured, record it under Risk Areas and in Gate Results.
 
-### 3-4. Flip Draft to Ready
+### 3-4. Automated Review Response
 
-Only when **both** review-gate stages pass **and** CI is green, mark the PR/MR
-ready for review (see the platform guide). If either never passes within its
-fix rounds, the PR **stays a draft** with the unresolved state recorded in
-Gate Results / Risk Areas — a draft with honest concerns beats a "ready" PR
-that isn't.
+The repository's own automated reviewers are machines too, so they finish
+before the human starts: detect them, wait (bounded) for their findings,
+address them (fix, push, reply) for a bounded number of rounds, and record
+what is left. See [automated-review.md](automated-review.md) for the full
+procedure. The contract it holds to:
+
+- **Automated reviewers only.** Human review comments are never auto-addressed
+  — they go through the interactive respond-to-pr-review skill. Ambiguous
+  authorship counts as human.
+- **Bounded everywhere.** Detection is a few reads; waiting has a completion
+  signal or a wall-clock cap; fix/reply rounds max out at 2. With no automated
+  reviewer configured, the step records that and ends immediately.
+- **Nothing silently dropped.** Every collected finding gets a reply, and
+  findings left after the last round are recorded in the PR body (Risk Areas)
+  rather than chased.
+- **Findings are decided, not obeyed.** Each one is resolved by the same rules
+  as any implementation-time decision (1-3) and logged the same way; a bot
+  does not reopen a settled decision.
+
+**Orchestrated**: skip this step — the orchestrator runs it per PR before the
+flip (batch.md B2-3).
+
+### 3-5. Flip Draft to Ready
+
+Only when **both** review-gate stages pass, CI is green, **and** the automated
+review response of 3-4 has completed, mark the PR/MR ready for review (see the
+platform guide). If a gate or CI never passes within its fix rounds, the PR
+**stays a draft** with the unresolved state recorded in Gate Results / Risk
+Areas — a draft with honest concerns beats a "ready" PR that isn't. Automated
+review findings recorded as remaining do **not** hold the draft (see
+[automated-review.md](automated-review.md) F).
 
 **Orchestrated**: the orchestrator performs this flip after it runs the gates
-(see batch.md B2-3).
+and the automated review response (see batch.md B2-3).
 
-### 3-5. Comment on the Issue
+### 3-6. Comment on the Issue
 
 If the issue tracker supports comments (e.g. Backlog, or cross-platform setups
 where the PR is not auto-linked), post the PR/MR link on the issue.
 
-### 3-6. Report
+### 3-7. Report
 
 **Direct — chat recap**, the session-side report. It must contain:
 
@@ -304,7 +332,8 @@ where the PR is not auto-linked), post the PR/MR link on the issue.
   Decisions appended, status changes, comments).
 - **Review focus**: the few places a human reviewer should look first.
 - **Gates**: one line per gate — self-review rounds/findings, security review,
-  Stage 1, Stage 2, CI.
+  Stage 1, Stage 2, CI, and automated review (which reviewers were handled, how
+  many rounds, what remains — or that none were configured).
 
 **Orchestrated — one status line** to the orchestrator, plus the PR/MR URL or
 failure details:

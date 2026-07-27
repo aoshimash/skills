@@ -4,8 +4,9 @@ description: >
   Read platform issues (GitHub/GitLab/Backlog), analyze the codebase,
   implement autonomously, and open review-first pull/merge requests: draft
   PR with decisions logged in the body, two-stage review (spec compliance,
-  then code quality), a pre-push security review, and a flip to
-  ready-for-review once gates and CI pass. Implements a single issue end to
+  then code quality), a pre-push security review, an automatic response to the
+  repository's own bot/AI reviewers, and a flip to ready-for-review once gates,
+  CI, and those reviewers are done. Implements a single issue end to
   end with zero routine questions by default; when given a parent issue, a
   milestone, a label, or a list of issues, offers batch implementation with
   a dependency graph, git worktrees, and parallel agent instances where the
@@ -39,11 +40,16 @@ parent issues, milestones, labels, or explicit lists.
    answers are written back to the issue before implementation proceeds —
    never ask twice.
 3. **Review-first PRs; machines finish before humans start** — The PR is
-   created as a **draft** and flipped to ready-for-review only after CI and
-   both review-gate stages pass. The body is ordered for the reviewer:
-   decisions and risk areas first, acceptance criteria mapped to verification
-   evidence, mechanical change lists last. Repository PR templates, when
-   present, take precedence as the skeleton.
+   created as a **draft** and flipped to ready-for-review only after CI passes,
+   both review-gate stages pass, and the repository's own automated reviewers
+   have been responded to (detect → bounded wait → fix, push, reply → record
+   what is left; see
+   [references/automated-review.md](references/automated-review.md)). Human
+   review comments are never auto-addressed — they go through the interactive
+   respond-to-pr-review skill. The body is ordered for the reviewer: decisions
+   and risk areas first, acceptance criteria mapped to verification evidence,
+   mechanical change lists last. Repository PR templates, when present, take
+   precedence as the skeleton.
 4. **Nothing unsafe leaves the machine** — A security review of the pending
    changes runs after checks and self-review pass and **before the branch is
    pushed**; unresolved Critical/High findings block the push.
@@ -124,11 +130,14 @@ its phases end to end without pausing between them:
    security review **before any push** (Critical/High findings block the
    push), commit.
 3. **PR and gates** — push, create a **draft** PR with the review-first body,
-   run Stage 1 and Stage 2 review gates, monitor CI, and flip the PR to ready
-   only when gates and CI all pass; otherwise it stays a draft with the
-   unresolved state recorded.
+   run Stage 1 and Stage 2 review gates, monitor CI, then respond to the
+   repository's automated reviewers (bounded wait, bounded fix/reply rounds,
+   leftovers recorded), and flip the PR to ready only when gates, CI, and that
+   response are done; otherwise it stays a draft with the unresolved state
+   recorded.
 4. **Recap** — report the PR URL and state, every decision made, every issue
-   write-back performed, the review-focus areas, and one line per gate.
+   write-back performed, the review-focus areas, and one line per gate —
+   including which automated reviewers were handled and in how many rounds.
 
 Former mid-run stops (plan approval, location choice, per-decision questions,
 failing-check and self-review escalations) no longer exist: they either
@@ -160,7 +169,10 @@ See [references/batch.md](references/batch.md) for the full procedure.
    After each draft PR is created, the orchestrator runs the two-stage review
    gates ([references/review-gates.md](references/review-gates.md)), including
    **Stage 2.5 pattern propagation** across other in-flight PRs when a
-   rule-violation is found, and flips the PR to ready when gates and CI pass.
+   rule-violation is found, then the **automated review response**
+   ([references/automated-review.md](references/automated-review.md)) with the
+   reviewer set detected once for the whole batch, and flips the PR to ready
+   when gates, CI, and that response are done.
    Update the DAG as issues complete; on failure, mark the issue `BLOCKED`,
    cascade `SKIPPED` to its transitive dependents, and continue with
    independent issues.
@@ -173,6 +185,7 @@ See [references/batch.md](references/batch.md) for the full procedure.
 - [references/workflow.md](references/workflow.md) — Canonical autonomous pipeline (Direct context for Single mode, Orchestrated context for Batch implementers)
 - [references/batch.md](references/batch.md) — Batch mode dependency graph, dispatch, and failure handling
 - [references/review-gates.md](references/review-gates.md) — Two-stage review procedure (Stage 1 spec compliance, Stage 2 code quality, Stage 2.5 pattern propagation)
+- [references/automated-review.md](references/automated-review.md) — Responding to repository-configured automated (bot/AI) reviewers before the draft → ready flip
 - [references/platform-github.md](references/platform-github.md) — GitHub CLI commands
 - [references/platform-gitlab.md](references/platform-gitlab.md) — GitLab CLI commands
 - [references/platform-backlog.md](references/platform-backlog.md) — Backlog CLI commands (bee)

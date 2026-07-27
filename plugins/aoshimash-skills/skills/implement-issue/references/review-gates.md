@@ -2,12 +2,14 @@
 
 ## Purpose
 
-Every PR/MR goes through two review stages before being marked as done — whether it came from Single mode (one issue, Direct context) or Batch mode (many issues, Orchestrated context). Together with CI, these gates control the draft → ready flip: a PR/MR leaves draft status only after both stages pass (see workflow.md 3-4). This mirrors superpowers' two-stage review pattern:
+Every PR/MR goes through two review stages before being marked as done — whether it came from Single mode (one issue, Direct context) or Batch mode (many issues, Orchestrated context). Together with CI and the automated review response ([automated-review.md](automated-review.md)), these gates control the draft → ready flip: a PR/MR leaves draft status only after both stages pass (see workflow.md 3-5). This mirrors superpowers' two-stage review pattern:
 
 1. **Spec compliance** — Does the implementation match what the issue asked for?
 2. **Code quality** — Is the code well-written, safe, and maintainable?
 
 These are separate concerns. Spec compliance prevents over-building and under-building. Code quality catches bugs and style issues. Combining them into one review loses signal.
+
+**Not the same as the repository's automated reviewers.** These two stages are internal to the run — their findings exist only in this session, which is why unresolved ones keep the PR/MR a draft. Reviewers the repository itself configures (bot/AI) are handled separately in workflow.md 3-4 ([automated-review.md](automated-review.md)), after these gates and CI pass; their leftovers are already visible on the PR thread with replies beside them, so they are recorded rather than blocking.
 
 **Single mode note**: with only one issue in flight there is no orchestrator — the main agent is responsible for both stages: run each as a separate fresh-context agent instance where the environment supports one (see Reviewer Dispatch), otherwise review directly with the `SELF-REVIEWED` marker. Stage 2.5 (pattern propagation) never runs in Single mode — there are no other in-flight PRs to scan.
 
@@ -181,5 +183,11 @@ Mode check
                           ├─ No matches / user skips → gates passed
                           └─ User approves → Run fix passes → gates passed (failures non-blocking)
   ↓
-Gates passed + CI green → flip draft to ready (workflow.md 3-4 / batch.md B2-3)
+Gates passed + CI green
+  ↓
+Automated review response (workflow.md 3-4 / automated-review.md)
+  ├─ No automated reviewer configured → done
+  └─ Findings → fix + push + reply, max 2 rounds → leftovers recorded (never block the flip)
+  ↓
+flip draft to ready (workflow.md 3-5 / batch.md B2-3)
 ```
