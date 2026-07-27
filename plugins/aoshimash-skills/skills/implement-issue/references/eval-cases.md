@@ -644,3 +644,40 @@ All 24 cases pass the desk-check. This entry records a static evaluation
 autonomous flow is the session that produced this rewrite's own PR, which
 followed the new pipeline (no plan gate, security review before push, draft
 PR with review-first body, gates, ready flip, recap).
+
+### 2026-07-27 — PR #99 review follow-ups: Reorder procedure, agent-instructions wording, open-issue listing
+
+Three pre-existing gaps flagged during PR #99's code-quality review but out of
+that PR's scope:
+
+- **Reorder is now a defined procedure** (batch.md B1-3, summarized in
+  SKILL.md's Batch summary): since execution order is derived from the DAG,
+  Reorder collects edits to the DAG's inputs (exclude an issue, add an edge,
+  drop a stale body-declared edge), rebuilds the graph, and re-presents the
+  plan until Approve or Abort. Platform-registered relationships are only
+  overridden for the batch, never edited on the platform; an order that
+  contradicts a kept edge is rejected with the conflicting edge named.
+- **Neutral agent-instructions wording** completed in the files PR #99 did not
+  touch for it: batch.md B2-2 item 4, review-gates.md Stage 2 reviewer context,
+  and the three platform guides' Detect Platform steps and config-example
+  headings now say "the project's agent instructions (e.g. CLAUDE.md,
+  AGENTS.md)" instead of prescribing CLAUDE.md, per AGENTS.md portability
+  rules.
+- **Open-issue listing commands added** for GitHub (`gh issue list --state
+  open --limit 20`, flags verified against local `gh` help) and GitLab
+  (`glab issue list`, open-by-default and `--output json` verified against the
+  official CLI docs), backing SKILL.md Phase 0 step 2, which previously only
+  Backlog's guide supported; SKILL.md now points at the platform guide's
+  issue-listing section instead of hedging with "(when supported)".
+
+Desk-check of the affected cases (static inspection, no live run):
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 13 | Pass | Platform detection reads the same `## Issue Tracker` section whatever the instructions file is named; Backlog guide changes are wording-only |
+| 16 | Pass | Approve path through B1-3 unchanged; Reorder definition is additive |
+| 20 | Pass | Manual-list plan approval offers the same three options; Reorder now has defined semantics instead of none |
+| 22 | Pass | Phase 0 routing unchanged; step 2 listing now resolvable on all three platforms |
+
+No behavior removed: Approve/Abort semantics, the DAG builder, and all
+previously documented platform commands are unchanged.

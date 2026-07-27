@@ -7,7 +7,7 @@
 ## Detect Platform
 
 Check in order:
-1. CLAUDE.md `## Issue Tracker` section with `platform: backlog`
+1. The project's agent instructions (e.g. CLAUDE.md, AGENTS.md): an `## Issue Tracker` section with `platform: backlog`
 2. Ask the user (Backlog cannot be inferred from git remote)
 
 ## Read Issue
@@ -23,7 +23,7 @@ bee issue view PROJ-123 --json
 
 ## List Issues
 
-To let the user select an issue when no identifier is provided (Single mode, Phase 0):
+To let the user select an issue when no identifier is provided (Phase 0 step 2):
 
 ```bash
 bee issue list -p <project_key> -S <open_status_id> -L 20
@@ -112,7 +112,9 @@ Post a comment on the issue (e.g., with PR link):
 bee issue comment PROJ-123 -b "PR created: <pr_url>"
 ```
 
-## CLAUDE.md Config Example
+## Agent Instructions Config Example
+
+Add to the project's agent instructions (e.g. CLAUDE.md, AGENTS.md):
 
 ```markdown
 ## Issue Tracker

@@ -79,7 +79,7 @@ If spec compliance fails:
 Review with:
 
 - The PR diff
-- Project conventions (CLAUDE.md path)
+- Project conventions (path to the repository's agent instructions, e.g. CLAUDE.md or AGENTS.md)
 - Instructions below
 
 **Batch mode**: the orchestrator runs a dedicated reviewer — a separate agent instance where available, otherwise self-review with the `SELF-REVIEWED` marker (see Reviewer Dispatch above). **Single mode**: the main agent runs the review the same way — a separate fresh-context instance where available, direct self-review with the marker otherwise.

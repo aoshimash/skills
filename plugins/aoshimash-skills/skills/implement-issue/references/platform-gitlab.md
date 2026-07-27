@@ -7,7 +7,7 @@
 ## Detect Platform
 
 Check in order:
-1. CLAUDE.md `## Issue Tracker` section with `platform: gitlab`
+1. The project's agent instructions (e.g. CLAUDE.md, AGENTS.md): an `## Issue Tracker` section with `platform: gitlab`
 2. Git remote URL contains `gitlab.com` or a known GitLab instance
 
 ## Read Issue
@@ -20,6 +20,17 @@ Structured JSON:
 ```bash
 glab issue view <number> --output json
 ```
+
+## List Open Issues
+
+To let the user select an issue when no identifier is provided (Phase 0 step 2):
+
+```bash
+glab issue list
+```
+
+Open issues are listed by default; add `--output json` for structured output.
+Present the list to the user and ask them to select one.
 
 ## Detect Child Items of a Parent
 
@@ -139,7 +150,9 @@ Used by Phase 0's closed-issue check ("Reopen and implement"):
 glab issue reopen <number>
 ```
 
-## CLAUDE.md Config Example
+## Agent Instructions Config Example
+
+Add to the project's agent instructions (e.g. CLAUDE.md, AGENTS.md):
 
 ```markdown
 ## Issue Tracker

@@ -79,7 +79,8 @@ below use capability terms; map them to your environment as follows.
    - GitLab: [references/platform-gitlab.md](references/platform-gitlab.md)
    - Backlog: [references/platform-backlog.md](references/platform-backlog.md)
 2. Obtain the issue identifier(s). If none are provided, list open issues from
-   the platform (when supported) and ask the user to select.
+   the platform (see the platform guide's issue-listing section) and ask the
+   user to select.
 3. **Mode routing:**
    - **Multiple issues referenced** — a list of numbers, "these issues", a
      milestone, a label, or "run sprint" / "スプリント実行" phrasing →
@@ -148,7 +149,8 @@ See [references/batch.md](references/batch.md) for the full procedure.
    build a DAG from the union; detect cycles and ask the user how to resolve
    them; compute parallel execution groups (topological levels); visualize the
    plan; get approval via a user choice (see Environment Adaptation) with
-   options Approve / Reorder / Abort.
+   options Approve / Reorder / Abort (Reorder collects dependency-graph edits
+   and re-presents the plan — see batch.md B1-3).
 2. **Execution loop** — for each group, implement its issues, each in its own
    git worktree, executing [references/workflow.md](references/workflow.md) in
    the **Orchestrated** context (see that file's Invocation Contexts). Where
