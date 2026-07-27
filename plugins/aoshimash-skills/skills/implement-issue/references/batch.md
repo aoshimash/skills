@@ -69,7 +69,19 @@ Group 3 (sequential, after Group 2):
   #105 — Integration tests [Medium] ← depends on #103, #104
 ```
 
-Ask the user to choose (see Environment Adaptation in SKILL.md) — "Proceed with this execution plan?" with options: Approve / Reorder / Abort.
+Ask the user to choose (see Environment Adaptation in SKILL.md) — "Proceed with this execution plan?" with options:
+
+- **Approve** — proceed to Phase B2.
+- **Reorder** — adjust the plan. Execution order is derived from the DAG, so
+  reordering means editing its inputs: collect the user's changes (exclude an
+  issue from the batch, add a dependency edge to force one issue after another,
+  or drop a body-declared edge the user says is stale), apply them to the B1-1
+  mapping, then rebuild the DAG (B1-2) and re-present the plan. Repeat until
+  the user approves or aborts. Platform-registered relationships the user drops
+  are ignored for this batch only — note the override in the re-presented plan;
+  do not edit them on the platform. A requested order that contradicts a kept
+  dependency edge cannot be applied; say which edge conflicts and re-ask.
+- **Abort** — stop without implementing anything.
 
 ## Phase B2: Execution Loop
 
@@ -101,7 +113,7 @@ Run each issue's implementer with an instruction set that includes:
 2. The absolute path to the worktree already created for it (step B2-1) — the implementer works there, it does not create its own.
 3. The absolute paths to this skill's [workflow.md](workflow.md) and the relevant `platform-*.md` guide, with the instruction:
    > "Read these files, then execute workflow.md Phases 1–3 in the **Orchestrated context** inside the given worktree. Create the PR/MR as a draft and leave it a draft. Skip the review gates (3-2) and the ready flip (3-4) — the orchestrator does both; do run CI monitoring (3-3) and the issue comment (3-5). Then return exactly one status line (`DONE` / `DONE_WITH_CONCERNS` / `NEEDS_CONTEXT` / `BLOCKED`) plus the PR/MR URL or failure details, per workflow.md step 3-6."
-4. The project's CLAUDE.md path.
+4. The path to the project's agent instructions (e.g. CLAUDE.md, AGENTS.md), when the project has one.
 
 Resolve the absolute paths to `workflow.md` and the platform guide before starting the implementer (they live alongside this file in the skill's `references/` directory) — do not rely on the implementer inferring them. When running as a separate agent instance, pass this as its dispatch prompt; when running in the current context, follow it directly.
 

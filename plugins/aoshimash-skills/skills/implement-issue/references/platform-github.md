@@ -7,7 +7,7 @@
 ## Detect Platform
 
 Check in order:
-1. CLAUDE.md `## Issue Tracker` section with `platform: github`
+1. The project's agent instructions (e.g. CLAUDE.md, AGENTS.md): an `## Issue Tracker` section with `platform: github`
 2. Git remote URL contains `github.com`
 
 ## Read Issue
@@ -20,6 +20,16 @@ Structured JSON:
 ```bash
 gh issue view <number> --json title,body,labels,assignees,state
 ```
+
+## List Open Issues
+
+To let the user select an issue when no identifier is provided (Phase 0 step 2):
+
+```bash
+gh issue list --state open --limit 20
+```
+
+Present the list to the user and ask them to select one.
 
 ## Platform-Level Issue Relationships
 
@@ -229,7 +239,9 @@ gh issue close <number>
 gh issue reopen <number>
 ```
 
-## CLAUDE.md Config Example
+## Agent Instructions Config Example
+
+Add to the project's agent instructions (e.g. CLAUDE.md, AGENTS.md):
 
 ```markdown
 ## Issue Tracker
