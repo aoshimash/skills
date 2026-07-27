@@ -1,376 +1,294 @@
 # Evaluation Test Cases
 
+Cases 1–15 evaluate Single mode's autonomous flow (workflow.md, Direct
+context). Cases 16–21 evaluate Batch mode, 22–24 evaluate mode routing.
+
 ## Quality Criteria
 
 | # | Criterion | Pass Condition |
 |---|---|---|
-| 1 | Issue parsed correctly | All fields extracted (summary, motivation, proposal, acceptance criteria) |
-| 2 | Codebase analyzed | Related files, patterns, conventions, and existing branches identified |
-| 3 | Design decisions resolved | User consulted when multiple valid approaches exist, with options and recommendation |
-| 4 | Plan covers all criteria | Every acceptance criterion has a verification method |
-| 5 | Plan stays in scope | No changes unrelated to the issue |
-| 6 | Plan follows conventions | Consistent with CLAUDE.md and existing patterns |
-| 7 | User approval obtained | Plan presented and explicit approval received before coding |
-| 8 | Implementation location chosen | User asked to choose worktree (default) / new branch / current branch |
-| 9 | Branch naming correct | Follows `<type>/<issue-number>-<description>` convention |
-| 10 | Implementation matches plan | No unplanned changes, no scope creep |
-| 11 | Checks pass with loop | Project checks run and failures fixed in loop (max 3 attempts, then escalate) |
-| 12 | AI self-review completed | Diff reviewed, issues fixed in loop (max 3 rounds, then escalate) |
-| 13 | Human escalation works | User consulted when human judgment is needed, with options and recommendation |
-| 14 | PR/MR well-formed | Has summary, issue link, changes list, test plan |
-| 15 | Closed issue detected early | Closed/merged issues caught in Phase 0 with user options (reopen/pick another/abort) |
-| 16 | "Other" free-text respected | When user selects "Other" with free-text, their text is treated as the chosen approach without re-presenting new options |
-| 17 | Auto-fix runs before check loop | Auto-fix commands (formatters, linters with --fix) run once before the check loop when defined in CLAUDE.md |
-| 18 | Post-PR CI monitored | CI checks monitored after PR creation; fixable failures result in a fix commit before returning the PR URL |
-| 19 | Parent-issue confirmation asked | When a single referenced issue has open sub-issues, the user is asked to choose batch / this-issue-only / pick-one before proceeding |
-| 20 | Review gates run in Single mode | Stage 1 (spec compliance) then Stage 2 (code quality) run after PR creation even for a single issue; Stage 2.5 is skipped |
-| 21 | Batch dependency graph correct | Dependencies read from the platform's relationship records first and from issue bodies as fallback, unioned into a valid DAG; closed blockers excluded; cycles are surfaced to the user; parallel groups are computed correctly |
-| 22 | Batch failure cascade works | A BLOCKED issue causes its transitive dependents to be marked SKIPPED; independent issues continue |
-| 23 | Stage 2.5 pattern propagation offered | When a `rule-violation-instance` is found in Batch mode, other in-flight PRs are scanned and the user is offered a fix, without blocking the original issue |
+| 1 | Zero routine interactions | On a well-formed issue, no user question is asked between invocation and the recap |
+| 2 | Issue fully read | Body, parent context, and any attached research comment are read; with a research comment, only the delta is re-verified |
+| 3 | Settled decisions followed | Decisions recorded in the issue, its parent, repository agent instructions, or user-level config are followed without re-asking |
+| 4 | Local decisions logged | Unrecorded reversible decisions are made by repository convention and appear in the PR body's Decisions & Deviations |
+| 5 | Batched question + write-back | Genuinely undecidable decisions produce exactly one batched question; answers are appended to the issue's Design Decisions before implementation proceeds |
+| 6 | Worktree without asking | Implementation happens in a worktree by default (or one already prepared for the run); no location question |
+| 7 | Branch naming correct | `<type>/<issue-number>-<description>` convention |
+| 8 | Checks loop, then record | Auto-fix once, checks loop max 3 attempts; on persistent failure the run continues with the failure recorded in the PR (Direct) or reports BLOCKED (Orchestrated) |
+| 9 | Self-review visible, non-blocking | Diff reviewed max 3 rounds with a visible summary line; remaining concerns recorded in the PR, never escalated mid-run |
+| 10 | Security review gates the push | Security review runs after checks/self-review and before any push; unresolved Critical/High findings block the push; the outcome appears in the PR body |
+| 11 | Review-first draft PR | PR created as a draft; body leads with Decisions & Deviations and Risk Areas, maps each AC to evidence, puts mechanical change lists last; a repository PR template, when present, is the skeleton |
+| 12 | Review gates run | Stage 1 then Stage 2 on every PR; failures after max fix rounds are recorded and the PR stays a draft |
+| 13 | CI monitored | Checks watched after PR creation; fixable failures get a fix commit |
+| 14 | Ready only when done | Draft flips to ready only after both gates and CI pass; otherwise it stays a draft with the state recorded |
+| 15 | Recap complete | Recap reports PR URL and state, every decision made, every issue write-back, review-focus areas, and one line per gate |
+| 16 | Plan mode opt-in only | Plan mode entered only on explicit user request, never by default |
+| 17 | Closed issue detected early | Closed/merged issues caught in Phase 0 with user options (reopen / pick another / abort) |
+| 18 | Parent-issue routing asked | A single referenced issue with open sub-issues triggers the batch / this-issue-only / pick-one question |
+| 19 | Batch DAG correct | Platform relationship records and body declarations unioned; closed blockers excluded; cycles surfaced; parallel groups correct |
+| 20 | Batch failure cascade | BLOCKED issues cascade SKIPPED to transitive dependents; independent issues continue |
+| 21 | Stage 2.5 propagation offered | Rule violations in Batch mode trigger a scan of other in-flight PRs and an offer to propagate, without blocking the original issue |
+| 22 | Orchestrated statuses replace questions | The Orchestrated context never asks the user: NEEDS_CONTEXT / BLOCKED / DONE_WITH_CONCERNS statuses instead; the orchestrator runs the gates and performs the ready flip |
 
-## Single-Issue Test Cases
+## Single-Mode Test Cases
 
-### Case 1: Simple bug fix issue
+### Case 1: Well-formed issue, zero interactions
 
-**Scenario**: User says "implement issue #12" — issue describes a null pointer error in a specific function with clear reproduction steps and acceptance criteria.
+**Scenario**: "implement issue #12" — the issue has motivation, proposal, and
+binary acceptance criteria; all needed decisions are recorded or conventional.
 
-**Expected behavior**:
-- Ask implementation location (default: worktree)
-- Plan is concise (1 file change), no design decisions needed (skip step 1-3)
-- Fix is minimal and targeted
-- Checks and review pass quickly
-- PR references and closes the issue
-- Two-stage review gates run after PR creation (Stage 1 then Stage 2); Stage 2.5 is skipped since only one issue is in flight
+**Expected behavior**: no user question at any point. Worktree created without
+asking, implementation and verification run straight through, a draft PR with
+the review-first body appears, gates and CI pass, the PR flips to ready, and
+the recap reports PR/decisions/write-backs/focus/gates.
 
-**Criteria to test**: 1, 2, 4, 5, 8, 10, 11, 14, 20
+**Criteria to test**: 1, 2, 6, 7, 11, 12, 13, 14, 15
 
-### Case 2: Feature request with multiple valid approaches
+### Case 2: Decisions settled in the parent issue
 
-**Scenario**: User provides issue URL — issue requests a new API endpoint. Both REST and GraphQL are viable.
+**Scenario**: A sub-issue's parent records "use REST, not GraphQL" in its
+Design Decisions.
 
-**Expected behavior**:
-- Present REST vs GraphQL (or similar) as options with pros/cons and recommendation
-- Wait for user's choice before drafting plan
-- Plan lists all files (route, controller, model, migration, tests)
-- Checks loop runs; any test failures are fixed
-- AI review catches issues and fixes them
-- PR created after all checks and review pass
-- Two-stage review gates run after PR creation; Stage 2.5 is skipped
+**Expected behavior**: parent fetched in 1-1; REST followed without any
+question and without re-litigating; no entry needed in the PR's Decisions
+section for it (it is a settled decision, not an implementation-time one).
 
-**Criteria to test**: 3, 4, 6, 7, 10, 11, 12, 14, 20
+**Criteria to test**: 2, 3
 
-### Case 3: Issue with vague acceptance criteria
+### Case 3: Genuinely undecidable decision
 
-**Scenario**: User says "issue #45 を実装して" — issue has good motivation/proposal but acceptance criteria are vague ("it should work well").
+**Scenario**: The issue requires choosing between two storage schemas with
+materially different migration costs; no store records a preference and no
+convention points either way.
 
-**Expected behavior**:
-- Flag the vague criteria during planning
-- Propose 2-3 concrete, testable criteria for user approval
-- Do not proceed with implementation until criteria are clarified
+**Expected behavior**: exactly one batched question (this and any other
+undecidable points together), each with numbered options and a recommendation.
+Answers are appended to the issue's `## Design Decisions` via the platform
+write-back command **before** implementation starts; the recap lists the
+write-back.
 
-**Criteria to test**: 1, 4, 7
+**Criteria to test**: 1, 5, 15
 
-### Case 4: Large issue that should be split
+### Case 4: Vague acceptance criteria
 
-**Scenario**: Issue describes 3+ independent features bundled together.
+**Scenario**: "issue #45 を実装して" — good motivation/proposal, but AC says
+"it should work well".
 
-**Expected behavior**:
-- Recognize the issue is too large for a single PR
-- Suggest splitting into smaller issues/PRs
-- If user insists, implement incrementally with clear scope per commit
+**Expected behavior**: concrete binary criteria are derived from the
+motivation and proposal without asking; they appear in the PR's AC → Evidence
+section. Only if the intent itself is ambiguous does it join the batched
+question.
 
-**Criteria to test**: 5, 7, 10
+**Criteria to test**: 1, 2, 11
 
-### Case 5: Issue in GitLab project
+### Case 5: Checks still failing after 3 attempts
 
-**Scenario**: User says "implement issue #7" in a project with GitLab remote.
+**Scenario**: A test failure survives the auto-fix pass and 3 fix attempts.
 
-**Expected behavior**:
-- Detect GitLab platform from remote URL
-- Ask implementation location
-- Use `glab` CLI to read issue and create MR
-- MR format matches GitLab conventions
+**Expected behavior**: no user escalation. The failure and what was tried are
+recorded under Risk Areas; the run continues to the PR, CI fails, the PR stays
+a draft, and the recap flags it prominently.
 
-**Criteria to test**: 1, 8, 9, 14
+**Criteria to test**: 8, 14, 15
 
-### Case 6: Issue with existing partial implementation
+### Case 6: Self-review finds an ambiguous concern
 
-**Scenario**: User says "implement #30" — there's already a stale branch with partial work.
+**Scenario**: Self-review surfaces a business-rule edge the issue does not
+address, after the batched-question window has passed.
 
-**Expected behavior**:
-- Detect existing branch during codebase analysis
-- Ask user whether to build on existing branch or start fresh
-- Plan accounts for already-completed work if continuing
+**Expected behavior**: resolved by convention if one applies (logged under
+Decisions), otherwise recorded under Risk Areas for the reviewer; the visible
+`Self-review complete: …` line is printed; the run does not stop.
 
-**Criteria to test**: 2, 7, 10
+**Criteria to test**: 4, 9
 
-### Case 7: Tests fail repeatedly during implementation
+### Case 7: Security review finds a Critical issue before push
 
-**Scenario**: Implementation causes test failures that are hard to fix. After 3 attempts, tests still fail.
+**Scenario**: The pending diff contains a hard-coded credential.
 
-**Expected behavior**:
-- Attempt to fix failures up to 3 times
-- After 3 attempts, escalate to user with: which checks fail, what was tried, options (continue/skip/abandon)
-- Respect user's choice and proceed accordingly
+**Expected behavior**: the security review (run after checks and self-review,
+before any push) catches it; the finding is fixed and the review re-run before
+anything is pushed. If it cannot be resolved in 2 rounds, nothing is pushed
+and the run stops with a report. The review outcome appears in Gate Results.
 
-**Criteria to test**: 11, 13
+**Criteria to test**: 10
 
-### Case 8: AI review finds issue needing human judgment
+### Case 8: Review gate fails past its fix rounds
 
-**Scenario**: During AI self-review, a business logic ambiguity is discovered that the issue doesn't address.
+**Scenario**: Stage 2 keeps finding a Critical issue after 2 fix rounds.
 
-**Expected behavior**:
-- Present the ambiguity to user with 2-3 options and a recommendation
-- Wait for user's choice
-- Apply the fix based on user's decision
-- Re-run checks after fix
-- Continue review loop
+**Expected behavior**: the findings are recorded in Risk Areas and Gate
+Results, the PR remains a draft, and the recap's review-focus areas lead with
+them. No mid-run user question.
 
-**Criteria to test**: 12, 13
+**Criteria to test**: 12, 14, 15
 
-### Case 9: Backlog issue implementation
+### Case 9: CI catches what local checks missed
 
-**Scenario**: User says "PROJ-42 を実装して" in a project with Backlog configured as issue tracker and GitHub as code hosting.
+**Scenario**: Local checks pass; CI fails on a stricter rule.
 
-**Expected behavior**:
-- Detects Backlog as issue tracker from CLAUDE.md
-- Fetches issue via `bee issue view` using key `PROJ-42`
-- Updates issue status to "In Progress" on Backlog after plan approval (Phase 2, not Phase 0)
-- Detects GitHub as code hosting from git remote
-- Creates PR on GitHub (not Backlog)
-- Posts comment on Backlog issue with PR link
-- Continuous flow from Phase 2 to Phase 3 without stopping
+**Expected behavior**: failure investigated, fix commit pushed (max 1 round),
+CI re-watched; the ready flip happens only after CI is green.
 
-**Criteria to test**: 1, 2, 4, 5, 8, 9, 10, 14
+**Criteria to test**: 13, 14
 
-### Case 10: Cross-platform with issue listing
+### Case 10: Repository defines a PR template
 
-**Scenario**: User says "implement issue" without specifying an identifier, in a project with Backlog + GitHub setup.
+**Scenario**: The repository has `.github/PULL_REQUEST_TEMPLATE.md`.
 
-**Expected behavior**:
-- Lists open issues from Backlog
-- Presents the list and asks user to select one
-- After selection, proceeds with the normal implementation flow
-- Issue status updated to "In Progress" on Backlog
-- PR created on GitHub
-- Comment posted on Backlog issue with PR link
+**Expected behavior**: the template is the skeleton — its sections filled,
+review-first content mapped into semantically matching sections, unmatched
+sections appended after the template body. The recap still carries the
+decisions-first reading path.
 
-**Criteria to test**: 1, 2, 7, 8, 14
+**Criteria to test**: 11, 15
 
-### Case 11: Already-closed issue
+### Case 11: User explicitly asks for a plan gate
 
-**Scenario**: User says "implement issue #15" — issue #15 is already closed (e.g., fixed in a previous PR).
+**Scenario**: "issue #50 を実装して。まずプランをレビューさせて"
 
-**Expected behavior**:
-- Fetch the issue and detect that it is closed/merged in Phase 0 (before Phase 1)
-- Inform the user: "Issue #15 is already closed."
-- Present options via a user choice: "Reopen and implement" / "Pick another issue" / "Abort"
-- If "Reopen and implement": reopen the issue and proceed with normal flow
-- If "Pick another issue": return to issue selection
-- If "Abort": stop without entering Phase 1
+**Expected behavior**: the explicit request makes plan mode (or a plan
+presentation) opt-in for this run; without such a request, no plan is ever
+presented for approval.
 
-**Criteria to test**: 15
+**Criteria to test**: 16
 
-### Case 12: User selects "Other" with free-text in design decision
+### Case 12: Already-closed issue
 
-**Scenario**: During step 1-3, user is presented with 3 approach options (e.g., REST vs GraphQL vs gRPC) but selects "Other" and types "Use WebSocket for real-time updates".
+**Scenario**: "implement issue #15" — #15 is closed.
 
-**Expected behavior**:
-- Treat "Use WebSocket for real-time updates" as the chosen approach
-- Draft the plan using WebSocket — do NOT present new options like "WebSocket vs SSE vs long polling"
-- Only re-ask if the text is genuinely ambiguous (e.g., too vague to implement)
+**Expected behavior**: detected in Phase 0; the user chooses reopen / pick
+another / abort. This is an anomaly gate, not a routine interaction.
 
-**Criteria to test**: 3, 7, 16
+**Criteria to test**: 17
 
-### Case 13: User selects "Other" with free-text in plan approval
+### Case 13: Cross-platform (Backlog issues + GitHub PRs)
 
-**Scenario**: Plan is presented for approval. User selects "Other" and types "Looks good but use a factory pattern instead of direct instantiation in the service layer".
+**Scenario**: "PROJ-42 を実装して" with Backlog as tracker, GitHub as host.
 
-**Expected behavior**:
-- Treat the text as a specific change request
-- Revise the plan to use factory pattern in the service layer
-- Re-present the revised plan for approval — do NOT present new multiple-choice options about the factory pattern
-- Only re-ask if the feedback contradicts other requirements or is too vague
+**Expected behavior**: issue fetched via `bee`, status set to In Progress
+after decisions are resolved, draft PR created via `gh`, decision write-backs
+posted as Backlog comments, PR link commented on the issue, ready flip via
+`gh pr ready`.
 
-**Criteria to test**: 7, 16
+**Criteria to test**: 5, 11, 14, 15
 
-### Case 14: Auto-fix reduces check loop iterations
+### Case 14: Research comment attached
 
-**Scenario**: CLAUDE.md defines a format auto-fix command (e.g., `prettier --write .`). Generated code has formatting violations that would fail the strict format check.
+**Scenario**: The issue's parent carries a research comment from the
+create-issue Design Flow, dated three weeks ago.
 
-**Expected behavior**:
-- Before entering the check loop, run the auto-fix command once
-- Strict format check now passes on the first loop attempt instead of requiring a manual fix cycle
-- Check loop completes in 1 attempt instead of 2-3
+**Expected behavior**: the comment is read first; only the delta since its
+date is re-verified against the current code instead of re-researching from
+scratch.
 
-**Criteria to test**: 11, 17
+**Criteria to test**: 2
 
-### Case 15: Post-PR CI monitoring catches a fixable failure
+### Case 15: GitLab project
 
-**Scenario**: All local checks pass. PR is created. CI fails due to a check that wasn't run locally (e.g., an integration test or a stricter linting rule enabled only in CI).
+**Scenario**: "implement issue #7" in a GitLab-hosted project.
 
-**Expected behavior**:
-- After PR creation, run `gh pr checks --watch` (GitHub) or `glab mr checks` (GitLab)
-- Detect the CI failure and investigate
-- If fixable: push a fix commit and re-monitor CI until it passes
-- Return the PR URL only after CI is green (or note the failure if not fixable)
+**Expected behavior**: platform detected from the remote; draft MR created
+with `glab mr create --draft`; ready flip with `glab mr update --ready`;
+write-backs via `glab issue update --description`.
 
-**Criteria to test**: 14, 18
+**Criteria to test**: 6, 11, 14
 
 ## Batch Mode Test Cases
 
 ### Case 16: Simple linear batch
 
-**Input:** Parent issue #100 with 3 sub-issues (#101 → #102 → #103, linear dependencies)
+**Input:** Parent issue #100 with 3 sub-issues (#101 → #102 → #103, linear).
 
-**Expected behavior:**
-1. Fetches sub-issues of #100
-2. Builds DAG: #101 → #102 → #103
-3. Executes sequentially: #101 first, then #102, then #103
-4. Each issue gets its own worktree
-5. Two-stage review after each
-6. Summary shows all 3 completed with PR links
+**Expected behavior**: DAG built from platform records ∪ body declarations;
+issues executed in order, each in its own worktree, each producing a draft PR;
+the orchestrator runs both gates per issue and flips each PR to ready when its
+gates and CI pass; summary table accurate.
 
-**Verification:**
-- [ ] Correct dependency graph displayed
-- [ ] Issues executed in correct order
-- [ ] Each PR references the correct issue
-- [ ] Two-stage review ran for each issue
-- [ ] Worktrees cleaned up after completion
-- [ ] Summary table accurate
+**Criteria to test**: 19, 22
 
 ### Case 17: Parallel batch
 
-**Input:** Parent issue #200 with 4 sub-issues:
-- #201 (no deps), #202 (no deps) — parallel
-- #203 (depends on #201), #204 (depends on #202) — parallel after their deps
+**Input:** 4 sub-issues: #201, #202 independent; #203 ← #201, #204 ← #202.
 
-**Expected behavior:**
-1. Builds DAG with 2 groups: {#201, #202} then {#203, #204}
-2. Group 1: #201 and #202 dispatched in parallel (separate worktrees)
-3. Group 2: #203 and #204 dispatched in parallel after Group 1 completes
-4. All 4 PRs created
+**Expected behavior**: two groups; group members dispatched in parallel where
+separate agent instances exist, sequentially otherwise; no worktree conflicts;
+identical DAG semantics either way.
 
-**Verification:**
-- [ ] #201 and #202 run in parallel (concurrent agent instances, where the environment supports them)
-- [ ] #203 waits for #201 to complete
-- [ ] #204 waits for #202 to complete
-- [ ] No worktree conflicts between parallel issues
+**Criteria to test**: 19, 22
 
 ### Case 18: Failure cascading
 
-**Input:** 4 issues: #301 (no deps), #302 (depends on #301), #303 (depends on #302), #304 (no deps)
+**Input:** #301 fails its checks after 3 attempts; #302 ← #301, #303 ← #302,
+#304 independent.
 
-**Scenario:** #301 fails (tests don't pass after 3 attempts)
+**Expected behavior**: #301 reports BLOCKED (no user question), #302/#303
+marked SKIPPED, #304 completes; batch continues; blocked worktree kept for
+debugging.
 
-**Expected behavior:**
-1. #301 and #304 start in parallel
-2. #301 fails → marked BLOCKED
-3. #302 marked SKIPPED (depends on #301)
-4. #303 marked SKIPPED (transitively depends on #301)
-5. #304 continues and completes normally
-6. Summary shows: 1 done, 1 blocked, 2 skipped
+**Criteria to test**: 8, 20, 22
 
-**Verification:**
-- [ ] Batch does NOT stop when #301 fails
-- [ ] #304 completes independently
-- [ ] Transitive dependencies correctly identified
-- [ ] Failed worktree kept for debugging
-- [ ] Summary accurately reflects all statuses
+### Case 19: Spec-compliance catch in batch
 
-### Case 19: Two-stage review catches issues (batch)
+**Input:** #401's AC requires pagination; the implementation omits it.
 
-**Input:** Issue #401 with clear AC: "search returns paginated results"
+**Expected behavior**: Stage 1 FAIL → implementer re-invoked → fix pushed →
+re-review PASS → Stage 2 runs → PR flipped to ready only after both stages and
+CI pass.
 
-**Scenario:** Implementation doesn't include pagination
+**Criteria to test**: 12, 14, 22
 
-**Expected behavior:**
-1. Issue implemented without pagination
-2. Spec compliance review (Stage 1): FAIL — AC "paginated results" not met
-3. Implementer fixes: adds pagination
-4. Re-review: PASS
-5. Code quality review (Stage 2): runs on updated code
-6. Final status: DONE (after fix round)
+### Case 20: Manual issue list
 
-**Verification:**
-- [ ] Spec compliance correctly identifies missing AC
-- [ ] Fix round addresses the issue
-- [ ] Code quality review runs after spec compliance passes
-- [ ] Status reflects the fix round in summary
+**Input:** "implement these issues #501, #502, #503" (no parent).
 
-### Case 20: Manual issue list (batch)
-
-**Input:** User provides "implement these issues #501, #502, #503" (no parent issue)
-
-**Expected behavior:**
-1. Fetches all 3 issues individually
-2. Parses dependencies from issue bodies
-3. Builds DAG from parsed dependencies
-4. Executes normally in Batch mode
-
-**Verification:**
-- [ ] Works without a parent issue
-- [ ] Dependencies parsed from issue body text
-- [ ] Same workflow as parent-based batch
-
-### Case 21: Cross-platform batch (Backlog issues + GitHub PRs)
-
-**Input:** Backlog project issues, code hosted on GitHub
-
-**Expected behavior:**
-1. Detects Backlog as issue tracker
-2. Fetches issues with `bee`
-3. Detects GitHub as code hosting from git remote
-4. Creates PRs with `gh`
-5. Comments on Backlog issues with PR links
-
-**Verification:**
-- [ ] Correct platform detection for both issue tracker and code hosting
-- [ ] Uses `bee` for issue operations
-- [ ] Uses `gh` for PR operations
-- [ ] Backlog issue gets comment with GitHub PR link
-
-## Mode-Routing Test Cases (new)
-
-### Case 22: Parent detection on plain "implement issue #N"
-
-**Scenario**: User says "implement issue #40" — #40 has 3 open sub-issues (#41, #42, #43) and no unresolved dependencies among them.
-
-**Expected behavior**:
-- Phase 0 detects that #40 has open sub-issues (via the platform guide's sub-issue/child detection)
-- Presents a user choice: "Implement all sub-issues (batch)" (Recommended, since 2+ children are open) / "Implement only this issue" / "Pick one sub-issue"
-- If the user picks batch: proceeds to Batch mode (Phase B1 dependency graph) using #41-#43 as the source set
-- If the user picks "only this issue": treats #40 as a normal single issue, does not touch #41-#43
-- If the user picks "pick one": lists #41-#43 and continues in Single mode with the selected child
-
-**Criteria to test**: 19, 21
-
-### Case 23: Single-mode spec-compliance catch
-
-**Scenario**: User says "implement issue #55" (a single, standalone issue with clear AC including "response is paginated"). Implementation is drafted without pagination.
-
-**Expected behavior**:
-- PR is created
-- Stage 1 spec compliance review (run by the main agent, not a separate agent instance) finds AC "paginated" not met → FAIL
-- Main agent fixes and pushes directly (no orchestrator, no re-dispatch)
-- Re-review: PASS
-- Stage 2 code quality review runs next
-- Stage 2.5 pattern propagation is explicitly NOT run — only one issue is in flight
-- User sees the gate results in the final summary
-
-**Criteria to test**: 20
-
-### Case 24: Parent issue, user chooses "implement only this issue"
-
-**Scenario**: User says "implement issue #60" — #60 has 2 open sub-issues, but the user explicitly wants #60 itself implemented (e.g., #60 is a tracking issue with its own small piece of work).
-
-**Expected behavior**:
-- Phase 0 detects the open sub-issues and asks the batch/this-issue-only/pick-one question
-- User selects "Implement only this issue"
-- Flow proceeds as normal Single mode on #60 — plan, approval, implement, PR, review gates
-- The 2 sub-issues are not fetched, planned, or touched in any way
+**Expected behavior**: dependencies parsed from platform records and bodies;
+normal batch flow.
 
 **Criteria to test**: 19
+
+### Case 21: Stage 2.5 pattern propagation
+
+**Input:** Stage 2 flags a `rule-violation-instance` while 3 issues are in
+flight.
+
+**Expected behavior**: other in-flight PR diffs scanned for the pattern; user
+offered Apply to all / Select / Skip; propagation failures do not block the
+original issue.
+
+**Criteria to test**: 21
+
+## Mode-Routing Test Cases
+
+### Case 22: Parent detection on "implement issue #N"
+
+**Scenario**: #40 has 3 open sub-issues.
+
+**Expected behavior**: sub-issues detected in Phase 0; the user chooses batch
+(recommended for 2+) / only this issue / pick one. This scope question is
+asked even though Single mode itself is autonomous.
+
+**Criteria to test**: 18
+
+### Case 23: Single-mode gate results in the recap
+
+**Scenario**: A standalone issue implemented in Single mode; Stage 1 finds and
+fixes one AC miss.
+
+**Expected behavior**: main agent runs both gates itself, fixes and pushes
+directly; Stage 2.5 not run; the recap's gate lines show the fix round; ready
+flip after gates and CI pass.
+
+**Criteria to test**: 12, 14, 15, 22
+
+### Case 24: Parent issue, user picks "only this issue"
+
+**Scenario**: #60 has 2 open sub-issues, but the user wants #60 itself.
+
+**Expected behavior**: after the routing question, #60 proceeds through the
+normal autonomous Single flow; sub-issues untouched.
+
+**Criteria to test**: 1, 18
 
 ---
 
@@ -660,3 +578,69 @@ disproved that. REST reports `state` lower-case where the JSON fields report `OP
 
 `create-issue`'s `platform-github.md` was given the matching treatment in the same change —
 see that skill's own evaluation log entry for the same date.
+
+### 2026-07-27 — Autonomous Single mode rewrite (Refs #93)
+
+Wholesale rewrite per the settled decisions in #91/#93: Single mode is now a
+single autonomous flow with zero routine interactions. Criteria and cases 1–24
+above were rewritten for the new flow; the entries below this one evaluate the
+pre-rewrite interactive skill and are historical.
+
+Structural changes:
+
+- `workflow.md`: the Interactive/Autonomous Execution Modes table became
+  **Invocation Contexts** — Direct (Single) and Orchestrated (Batch) run the
+  same autonomous pipeline and differ only at seven divergence points. Plan
+  approval, the location question, and per-decision questions are gone;
+  decision resolution follows the store order (issue → parent → repository
+  agent instructions → user-level config), undecidable decisions become one
+  batched question whose answers are written back to the issue, and a security
+  review (new step 2-6) gates the push. Phase 3 creates a draft PR with a
+  review-first body and flips it to ready only after both gates and CI pass.
+- `SKILL.md`: principles and description rewritten; Environment Adaptation
+  gains a **Security review** capability row; plan mode is opt-in only.
+- `review-gates.md`: Single-mode "ask the user" escalations replaced with
+  record-in-PR + stay-draft; the flow diagram ends at the ready flip.
+- `batch.md`: implementer instruction updated (draft PR, stop after CI
+  monitoring at 3-3); the orchestrator now also flips PRs to ready (B2-3
+  step 5).
+- Platform guides: verified draft/ready/write-back/comment commands added
+  (`gh` verified locally on 2.x; `glab` flags verified against the official
+  CLI docs; Backlog write-backs use the already-verified comment command
+  rather than unverified description-edit flags).
+
+Plan-mode claim re-evaluation (required by #93): the old prohibition cited
+accidental rejections in the plan-approval UI with no feedback path. That
+claim was not re-verified against the current UI — it no longer needs to be
+load-bearing: with the plan gate removed, plan mode is opt-in regardless of
+UI quality, because any unrequested gate is a round trip. The skill text
+therefore justifies opt-in by round-trip cost alone and no longer asserts the
+UI-misfire claim.
+
+Desk-check of the rewritten cases against the new texts:
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 1 | Pass | Happy path has no question site: worktree without asking (2-1), no plan gate (1-4), draft PR (3-1), ready flip (3-4), recap (3-6) |
+| 2 | Pass | Parent context in 1-1; settled-decision rule in 1-3 category 1 |
+| 3 | Pass | 1-3 category 3: one batched question, write-back before implementation; platform guides carry the write-back commands |
+| 4 | Pass | 1-1 derives binary criteria itself; only intent-level ambiguity joins the batched question |
+| 5 | Pass | 2-4 Direct: record in Risk Areas, continue; PR stays draft via 3-4; recap flags it |
+| 6 | Pass | 2-5 resolves by convention or records under Risk Areas; visible summary line retained |
+| 7 | Pass | 2-6 runs before any push; Critical/High blocks push in both contexts; outcome lands in Gate Results |
+| 8 | Pass | review-gates.md On Failure records findings, PR stays draft, recap flags |
+| 9 | Pass | 3-3 fix loop; 3-4 requires CI green |
+| 10 | Pass | 3-1 template-precedence paragraph; template lookup in platform guides |
+| 11 | Pass | 1-4 and SKILL.md: plan mode only on explicit request |
+| 12 | Pass | Phase 0 step 4 unchanged from previous version |
+| 13 | Pass | Backlog guide: status update, comment write-back, code-host draft/ready delegation |
+| 14 | Pass | 1-1 research-comment paragraph: read first, re-verify delta only |
+| 15 | Pass | GitLab guide: `--draft`, `--ready`, `--description` all doc-verified |
+| 16–21 | Pass | Batch orchestration semantics unchanged; B2-2/B2-3 updated for draft→ready; statuses replace questions (criterion 22) |
+| 22–24 | Pass | Routing and closed-issue questions retained as scope/anomaly gates |
+
+All 24 cases pass the desk-check. This entry records a static evaluation
+(instructions inspected against expected behavior); the first live run of the
+autonomous flow is the session that produced this rewrite's own PR, which
+followed the new pipeline (no plan gate, security review before push, draft
+PR with review-first body, gates, ready flip, recap).

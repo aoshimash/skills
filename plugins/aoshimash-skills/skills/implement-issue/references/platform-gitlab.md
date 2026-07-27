@@ -51,14 +51,7 @@ Also parse the issue body for `Blocked by: #N` patterns.
 
 ## Create Branch
 
-**New branch or current-branch flows (Single mode):**
-
-```bash
-git checkout main && git pull
-git checkout -b <branch-name>
-```
-
-**Worktree flow (Single mode default, and always in Batch mode):**
+**Worktree flow (the default in both modes):**
 
 ```bash
 git fetch origin
@@ -72,22 +65,47 @@ git worktree add .worktrees/<branch-name> -b <branch-name> origin/<default-branc
 git push -u origin <branch-name>
 ```
 
-## Create Merge Request
+## Read Issue Comments (research comment)
+
+Used in workflow.md 1-1 to find a research comment attached by the create-issue
+Design Flow:
 
 ```bash
-glab mr create --title "<title>" --description "$(cat <<'EOF'
-## Summary
-<bullets>
+glab issue view <number> --comments
+```
 
-Closes #<issue-number>
+## Write Back Design Decisions to the Issue
 
-## Changes
-<file-level changes>
+Used in workflow.md 1-3 to append batched-question answers to the issue's
+`## Design Decisions` section (create the section if absent). Fetch the current
+description (`glab issue view <number> --output json`), append the decisions,
+then:
 
-## Test Plan
-<verification checklist>
-EOF
-)"
+```bash
+glab issue update <number> --description "<updated body>"
+```
+
+## Check for an MR Template
+
+A repository template, when present, is the MR body skeleton (workflow.md 3-1).
+Look for `.gitlab/merge_request_templates/` (the default template is usually
+`Default.md`).
+
+## Create Draft Merge Request
+
+MRs are always created as drafts (workflow.md 3-1); the body sections come from
+workflow.md 3-1 (or the repository's MR template when one exists):
+
+```bash
+glab mr create --draft --title "<title>" --description "<body>"
+```
+
+## Mark MR Ready for Review
+
+Only after both review-gate stages pass and CI is green (workflow.md 3-4):
+
+```bash
+glab mr update <number> --ready
 ```
 
 ## Link MR to Issue

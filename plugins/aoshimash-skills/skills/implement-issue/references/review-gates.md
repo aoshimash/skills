@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Every PR/MR goes through two review stages before being marked as done — whether it came from Single mode (one issue, interactive) or Batch mode (many issues, orchestrated). This mirrors superpowers' two-stage review pattern:
+Every PR/MR goes through two review stages before being marked as done — whether it came from Single mode (one issue, Direct context) or Batch mode (many issues, Orchestrated context). Together with CI, these gates control the draft → ready flip: a PR/MR leaves draft status only after both stages pass (see workflow.md 3-4). This mirrors superpowers' two-stage review pattern:
 
 1. **Spec compliance** — Does the implementation match what the issue asked for?
 2. **Code quality** — Is the code well-written, safe, and maintainable?
@@ -19,7 +19,7 @@ A review is strongest when run by a **separate agent instance** (see Environment
 
 **Reviewer model.** Where the environment supports **model selection** (see Environment Adaptation in SKILL.md), run each reviewer on a model at least as capable as — ideally more capable than — the implementer's. Well-formed issues deliberately carry no implementation detail (they record decisions and constraints, never steps), so the implementer derives the implementation plan itself; a stronger reviewer is the cheapest guard against derivation errors, especially when implementers run on a faster/cheaper model. On Claude Code, pass a `model` override when dispatching the reviewer as a subagent (e.g. an `opus`-class reviewer over `sonnet`-class implementers). Where model selection is unavailable, run reviewers on the default model — the two-stage structure and fix routing are unchanged.
 
-**Fallback when no separate agent instance is available.** Run the stage's checklist yourself and produce the stage's real verdict exactly as defined below (Stage 1: PASS/FAIL with the issue list; Stage 2: severity-tagged issue counts and PASS/NEEDS_FIXES). Then mark that verdict `SELF-REVIEWED (no independent reviewer available)`. The marker **rides on** the real result — it does not replace it — so the On-Failure fix routing (max 2 rounds, then DONE_WITH_CONCERNS in Batch / escalate in Single) applies unchanged. Record the marker next to the gate outcome in the PR/MR body so a human can see the independent-review guarantee did not hold.
+**Fallback when no separate agent instance is available.** Run the stage's checklist yourself and produce the stage's real verdict exactly as defined below (Stage 1: PASS/FAIL with the issue list; Stage 2: severity-tagged issue counts and PASS/NEEDS_FIXES). Then mark that verdict `SELF-REVIEWED (no independent reviewer available)`. The marker **rides on** the real result — it does not replace it — so the On-Failure fix routing (max 2 rounds, then DONE_WITH_CONCERNS in Batch / record-and-stay-draft in Single) applies unchanged. Record the marker next to the gate outcome in the PR/MR body so a human can see the independent-review guarantee did not hold.
 
 ## Stage 1: Spec Compliance Review
 
@@ -70,7 +70,7 @@ If spec compliance fails:
 2. Re-run spec compliance review.
 3. Max 2 fix rounds. If still failing:
    - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS` and include the review output in the batch summary.
-   - **Single mode**: present the remaining findings to the user via a user choice (see Environment Adaptation) with options Proceed as-is / Keep fixing / Abandon instead of silently marking anything — there is a user present to decide.
+   - **Single mode**: record the remaining findings in the PR body (Risk Areas and Gate Results), leave the PR/MR a **draft**, and surface the findings in the recap's review-focus areas. Do not ask the user mid-run — the draft state plus the recorded findings put the decision where it belongs, at PR review.
 
 ## Stage 2: Code Quality Review
 
@@ -126,7 +126,7 @@ If code quality review finds Critical or Important issues:
 2. Re-run code quality review.
 3. Max 2 fix rounds. If Critical issues remain:
    - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS`.
-   - **Single mode**: present the remaining Critical findings to the user via a user choice (see Environment Adaptation) with options Proceed as-is / Keep fixing / Abandon.
+   - **Single mode**: record the remaining Critical findings in the PR body (Risk Areas and Gate Results), leave the PR/MR a **draft**, and surface them in the recap's review-focus areas.
 
 ## Stage 2.5: Pattern Propagation (Batch Mode Only)
 
@@ -159,25 +159,27 @@ Failures in propagation fixes do **not** block the original issue from completin
 ## Review Flow Diagram
 
 ```
-PR Created
+Draft PR Created
   ↓
 Stage 1: Spec Compliance
   ├─ PASS → Stage 2
   └─ FAIL → Fix (implementer in Batch / main agent in Single) → Re-review (max 2 rounds)
               ├─ PASS → Stage 2
-              └─ FAIL → Batch: DONE_WITH_CONCERNS | Single: ask user
+              └─ FAIL → Record in PR, stays draft; Batch: DONE_WITH_CONCERNS | Single: flag in recap
   ↓
 Stage 2: Code Quality
   ├─ PASS (no Critical/Important) → Mode check
   └─ NEEDS_FIXES → Fix → Re-review (max 2 rounds)
               ├─ PASS → Mode check
-              └─ Still Critical → Batch: DONE_WITH_CONCERNS | Single: ask user
+              └─ Still Critical → Record in PR, stays draft; Batch: DONE_WITH_CONCERNS | Single: flag in recap
   ↓
 Mode check
-  ├─ Single mode → DONE (Stage 2.5 always skipped)
+  ├─ Single mode → gates passed (Stage 2.5 always skipped)
   └─ Batch mode → Stage 2.5 check
-              ├─ No rule violations → DONE
+              ├─ No rule violations → gates passed
               └─ rule-violation-instance → Scan other in-flight PRs
-                          ├─ No matches / user skips → DONE
-                          └─ User approves → Run fix passes → DONE (failures non-blocking)
+                          ├─ No matches / user skips → gates passed
+                          └─ User approves → Run fix passes → gates passed (failures non-blocking)
+  ↓
+Gates passed + CI green → flip draft to ready (workflow.md 3-4 / batch.md B2-3)
 ```
