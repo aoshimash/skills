@@ -2,14 +2,14 @@
 
 Cases 1–15 evaluate Single mode's autonomous flow (workflow.md, Direct
 context). Cases 16–21 evaluate Batch mode, 22–24 evaluate mode routing, 25–30
-evaluate the automated review response (automated-review.md), and 31–39 evaluate
+evaluate the automated review response (automated-review.md), and 31–40 evaluate
 post-PR decision harvesting (harvesting.md).
 
 ## Quality Criteria
 
 | # | Criterion | Pass Condition |
 |---|---|---|
-| 1 | Zero routine interactions | On a well-formed issue, no user question is asked between invocation and the recap |
+| 1 | Zero routine interactions | On a well-formed issue, no user question is asked between invocation and the delivered PR; the post-PR harvesting confirmation (criteria 27–28) is not a routine-flow stop and does not count against this |
 | 2 | Issue fully read | Body, parent context, and any attached research comment are read; with a research comment, only the delta is re-verified |
 | 3 | Settled decisions followed | Decisions recorded in the issue, its parent, repository agent instructions, or user-level config are followed without re-asking |
 | 4 | Local decisions logged | Unrecorded reversible decisions are made by repository convention and appear in the PR body's Decisions & Deviations |
@@ -492,6 +492,19 @@ because the PR is still a draft. The candidate is not lost: a re-run against the
 same issue derives it again.
 
 **Criteria to test**: 27
+
+### Case 40: More candidates than one round can carry
+
+**Scenario**: Judging yields six candidates in an environment whose question tool
+caps a round at four.
+
+**Expected behavior**: the four strongest are offered in the single round; the
+other two are reported in the recap as not offered, with nothing written for
+them. No second confirmation round is opened, and the over-count is treated as a
+signal that the generalizability filter was applied too loosely — not as a reason
+to spend another round trip.
+
+**Criteria to test**: 28
 
 ## Evaluation Log
 
@@ -1004,7 +1017,7 @@ Design decisions recorded here because they shape the eval expectations:
 - **Managed blocks are a real trap** — a rule appended inside one is deleted by
   the next sync. This plugin ships the mechanism (`sync-agent-rules` writes
   delimited blocks into a repository's `AGENTS.md`; the delimiters are specified
-  in `rules/agent-rules.md` "Format"), so any repository this skill runs against
+  in `rules/agent-rules.md` "Contract"), so any repository this skill runs against
   may carry one — this repository's own `AGENTS.md` currently does not. Hence the
   append-outside rule and the recap pointer at the shared-corpus route
   (`collect-agent-rules`), while the skill itself stays generic and targets the
@@ -1045,6 +1058,7 @@ generalizable decision, which this change's own run did not):
 | 37 | Pass | C's fallback paragraph plus the Environment Adaptation row make the missing store visible in the question |
 | 38 | Pass | B's provenance rule excludes it before routing; the recap reports it, matching 3-4's own handling |
 | 39 | Pass | The precondition in harvesting.md's header runs before any candidate is judged; the skip is reported rather than silent |
+| 40 | Pass | D's Capacity rule keeps one round hard and reports the remainder; G lists them as not offered |
 | Case 1 | Pass | The zero-question happy path is preserved: with no candidates the step adds no question site |
 | Criterion 14 | Pass | The flip's preconditions are untouched — harvesting runs strictly after the flip and can never hold a PR in draft |
 | Criterion 15 | Pass | 3-8's recap gains the Promotions bullet, omitted when there were no candidates |
@@ -1089,6 +1103,23 @@ Criterion 34 (drops and downgrades stay visible) and case 39 (a run that ends in
 draft) also came from Stage 2: cases 33 and 37 had been mapped to criteria that
 contradicted or did not cover them, and criterion 27's second clause had no case
 at all.
+
+A second Stage 2 round on the fixed text found four more, all fixed:
+
+- **C's routing table pointed at the wrong sections** (D/E instead of E/F), which
+  would have sent a cross-repository personal preference into a repository PR.
+- **The promotion-worktree block never entered the worktree it created**, so the
+  commit, push, and PR would have run on the implementation branch — defeating
+  the structural isolation the same section promises. The `cd` is now in the
+  block, `git worktree remove` takes its path argument, and cleanup returns to the
+  repository root first.
+- **Criterion 1 ("zero routine interactions") had become unsatisfiable**: it
+  measured "no question between invocation and the recap", and 3-7 sits before the
+  recap. It now measures the delivered PR, with harvesting scored by criteria
+  27–28 instead. The stale "only routine-flow stop" phrasing in workflow.md 1-3
+  and SKILL.md principle 2 was corrected the same way.
+- **Case 40** covers criterion 28's over-capacity clause, which had no case — the
+  same gap case 39 closed for criterion 27.
 
 Criterion 32 and case 38 came out of this change's own security review. The step
 writes stores that outlive the session — user-level configuration steers every

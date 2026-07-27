@@ -81,8 +81,8 @@ now in the write direction:
 
 | Scope of the candidate | Store | Mechanism |
 |---|---|---|
-| A convention for this repository | The repository's agent instructions file | Separate PR/MR (**D**) |
-| A personal preference across repositories | The user's agent configuration (user-level) | Append (**E**) |
+| A convention for this repository | The repository's agent instructions file | Separate PR/MR (**E**) |
+| A personal preference across repositories | The user's agent configuration (user-level) | Append (**F**) |
 | This issue only | Issue body / PR body — already there | Not a candidate |
 
 If the environment exposes no user-level configuration store (see the
@@ -136,6 +136,7 @@ git fetch origin
 root="$(git rev-parse --path-format=absolute --git-common-dir)/.."
 grep -qxF '.worktrees/' "$root/.git/info/exclude" 2>/dev/null || echo '.worktrees/' >> "$root/.git/info/exclude"
 git worktree add "$root/.worktrees/<branch-name>" -b <branch-name> origin/<default-branch>
+cd "$root/.worktrees/<branch-name>"
 ```
 
 Resolving through `--git-common-dir` is what makes those commands work unchanged
@@ -186,9 +187,14 @@ that it was:
   is what keeps that content trustworthy; it is not optional.
 
 If CI fails, or the repository has none, the PR stays a draft and the recap says
-so. Once the PR exists and the flip has been attempted, `cd` out of the promotion
-worktree and remove it (`git worktree remove`) — never before, since the PR is
-created from that worktree's branch.
+so. Once the PR exists and the flip has been attempted, leave the promotion worktree
+and remove it — never before, since the commit, the push, and the PR are all
+created from inside it:
+
+```bash
+cd "$root"
+git worktree remove ".worktrees/<branch-name>"
+```
 
 The implementation PR/MR is not edited to mention this one — its
 `Decisions & Deviations` already records the decision itself, and the recap

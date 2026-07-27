@@ -35,8 +35,9 @@ parent issues, milestones, labels, or explicit lists.
 2. **Autonomous by default, decisions logged not asked** — There is no plan
    approval gate and no location question. Settled decisions are followed;
    local, reversible decisions are made by repository convention and logged in
-   the PR body (`Decisions & Deviations`). The only routine-flow stop is a
-   genuinely undecidable decision, asked as **one batched question** whose
+   the PR body (`Decisions & Deviations`). The only stop before the PR is
+   delivered is a genuinely undecidable decision, asked as **one batched
+   question** whose
    answers are written back to the issue before implementation proceeds —
    never ask twice. Once the PR is delivered, the decisions that were really
    rules are offered — in one batched confirmation, or none at all — for

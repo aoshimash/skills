@@ -94,7 +94,8 @@ the user:
      question** (user choice, numbered options with a recommendation per
      decision). Immediately append the answers to the issue's `## Design
      Decisions` section (create it if absent) using the platform guide's
-     write-back command, then proceed. This is the only routine-flow stop.
+     write-back command, then proceed. This is the only stop before the PR is
+     delivered; the harvesting confirmation of 3-7 comes after it.
    - **Orchestrated**: stop and report `NEEDS_CONTEXT` listing the decisions.
 
 When in doubt whether a decision is undecidable or merely local, treat it as
