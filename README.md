@@ -118,6 +118,7 @@ superpowers also contributed a staged workflow with hard approval gates, and bot
 | [merge-renovate-prs](plugins/aoshimash-skills/skills/merge-renovate-prs/) | Merge Renovate PRs one at a time, autonomously by default — verify monitoring/revert preconditions, LLM pre-check, merge, post-merge verification, and auto-revert on failure; interactive per-PR-approval mode available |
 | [sync-agent-rules](plugins/aoshimash-skills/skills/sync-agent-rules/) | Write the shared conventions from [the rule corpus](plugins/aoshimash-skills/rules/agent-rules.md) into the current repository's `AGENTS.md` — detect which rules apply from the files actually present, write only those into a delimited managed block, and open a PR; additive, so nothing is removed without confirmation |
 | [collect-agent-rules](plugins/aoshimash-skills/skills/collect-agent-rules/) | Promote hand-written conventions from your own repositories into [the rule corpus](plugins/aoshimash-skills/rules/agent-rules.md) — confirm which repositories to scan, read their `AGENTS.md` over the API without cloning, ignore managed blocks, propose the conventions that recur across repositories, and open a PR for the ones approved one at a time |
+| [conference-planner](plugins/aoshimash-skills/skills/conference-planner/) | Plan attendance at a multi-day conference — extract the full program from fragmented sources, resolve every parallel slot with the user one slot at a time, register the choices to a calendar (or an `.ics` file), and build an offline single-file mobile schedule from a shared template |
 
 ## Structure
 
@@ -131,6 +132,7 @@ plugins/aoshimash-skills/
     └── <skill-name>/
         ├── SKILL.md              # Skill definition (required)
         ├── scripts/              # Helper scripts (optional)
+        ├── assets/               # Templates and static files (optional)
         └── references/           # Reference docs (optional)
 ```
 

@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<!--
+  conference-planner canonical template.
+  Replace ONLY the data blocks between "DATA START" and "DATA END" in the
+  script below (EVENT, UI, FLOORS, URLBASE, DAYS, GLOSSARY, PREP), plus the
+  <html lang> and <title> values. Keep the styles and the code after
+  "DATA END" unchanged so every generated schedule shares one UI.
+  Design rationale: ../references/mobile-html.md
+-->
+<html lang="ja"><!-- REPLACE: user's language -->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Conference Schedule — REPLACE</title>
+<style>
+  :root {
+    --bg:#0f1115; --card:#181c23; --line:#2a2f3a;
+    --text:#e8eaed; --dim:#9aa3ae; --acc:#60a5fa; --warn:#f87171;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+    -webkit-text-size-adjust:100%;
+  }
+  #hdr {
+    position:sticky; top:0; z-index:10;
+    background:rgba(15,17,21,.96); backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);
+    padding-top:env(safe-area-inset-top);
+  }
+  #hdr h1 { margin:0; font-size:14px; font-weight:700; padding:10px 14px 2px; }
+  #tabs {
+    display:flex; gap:6px; overflow-x:auto; padding:8px 12px 10px;
+    scrollbar-width:none;
+  }
+  #tabs::-webkit-scrollbar { display:none; }
+  .tabbtn {
+    flex:0 0 auto; border:1px solid var(--line); background:transparent;
+    color:var(--dim); border-radius:999px; padding:6px 13px; font-size:13px;
+    font-family:inherit; cursor:pointer;
+  }
+  .tabbtn .tsub { font-size:10px; color:inherit; opacity:.8; }
+  .tabbtn.active {
+    background:var(--text); color:#0b0d10; border-color:var(--text);
+    font-weight:600;
+  }
+  #view {
+    max-width:640px; margin:0 auto;
+    padding:12px 2px calc(90px + env(safe-area-inset-bottom));
+  }
+  /* ---- schedule rows: floor rail + card ---- */
+  .row {
+    display:grid; grid-template-columns:46px 1fr; gap:8px;
+    padding:0 10px; margin-bottom:8px;
+  }
+  .rail { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .fbadge {
+    width:40px; text-align:center; border-radius:8px; padding:4px 0;
+    font-size:12px; font-weight:700; color:#0b0d10;
+  }
+  .spine { width:3px; flex:1; min-height:8px; border-radius:2px; opacity:.55; }
+  .card {
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:10px 12px;
+  }
+  .plain .card { background:transparent; border-style:dashed; opacity:.8; }
+  .plain .fbadge, .plain .spine { opacity:.45; }
+  .card.past { opacity:.45; }
+  .card.now { border-color:var(--acc); box-shadow:0 0 0 1px var(--acc); }
+  .meta { font-size:12px; color:var(--dim); }
+  .room { color:var(--text); font-size:13px; }
+  .tag {
+    border:1px solid var(--line); border-radius:6px; padding:0 5px;
+    font-size:10px; color:var(--dim);
+  }
+  .nowbadge {
+    background:var(--acc); color:#0b0d10; font-size:10px; font-weight:800;
+    border-radius:6px; padding:1px 6px;
+  }
+  .title { font-size:15px; font-weight:650; line-height:1.35; margin-top:2px; }
+  .spk { font-size:12px; color:var(--dim); margin-top:2px; }
+  .hasbody .head { cursor:pointer; }
+  .hasbody .title::after { content:" ▸"; color:var(--dim); font-size:12px; }
+  .open .title::after { content:" ▾"; }
+  .body {
+    display:none; margin-top:10px; padding-top:10px;
+    border-top:1px solid var(--line); font-size:13px; line-height:1.55;
+  }
+  .open .body { display:block; }
+  .pre {
+    background:rgba(96,165,250,.12); border-left:3px solid var(--acc);
+    border-radius:8px; padding:8px 10px; margin-bottom:8px;
+  }
+  .pre ul { margin:0; padding-left:18px; }
+  .pre li { margin:2px 0; }
+  .desc { margin:6px 0; }
+  .prog { margin:6px 0 6px 0; padding-left:20px; color:var(--dim); }
+  .ask { margin:6px 0; color:#ffd57e; }
+  .note { margin:6px 0; font-size:12px; color:var(--dim); }
+  .link { margin:8px 0 0; }
+  .link a { color:var(--acc); }
+  /* ---- transition rows ---- */
+  .trans {
+    margin:0 10px 8px 64px; padding:4px 10px;
+    display:flex; justify-content:space-between; gap:8px;
+    border:1px dashed var(--line); border-radius:8px;
+    font-size:12px; color:var(--dim);
+  }
+  .trans.warn { color:var(--warn); border-color:var(--warn); }
+  /* ---- glossary / prep tabs ---- */
+  .wrap { padding:0 12px; }
+  #gsearch {
+    width:100%; background:var(--card); border:1px solid var(--line);
+    color:var(--text); border-radius:10px; padding:10px 12px; font-size:14px;
+    font-family:inherit; margin-bottom:12px;
+  }
+  .ggroup h2, .night h2 { font-size:13px; color:var(--dim); margin:16px 0 8px; }
+  .gterm, .pitem {
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:8px 12px; margin-bottom:8px;
+  }
+  .gt { font-weight:700; font-size:14px; }
+  .gd { font-size:13px; margin-top:2px; line-height:1.5; }
+  .gs { font-size:11px; color:var(--dim); margin-top:4px; }
+  .pitem.ess { border-left:3px solid var(--acc); }
+  .pt { font-weight:650; font-size:14px; }
+  .pmin { font-weight:400; font-size:12px; color:var(--dim); }
+  .ptag {
+    font-size:10px; color:var(--acc); border:1px solid var(--acc);
+    border-radius:6px; padding:0 5px;
+  }
+  .ps { font-size:12px; color:var(--dim); margin-top:2px; }
+  .hide { display:none; }
+  .empty { color:var(--dim); text-align:center; padding:40px 0; font-size:13px; }
+  /* ---- jump-to-now ---- */
+  #jumpnow {
+    position:fixed; right:14px;
+    bottom:calc(14px + env(safe-area-inset-bottom));
+    display:none; border:none; border-radius:999px; padding:10px 16px;
+    background:var(--acc); color:#0b0d10; font-size:13px; font-weight:700;
+    font-family:inherit; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,.4);
+  }
+  #jumpnow.show { display:block; }
+</style>
+</head>
+<body>
+<header id="hdr">
+  <h1 id="evname"></h1>
+  <nav id="tabs"></nav>
+</header>
+<main id="view"></main>
+<button id="jumpnow" type="button"></button>
+<script>
+"use strict";
+/* ================= DATA START — replace everything in this block =================
+   Text fields: title/spk/room/label/... are treated as plain text (escaped).
+   body.pre[] / body.d / body.prog[] / body.ask / body.note and glossary .d
+   are inserted as HTML — simple inline markup like <b> is allowed there.   */
+
+var EVENT = { name: "DevConf 20XX" };                     // REPLACE
+
+var UI = {                                                 // REPLACE: user's language
+  move: "移動",            // transition row label
+  min: "分",               // minutes suffix
+  now: "NOW",              // in-progress badge
+  jumpNow: "現在へ",       // jump-to-now button
+  prepTab: "準備",         // preparation tab label
+  glossaryTab: "用語集",   // glossary tab label
+  searchPlaceholder: "用語・説明を検索",
+  essential: "必須",       // essential prep item tag
+  talk: "セッションページ" // session link label
+};
+
+/* One distinct hue per floor plus offsite; "—" is the muted non-venue color. */
+var FLOORS = {
+  "1F": "#4cc38a", "3F": "#5aa7ff", "5F": "#c78bfa",
+  "OFF": "#f0a04b", "—": "#6b7280"
+};
+
+/* Session-page URL prefix; body.id is appended. Empty string = no links. */
+var URLBASE = "";
+
+/* Dates are placeholders (year 2099) so time-awareness stays inert until
+   real dates are filled in. plain:true = muted row (travel, meals, misc). */
+var DAYS = [
+  { id: "d1", label: "1/1 月", date: "2099-01-01", sub: "Day 1", items: [
+    { t: "09:30", e: "10:00", f: "1F", room: "受付", title: "受付・バッジ受け取り", plain: true },
+    { t: "10:00", e: "10:50", f: "1F", room: "Hall A", title: "Opening Keynote(差し替え)",
+      spk: "Speaker, Affiliation", n: "Keynote",
+      body: {
+        pre: ["直前に読む3〜5行をここに", "主張の要点・他セッションとの対比・移動注意・聞くこと"],
+        d: "アブストラクト由来の内容要約。<b>強調</b>が使える。",
+        ask: "質問候補をここに",
+        note: "選んだ理由、他セッションとの関連",
+        id: ""
+      } },
+    { t: "11:10", e: "11:40", f: "5F", room: "501", title: "選択済みセッション(差し替え)",
+      spk: "Speaker, Affiliation", n: "Track A",
+      body: {
+        pre: ["…"],
+        d: "…",
+        note: "選ばなかった並行セッション: …(予定変更時・録画探しのため)"
+      } },
+    { t: "12:00", e: "13:00", f: "—", room: "", title: "ランチ", plain: true },
+    { t: "13:00", e: "13:45", f: "3F", room: "301",
+      title: "Lightning Talks ×3(連続短編は1カードにまとめる)", n: "LT",
+      body: { prog: ["13:00 タイトル1 — Speaker", "13:15 タイトル2 — Speaker", "13:30 タイトル3 — Speaker"] } },
+    { t: "17:30", e: "18:10", f: "—", room: "", title: "会場 → 懇親会会場(徒歩40分)", plain: true },
+    { t: "18:30", e: "20:30", f: "OFF", room: "Venue B", title: "Evening Event(差し替え)",
+      body: { note: "ハード制約(集合時刻・要別登録など)をここに" } }
+  ]},
+  { id: "d2", label: "1/2 火", date: "2099-01-02", sub: "Day 2", items: [
+    { t: "10:00", e: "10:30", f: "3F", room: "302", title: "Session(差し替え)", spk: "Speaker, Affiliation",
+      body: { d: "…" } },
+    { t: "10:35", e: "11:05", f: "5F", room: "502", title: "5分での5F移動 — 警告表示のデモ", spk: "Speaker, Affiliation",
+      body: { d: "…" } }
+  ]}
+];
+
+/* Study add-on: searchable glossary. Empty array = tab hidden. */
+var GLOSSARY = [
+  { domain: "ドメイン名(差し替え)", terms: [
+    { t: "用語A", d: "定義。<b>強調</b>が使える。", s: ["Day1 10:00 Opening Keynote"] },
+    { t: "用語B", d: "定義", s: [] }
+  ]}
+];
+
+/* Study add-on: per-night preparation notes. Empty array = tab hidden. */
+var PREP = [
+  { night: "12/31(前夜)", items: [
+    { topic: "読む資料(差し替え)", min: 15, serves: "対象セッション: Day1 10:00 Keynote", essential: true },
+    { topic: "余裕があれば読む資料", min: 20, serves: "対象セッション: Day1 11:10", essential: false }
+  ]}
+];
+/* ================= DATA END — do not edit below this line ================= */
+
+var TIGHT_GAP_MIN = 10;
+
+function esc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function toMin(t) { var p = t.split(":"); return (+p[0]) * 60 + (+p[1]); }
+function pad(x) { return String(x).length < 2 ? "0" + x : String(x); }
+function nowInfo() {
+  var n = new Date();
+  return {
+    date: n.getFullYear() + "-" + pad(n.getMonth() + 1) + "-" + pad(n.getDate()),
+    mins: n.getHours() * 60 + n.getMinutes()
+  };
+}
+function fc(f) { return FLOORS[f] || FLOORS["—"]; }
+function dayById(id) {
+  for (var i = 0; i < DAYS.length; i++) if (DAYS[i].id === id) return DAYS[i];
+  return null;
+}
+
+var tab = null;            // current tab id
+var openIds = {};          // open card ids (kept across re-renders)
+
+function transitionRow(from, to, gap) {
+  var warn = gap <= TIGHT_GAP_MIN;
+  return '<div class="trans' + (warn ? " warn" : "") + '">' +
+    '<span>' + esc(UI.move) + " " + esc(from) + " → " + esc(to) + '</span>' +
+    '<span>' + gap + esc(UI.min) + '</span></div>';
+}
+
+function card(it, state, id) {
+  var color = fc(it.f);
+  var b = it.body || {};
+  var body = "";
+  if (b.pre && b.pre.length) {
+    body += '<div class="pre"><ul>';
+    for (var i = 0; i < b.pre.length; i++) body += "<li>" + b.pre[i] + "</li>";
+    body += "</ul></div>";
+  }
+  if (b.d) body += '<p class="desc">' + b.d + "</p>";
+  if (b.prog && b.prog.length) {
+    body += '<ol class="prog">';
+    for (var j = 0; j < b.prog.length; j++) body += "<li>" + b.prog[j] + "</li>";
+    body += "</ol>";
+  }
+  if (b.ask) body += '<p class="ask">Q: ' + b.ask + "</p>";
+  if (b.note) body += '<p class="note">' + b.note + "</p>";
+  if (b.id && URLBASE) {
+    body += '<p class="link"><a href="' + esc(URLBASE + b.id) +
+      '" target="_blank" rel="noopener">' + esc(UI.talk) + "</a></p>";
+  }
+  var hasBody = body !== "";
+  var cls = "card " + state +
+    (hasBody ? " hasbody" : "") + (openIds[id] ? " open" : "");
+  var meta = esc(it.t) + (it.e ? "–" + esc(it.e) : "") +
+    (it.room ? ' · <b class="room">' + esc(it.room) + "</b>" : "") +
+    (it.n ? ' <span class="tag">' + esc(it.n) + "</span>" : "") +
+    (state === "now" ? ' <span class="nowbadge">' + esc(UI.now) + "</span>" : "");
+  return '<div class="row' + (it.plain ? " plain" : "") + '">' +
+    '<div class="rail">' +
+      '<span class="fbadge" style="background:' + color + '">' + esc(it.f) + '</span>' +
+      '<span class="spine" style="background:' + color + '"></span>' +
+    '</div>' +
+    '<div class="' + cls + '" data-id="' + esc(id) + '">' +
+      '<div class="head">' +
+        '<div class="meta">' + meta + '</div>' +
+        '<div class="title">' + esc(it.title) + '</div>' +
+        (it.spk ? '<div class="spk">' + esc(it.spk) + "</div>" : "") +
+      '</div>' +
+      (hasBody ? '<div class="body">' + body + "</div>" : "") +
+    "</div></div>";
+}
+
+function renderDay(day) {
+  var info = nowInfo();
+  var isToday = info.date === day.date;
+  var h = "";
+  for (var i = 0; i < day.items.length; i++) {
+    var it = day.items[i];
+    var prev = day.items[i - 1];
+    // transition row on floor change; skip around non-venue / muted rows
+    if (prev && prev.f !== it.f && it.f !== "—" && prev.f !== "—" &&
+        !it.plain && !prev.plain) {
+      h += transitionRow(prev.f, it.f, toMin(it.t) - toMin(prev.e || prev.t));
+    }
+    var state = !isToday ? "" :
+      info.mins >= toMin(it.t) && info.mins < toMin(it.e || it.t) ? "now" :
+      info.mins >= toMin(it.e || it.t) ? "past" : "";
+    h += card(it, state, "c-" + day.id + "-" + i);
+  }
+  return h || '<div class="empty">—</div>';
+}
+
+function glossaryHtml() {
+  var h = '<div class="wrap"><input id="gsearch" type="search" placeholder="' +
+    esc(UI.searchPlaceholder) + '" autocomplete="off">';
+  for (var i = 0; i < GLOSSARY.length; i++) {
+    var g = GLOSSARY[i];
+    h += '<section class="ggroup"><h2>' + esc(g.domain) + "</h2>";
+    for (var j = 0; j < g.terms.length; j++) {
+      var t = g.terms[j];
+      h += '<div class="gterm" data-k="' + esc((t.t + " " + t.d).toLowerCase()) + '">' +
+        '<div class="gt">' + esc(t.t) + '</div>' +
+        '<div class="gd">' + t.d + "</div>" +
+        (t.s && t.s.length ? '<div class="gs">' + t.s.map(esc).join(" · ") + "</div>" : "") +
+        "</div>";
+    }
+    h += "</section>";
+  }
+  return h + "</div>";
+}
+
+function prepHtml() {
+  var h = '<div class="wrap">';
+  for (var i = 0; i < PREP.length; i++) {
+    var nt = PREP[i];
+    h += '<section class="night"><h2>' + esc(nt.night) + "</h2>";
+    for (var j = 0; j < nt.items.length; j++) {
+      var it = nt.items[j];
+      h += '<div class="pitem' + (it.essential ? " ess" : "") + '">' +
+        '<div class="pt">' + esc(it.topic) +
+          ' <span class="pmin">' + it.min + esc(UI.min) + "</span>" +
+          (it.essential ? ' <span class="ptag">' + esc(UI.essential) + "</span>" : "") +
+        '</div>' +
+        '<div class="ps">' + esc(it.serves) + "</div></div>";
+    }
+    h += "</section>";
+  }
+  return h + "</div>";
+}
+
+function updateJump() {
+  document.getElementById("jumpnow").className =
+    document.querySelector(".card.now") ? "show" : "";
+}
+
+function render() {
+  var view = document.getElementById("view");
+  var d = dayById(tab);
+  if (d) view.innerHTML = renderDay(d);
+  else if (tab === "prep") view.innerHTML = prepHtml();
+  else if (tab === "glossary") view.innerHTML = glossaryHtml();
+  updateJump();
+}
+
+function switchTab(id) {
+  tab = id;
+  var btns = document.querySelectorAll(".tabbtn");
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].className = "tabbtn" +
+      (btns[i].getAttribute("data-tab") === id ? " active" : "");
+  }
+  render();
+}
+
+function buildTabs() {
+  var h = "";
+  for (var i = 0; i < DAYS.length; i++) {
+    var d = DAYS[i];
+    h += '<button type="button" class="tabbtn" data-tab="' + esc(d.id) + '">' +
+      esc(d.label) +
+      (d.sub ? ' <span class="tsub">' + esc(d.sub) + "</span>" : "") +
+      "</button>";
+  }
+  if (PREP.length) h += '<button type="button" class="tabbtn" data-tab="prep">' + esc(UI.prepTab) + "</button>";
+  if (GLOSSARY.length) h += '<button type="button" class="tabbtn" data-tab="glossary">' + esc(UI.glossaryTab) + "</button>";
+  document.getElementById("tabs").innerHTML = h;
+}
+
+document.getElementById("evname").textContent = EVENT.name;
+document.title = EVENT.name;
+document.getElementById("jumpnow").textContent = UI.jumpNow;
+buildTabs();
+
+document.getElementById("tabs").addEventListener("click", function (e) {
+  var b = e.target.closest(".tabbtn");
+  if (b) { switchTab(b.getAttribute("data-tab")); window.scrollTo(0, 0); }
+});
+
+// card expand/collapse: toggle a class, never re-render, so scroll survives
+document.getElementById("view").addEventListener("click", function (e) {
+  if (e.target.closest("a")) return;
+  var c = e.target.closest(".card.hasbody");
+  if (!c) return;
+  var id = c.getAttribute("data-id");
+  if (openIds[id]) { delete openIds[id]; c.classList.remove("open"); }
+  else { openIds[id] = true; c.classList.add("open"); }
+});
+
+// glossary search: show/hide in place, so input focus and cursor survive
+document.getElementById("view").addEventListener("input", function (e) {
+  if (e.target.id !== "gsearch") return;
+  var q = e.target.value.trim().toLowerCase();
+  var terms = document.querySelectorAll(".gterm");
+  for (var i = 0; i < terms.length; i++) {
+    var hit = q === "" || terms[i].getAttribute("data-k").indexOf(q) !== -1;
+    terms[i].className = "gterm" + (hit ? "" : " hide");
+  }
+  var groups = document.querySelectorAll(".ggroup");
+  for (var j = 0; j < groups.length; j++) {
+    groups[j].className = "ggroup" +
+      (groups[j].querySelector(".gterm:not(.hide)") ? "" : " hide");
+  }
+});
+
+document.getElementById("jumpnow").addEventListener("click", function () {
+  var el = document.querySelector(".card.now");
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+});
+
+// re-render each minute so NOW advances — but only on a day tab, and
+// preserving scroll (open state is kept via openIds)
+setInterval(function () {
+  if (!dayById(tab)) return;
+  var y = window.scrollY;
+  render();
+  window.scrollTo(0, y);
+}, 60000);
+
+(function init() {
+  var today = null;
+  var date = nowInfo().date;
+  for (var i = 0; i < DAYS.length; i++) if (DAYS[i].date === date) today = DAYS[i];
+  switchTab(today ? today.id : DAYS[0].id);
+  if (today) {
+    requestAnimationFrame(function () {
+      var el = document.querySelector(".card.now");
+      if (el) el.scrollIntoView({ block: "center" });
+    });
+  }
+})();
+</script>
+</body>
+</html>
