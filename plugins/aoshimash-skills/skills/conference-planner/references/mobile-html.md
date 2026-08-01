@@ -227,6 +227,16 @@ Mention this rather than including it by default. On claude.ai, the artifact pre
 
 ## Verification
 
+Where a JavaScript runtime is available, `../scripts/verify-template.js` performs
+every check below in one pass:
+
+```
+node scripts/verify-template.js path/to/schedule.html
+```
+
+It evaluates the target file's inline script, so point it only at schedules this
+skill generated. Without a runtime, confirm the same things by hand.
+
 Before delivering, confirm mechanically:
 
 **The script parses.** Extract the script body and construct a function from it. A stray backtick inside a template literal — easy to introduce when generating code through a shell heredoc — produces a file that renders as a blank page.

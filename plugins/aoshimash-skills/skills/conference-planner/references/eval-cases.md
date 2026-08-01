@@ -153,6 +153,28 @@ personal/shared boundary.
 
 ## Evaluation Log
 
+### 2026-08-01 — Mechanical verification harness
+
+`scripts/verify-template.js` added, implementing the Verification section of
+`mobile-html.md` as a single command. It **runs the template's pure string
+builders and harvests classes from their real output**, rather than
+regex-scanning the source as the previous manual approach did — that approach
+both false-positives on JS string concatenation and misses classes applied via
+`className` assignment, so it could not have caught the defect below.
+
+Checks: script parses; every emitted class exists in the stylesheet; no dead CSS
+classes or id rules; every item floor exists in `FLOORS`; item times ordered and
+well-formed; document closes; tags balance; no external URLs; byte size
+reported. All pass against `assets/template.html` (20,264 bytes).
+
+One **pre-existing** defect found and fixed: `prepHtml()` emitted an `ess` class
+that had no rule in the stylesheet. The 必須 badge already carries that
+distinction, so the class was removed rather than styled.
+
+No change to the planning, calendar, or HTML-design instructions, so cases 1–12
+are unaffected. Criterion 9 ("no external requests", "template-based HTML") is
+now mechanically checkable rather than only inspectable.
+
 ### 2026-07-30 — Initial import (desk-check)
 
 Skill imported into the repository from a standalone `.skill` package, with

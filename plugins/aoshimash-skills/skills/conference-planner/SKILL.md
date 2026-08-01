@@ -57,6 +57,7 @@ below use capability terms; map them to your environment as follows.
 | **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`) | Numbered options as plain text; wait for the user's reply |
 | **Browser automation** — load a JavaScript-rendered page and read its network traffic, storage, or rendered text | Browser tool (e.g. Claude in Chrome) | Static fetch plus any documented API the platform exposes; when neither yields the data, ask the user to open the page and paste or screenshot the program (options 1 and 5 in `references/data-extraction.md`) |
 | **Calendar integration** — read and create events on the user's calendar | Connected calendar tool (e.g. a Google Calendar connector) | Generate an `.ics` file — one `VEVENT` per event, same content rules as Phase 3 — and have the user import it |
+| **Script execution** — run a helper script to verify a generated file | JavaScript runtime (e.g. `node`) | Perform the same checks by hand, following the Verification section of `references/mobile-html.md` |
 
 ---
 
@@ -178,6 +179,10 @@ The design principles that matter:
 **Avoid browser storage.** Keep state in memory so the file behaves identically in restrictive viewers. On claude.ai, the artifact preview blocks `localStorage` and the failure is silent. If the user will self-host, offer the small patch that adds persistence.
 
 **Offer the study add-ons** rather than waiting to be asked: a searchable glossary of terms that will appear in the sessions, and per-night preparation notes. Both exist in the template as auxiliary tabs — fill them when accepted, drop the tabs when declined.
+
+### Verify before delivering
+
+Run `scripts/verify-template.js` against the filled file where a JavaScript runtime is available; without one, work through the Verification section of `references/mobile-html.md` by hand. A stray backtick produces a blank page and a renamed class produces unstyled markup — both are invisible until the user opens the file at the venue.
 
 ### Delivery
 

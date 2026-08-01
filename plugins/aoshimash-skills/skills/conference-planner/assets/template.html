@@ -392,7 +392,7 @@ function prepHtml() {
     h += '<section class="night"><h2>' + esc(nt.night) + "</h2>";
     for (var j = 0; j < nt.items.length; j++) {
       var it = nt.items[j];
-      h += '<div class="pitem' + (it.essential ? " ess" : "") + '">' +
+      h += '<div class="pitem">' +
         '<div class="pt">' + esc(it.topic) +
           ' <span class="pmin">' + it.min + esc(UI.min) + "</span>" +
           (it.essential ? ' <span class="ptag">' + esc(UI.essential) + "</span>" : "") +
