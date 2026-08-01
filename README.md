@@ -1,6 +1,6 @@
 # aoshimash/skills
 
-Personal [Agent Skills](https://agentskills.io) collection. Distributed as a Claude Code plugin, but each skill under `plugins/aoshimash-skills/skills/` is a plain Agent Skills directory usable by any compliant agent.
+Personal [Agent Skills](https://agentskills.io) collection for **development workflow** — issues, pull requests, dependency updates, and the shared conventions behind them. Distributed as a Claude Code plugin, but each skill under `plugins/aoshimash-skills/skills/` is a plain Agent Skills directory usable by any compliant agent.
 
 ## Installation
 
@@ -118,7 +118,6 @@ superpowers also contributed a staged workflow with hard approval gates, and bot
 | [merge-renovate-prs](plugins/aoshimash-skills/skills/merge-renovate-prs/) | Merge Renovate PRs one at a time, autonomously by default — verify monitoring/revert preconditions, LLM pre-check, merge, post-merge verification, and auto-revert on failure; interactive per-PR-approval mode available |
 | [sync-agent-rules](plugins/aoshimash-skills/skills/sync-agent-rules/) | Write the shared conventions from [the rule corpus](plugins/aoshimash-skills/rules/agent-rules.md) into the current repository's `AGENTS.md` — detect which rules apply from the files actually present, write only those into a delimited managed block, and open a PR; additive, so nothing is removed without confirmation |
 | [collect-agent-rules](plugins/aoshimash-skills/skills/collect-agent-rules/) | Promote hand-written conventions from your own repositories into [the rule corpus](plugins/aoshimash-skills/rules/agent-rules.md) — confirm which repositories to scan, read their `AGENTS.md` over the API without cloning, ignore managed blocks, propose the conventions that recur across repositories, and open a PR for the ones approved one at a time |
-| [conference-planner](plugins/aoshimash-skills/skills/conference-planner/) | Plan attendance at a multi-day conference — extract the full program from fragmented sources, resolve every parallel slot with the user one slot at a time, register the choices to a calendar (or an `.ics` file), and build an offline single-file mobile schedule from a shared template |
 
 ## Structure
 
