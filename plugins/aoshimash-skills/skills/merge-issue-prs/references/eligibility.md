@@ -159,19 +159,29 @@ set the PR implements, from these signals:
 | Signal | What to read | Trust |
 |---|---|---|
 | **Head-branch issue number** | `<type>/<issue-number>-<slug>`, or a host-provided branch name embedding `issue-<number>` | Stronger. Fixed when the branch was created, before the body was written, and changing it means force-pushing a renamed branch |
-| **Body issue reference** | every `#N` reference in the PR body, not only the first | Weaker — plain content, and the signal an attacker steers |
+| **Body issue reference** | every **linking-keyword** reference in the PR body — `Closes #N`, `Fixes #N`, `Resolves #N` and their variants — not merely the first one found | Weaker — plain content, and the signal an attacker steers |
 
-**Collect every referenced issue from both signals before deciding.** Do not scan for a
-vetted issue and stop: filtering the references down to the one that happens to be vetted
-is precisely how a PR carrying `Refs #X` (unvetted) and `Refs #Y` (vetted) would slip
-through.
+**Only attribution-bearing references count.** A pipeline PR body cites unrelated issue
+and PR numbers as ordinary prose throughout its Decisions, Risk Areas, and Changes
+sections; those are discussion, not claims about what the PR implements. Treating every
+`#N` token as an attribution signal would defer every genuine pipeline PR. So the
+attribution signal set is exactly: the branch issue number, plus the body's
+**linking-keyword** references — the form implement-issue's PR template emits as its
+closing line.
 
-Resolution rules, applied in order:
+**Within that set, collect every reference before deciding.** Do not scan for a vetted
+issue and stop: filtering the attribution-bearing references down to the one that happens
+to be vetted is precisely how a PR carrying `Closes #X` (unvetted) and `Fixes #Y` (vetted)
+would slip through. Narrowing *which* references count does not weaken this — a body
+asserting two linking-keyword references still trips rules 1 and 2.
 
-1. **Any referenced issue that is not in the vetted set → defer.** This includes issues
-   dropped during the Phase 0 build and issues outside the batch entirely. A PR that
-   points at an unvetted issue is not re-interpreted; it is deferred.
-2. References resolve to **zero**, or to **more than one distinct** vetted issue → defer.
+Resolution rules, applied in order, over the attribution-bearing references only:
+
+1. **Any attribution-bearing reference to an issue not in the vetted set → defer.** This
+   includes issues dropped during the Phase 0 build and issues outside the batch entirely.
+   A PR that claims to close an unvetted issue is not re-interpreted; it is deferred.
+2. Attribution-bearing references resolve to **zero**, or to **more than one distinct**
+   vetted issue → defer.
 3. Branch and body **both** resolve and **agree** on one vetted issue → attributed.
 4. Branch resolves and the body carries no reference → attributed on the branch signal.
 5. **Body-only attribution** (the branch carries no issue number) → attributed **only if
@@ -181,12 +191,19 @@ Resolution rules, applied in order:
 **The clean-build condition (rule 5).** A build is *clean* when every issue the platform
 placed in the batch survived vetting: nothing dropped for lacking write access, no
 permission read that errored, no bot or deleted author, and the set's count reconciled
-against the platform's own total. A clean build means the batch contains **no
-third-party-authored issue at all** — so there is no unvetted issue inside the batch for
-the code to have come from, and attributing on the body cannot redirect E2 to a different
-trust level. If **anything** was dropped, the batch demonstrably contains third-party
-instructions, body content becomes an attacker-influenceable signal, and body-only
-attribution is refused: such a PR needs the branch signal, or it defers.
+against the platform's own total.
+
+What a clean build establishes is **bounded**, and stating it precisely matters: every
+issue *the platform placed in this batch* had a write-access author, so body-only
+attribution cannot redirect E2 to a **batch member** at a different trust level. It does
+**not** establish that the code was written from vetted content — a vetted issue's own body
+can delegate to unvetted material ("implement what #X describes", an external link, a
+quoted comment), leaving the build clean while the instructions came from elsewhere. That
+residual is Known limits #1 and is not closed here.
+
+If **anything** was dropped, the batch demonstrably contains third-party-authored
+instructions as a batch member, body content becomes an attacker-influenceable signal, and
+body-only attribution is refused: such a PR needs the branch signal, or it defers.
 
 Record which rule carried each attribution in the run report, and flag every attribution
 that rested on a single signal.
@@ -234,8 +251,21 @@ the condition that carries the adversarial weight:
   association label alone, or from the fact that the account opened issues before.
 - `read` / `none` → the issue is dropped from the vetted set, and any PR attributing to
   it defers (third-party-authored issue).
-- A permission read that errors or cannot be performed → drop, defer.
-- An issue authored by a bot, or whose author account was deleted → drop, defer.
+- An issue authored by a bot, or whose author account was deleted → drop, defer. These are
+  **substantive** answers: the API reported successfully and the answer disqualifies.
+- A permission read that **errors** → retry before concluding anything. A drop makes the
+  build unclean, which tightens attribution for every PR in the run, so one flaky call must
+  not be indistinguishable from a deliberately linked third-party issue.
+  - **Retry up to 3 times with backoff** on transient failures — network errors, timeouts,
+    5xx, and rate-limit responses.
+  - A **substantive** failure is not retried: a `404` for an account that no longer exists,
+    or an authorization error that will not change on a second attempt. Treat it as an
+    answer, drop the issue, and record which kind it was.
+  - **After retries are exhausted, fail closed** — drop and defer exactly as before. The
+    retry changes how quickly the gate concludes, never what it concludes.
+  - Record transient-exhausted drops **distinctly** from substantive ones in the run
+    report. A run tightened by an unreachable API is worth re-running; a run tightened by a
+    genuine third-party link is not.
 
 ### E3 — Machines finished, gates passed
 

@@ -1,40 +1,97 @@
 {
   "skill_name": "merge-issue-prs",
   "trigger_evals": [
-    { "query": "process the ready pipeline PRs for parent issue #109 — merge what's eligible and tell me what you skipped", "should_trigger": true },
-    { "query": "run the merge gate on the integration branch for this batch", "should_trigger": true },
-    { "query": "which of the implementation PRs from the sprint are safe to auto-merge? check them all", "should_trigger": true },
-    { "query": "auto-merge the issue PRs into integration and open the milestone PR when it's done", "should_trigger": true },
-    { "query": "the batch finished, go merge the per-issue PRs and tell me what got deferred", "should_trigger": true },
-    { "query": "issue #109 の実装PRを統合ブランチにマージしていって", "should_trigger": true },
-    { "query": "パイプラインが作ったPR、マージできるものを判定してマージして", "should_trigger": true },
-    { "query": "自動マージ対象のPRを判定して、対象外は理由をつけて教えて", "should_trigger": true },
-    { "query": "スプリントのPRまとめて統合ブランチに入れて、最後にmainへのPRを作って", "should_trigger": true },
-    { "query": "renovate たまってるからやって", "should_trigger": false },
-    { "query": "merge the dependency update PRs from renovate, verify each one, revert anything that breaks", "should_trigger": false },
-    { "query": "respond to the review comments on PR #231 — two reviewers want changes to the error handling", "should_trigger": false },
-    { "query": "implement issue #110 and open a PR for it", "should_trigger": false },
-    { "query": "create an issue hierarchy for the new auth feature and break it into sub-issues", "should_trigger": false },
-    { "query": "merge my PR #42 into main, I wrote it this morning and it's ready", "should_trigger": false },
-    { "query": "review my pull request for code quality and security issues before I ask for human review", "should_trigger": false },
-    { "query": "set up branch protection on main so PRs need a passing build before merge", "should_trigger": false },
-    { "query": "this branch has a merge conflict in SKILL.md, resolve it for me", "should_trigger": false },
-    { "query": "what's the difference between an integration branch and trunk-based development?", "should_trigger": false }
+    {
+      "query": "process the ready pipeline PRs for parent issue #109 — merge what's eligible and tell me what you skipped",
+      "should_trigger": true
+    },
+    {
+      "query": "run the merge gate on the integration branch for this batch",
+      "should_trigger": true
+    },
+    {
+      "query": "which of the implementation PRs from the sprint are safe to auto-merge? check them all",
+      "should_trigger": true
+    },
+    {
+      "query": "auto-merge the issue PRs into integration and open the milestone PR when it's done",
+      "should_trigger": true
+    },
+    {
+      "query": "the batch finished, go merge the per-issue PRs and tell me what got deferred",
+      "should_trigger": true
+    },
+    {
+      "query": "issue #109 の実装PRを統合ブランチにマージしていって",
+      "should_trigger": true
+    },
+    {
+      "query": "パイプラインが作ったPR、マージできるものを判定してマージして",
+      "should_trigger": true
+    },
+    {
+      "query": "自動マージ対象のPRを判定して、対象外は理由をつけて教えて",
+      "should_trigger": true
+    },
+    {
+      "query": "スプリントのPRまとめて統合ブランチに入れて、最後にmainへのPRを作って",
+      "should_trigger": true
+    },
+    {
+      "query": "renovate たまってるからやって",
+      "should_trigger": false
+    },
+    {
+      "query": "merge the dependency update PRs from renovate, verify each one, revert anything that breaks",
+      "should_trigger": false
+    },
+    {
+      "query": "respond to the review comments on PR #231 — two reviewers want changes to the error handling",
+      "should_trigger": false
+    },
+    {
+      "query": "implement issue #110 and open a PR for it",
+      "should_trigger": false
+    },
+    {
+      "query": "create an issue hierarchy for the new auth feature and break it into sub-issues",
+      "should_trigger": false
+    },
+    {
+      "query": "merge my PR #42 into main, I wrote it this morning and it's ready",
+      "should_trigger": false
+    },
+    {
+      "query": "review my pull request for code quality and security issues before I ask for human review",
+      "should_trigger": false
+    },
+    {
+      "query": "set up branch protection on main so PRs need a passing build before merge",
+      "should_trigger": false
+    },
+    {
+      "query": "this branch has a merge conflict in SKILL.md, resolve it for me",
+      "should_trigger": false
+    },
+    {
+      "query": "what's the difference between an integration branch and trunk-based development?",
+      "should_trigger": false
+    }
   ],
   "evals": [
     {
       "id": 1,
       "name": "eligible-clean-pipeline-pr",
-      "prompt": "Run the merge gate for parent issue #109 on aoshimash/skills. Paper exercise — decide, do not actually merge. Issue #109 has seven registered sub-issues (#110-#116), all opened by the repository owner. One open PR targets `integration/issue-109`: PR #201, head branch `feat/110-merge-issue-prs-skill`, not from a fork, body containing `## Decisions & Deviations`, `## Risk Areas`, `## Acceptance Criteria → Evidence`, `## Gate Results` (all gates recorded as passed) and the line `Refs #110`. It is ready for review; its check rollup has one CheckRun with status COMPLETED and conclusion SUCCESS; it has no comments or reviews. `gh pr view 201 --json closingIssuesReferences` returns an empty array. Describe how you decide whether to merge it, and what you do next.",
-      "expected_output": "The skill builds the vetted issue set FIRST, from the parent issue's registered sub-issue links (platform metadata, not PR content), and applies the write-access check to each of those issues via the collaborator-permission API before reading any PR. It then enumerates candidates on the integration branch, confirms PR #201 is not a fork, confirms the pipeline body structure, and attributes it to issue #110 from the branch number and the body reference agreeing — without needing, or waiting for, a registered closing reference (which it knows is always empty on a non-default base). It confirms the PR is ready for review with gates recorded as passed, reads the check rollup by __typename and finds the single CheckRun COMPLETED/SUCCESS, and confirms no human comment or review exists on any fully-paginated comment surface and that no human-review label is present. It concludes ELIGIBLE, hands the PR to the strictly serial merge loop, and re-reads eligibility immediately before the merge rather than caching the earlier decision.",
+      "prompt": "Run the merge gate for parent issue #109 on aoshimash/skills. Paper exercise — decide, do not actually merge. Issue #109 has seven registered sub-issues (#110-#116), all opened by the repository owner. One open PR targets `integration/issue-109`: PR #201, head branch `feat/110-merge-issue-prs-skill`, not from a fork, body containing `## Decisions & Deviations`, `## Risk Areas`, `## Acceptance Criteria → Evidence`, `## Gate Results` (all gates recorded as passed). It is ready for review; its check rollup has one CheckRun with status COMPLETED and conclusion SUCCESS; it has no comments or reviews. `gh pr view 201 --json closingIssuesReferences` returns an empty array. Its body also cites several unrelated numbers in prose: `## Decisions & Deviations` mentions #109 and #114, and `## Changes` refers to PR #117. The only linking-keyword line is `Closes #110`. Describe how you decide its eligibility and what you do next.",
+      "expected_output": "The skill builds the vetted issue set FIRST, from the parent issue's registered sub-issue links (platform metadata, not PR content), and applies the write-access check to each of those issues via the collaborator-permission API before reading any PR. It then enumerates candidates on the integration branch, confirms PR #201 is not a fork, confirms the pipeline body structure, and attributes it to issue #110. Crucially, it attributes on the ATTRIBUTION-BEARING references only — the branch number plus the `Closes #110` linking-keyword line — and does NOT treat the prose mentions of #109, #114 and #117 as attribution claims; those are discussion, and counting them would wrongly defer a perfectly ordinary pipeline PR. It does not need or wait for a registered closing reference, which is always empty on a non-default base. It confirms the PR is ready for review with gates recorded as passed, reads the check rollup by __typename and finds the single CheckRun COMPLETED/SUCCESS, and confirms no human comment or review exists on any fully-paginated comment surface and that no human-review label is present. It concludes ELIGIBLE and REPORTS that decision. Because this version of the skill specifies eligibility triage only, it does not merge the PR, does not sync it, and does not claim a merge occurred.",
       "files": [],
       "expectations": [
         "Builds the vetted issue set from the parent's registered sub-issue links before reading any PR, and applies the write-access check to that set",
         "Reads the issue author's write access from the platform's collaborator-permission API rather than the login or author association",
-        "Attributes the PR to issue #110 from branch and body signals agreeing, without requiring a registered closing reference",
+        "Attributes the PR to issue #110 using the branch number and the `Closes #110` linking-keyword line, without requiring a registered closing reference",
+        "Does NOT treat the prose mentions of #109, #114 and #117 as attribution-bearing references, and does not defer because of them",
         "Checks all five conditions, including the fork check and a fully-paginated comment read, rather than a subset",
-        "Concludes ELIGIBLE and processes merges strictly serially, one change in flight",
-        "Re-checks eligibility immediately before merging rather than caching the earlier decision"
+        "Concludes ELIGIBLE and reports it without merging, syncing, or implying a merge happened"
       ]
     },
     {
@@ -69,8 +126,8 @@
     {
       "id": 4,
       "name": "ambiguous-pipeline-pr-detection",
-      "prompt": "Run the merge gate for a batch on aoshimash/skills. Paper exercise. Two PRs target the integration branch. PR #204 is opened from a FORK of the repository; it otherwise looks well-formed, has green CI, is ready for review, and has no comments. PR #205 is not a fork, has all four pipeline body sections, green CI, no comments — but its head branch is `feat/117-add-cache` while its body says `Refs #133`; both #117 and #133 are vetted sub-issues of the batch. Decide what to do with each.",
-      "expected_output": "PR #204: deferred immediately on the fork check (E1a), before any other signal is weighed. The skill explains that pushing a branch into the repository requires push permission, so a non-fork head branch is itself evidence a write-access account created the PR — and conversely a fork PR can never be eligible. PR #205: deferred because the two attribution signals DISAGREE — the branch points at #117 and the body at #133. The skill does not pick one, does not merge on the strength of either, and does not average or guess; disagreement is ambiguity and ambiguity defers. It records exactly which signals matched and how they conflicted, and routes both PRs to a human to confirm provenance. It does not edit either PR body, retarget either branch, or otherwise manufacture eligibility. It explicitly declines to count 'the author is the pipeline account' as independent corroboration, since in a single-maintainer repository the pipeline and the human share an account and the signal separates nothing.",
+      "prompt": "Run the merge gate for a batch on aoshimash/skills. Paper exercise. Two PRs target the integration branch. PR #204 is opened from a FORK of the repository; it otherwise looks well-formed, has green CI, is ready for review, and has no comments. PR #205 is not a fork, has all four pipeline body sections, green CI, no comments — but its head branch is `feat/117-add-cache` while its body's only linking-keyword line is `Closes #133`; both #117 and #133 are vetted sub-issues of the batch. Decide what to do with each.",
+      "expected_output": "PR #204: deferred immediately on the fork check (E1a), before any other signal is weighed. The skill explains that pushing a branch into the repository requires push permission, so a non-fork head branch is itself evidence a write-access account created the PR — and conversely a fork PR can never be eligible. PR #205: deferred because the two attribution signals DISAGREE — the branch points at #117 and the body's `Closes #133` at #133. The skill does not pick one, does not merge on the strength of either, and does not average or guess; disagreement is ambiguity and ambiguity defers. It records exactly which signals matched and how they conflicted, and routes both PRs to a human to confirm provenance. It does not edit either PR body, retarget either branch, or otherwise manufacture eligibility. It explicitly declines to count 'the author is the pipeline account' as independent corroboration, since in a single-maintainer repository the pipeline and the human share an account and the signal separates nothing.",
       "files": [],
       "expectations": [
         "Defers the fork PR on the cross-repository check and explains that a non-fork head branch implies the opener had write access",
@@ -141,13 +198,13 @@
     {
       "id": 9,
       "name": "host-provided-branch-name",
-      "prompt": "Run the merge gate for a batch on aoshimash/skills. Paper exercise. The Phase 0 vetted-set build was CLEAN: every sub-issue the platform reported was authored by a write-access user, none were dropped, no permission read errored, and the count reconciled against the platform's total. Two PRs target the integration branch. Both are non-fork, carry all four pipeline body sections, are ready for review with green CI and no comments, and both #113 and #114 are vetted sub-issues. PR #213's head branch is `claude/aoshimash-skills-issue-113-a1b2c3`. PR #214's head branch is `claude/zealous-dirac-948980` and its body contains `Refs #114` and no other issue reference. Neither branch follows the `<type>/<issue-number>-<slug>` convention. Decide what to do with each.",
-      "expected_output": "Both are attributed and eligible; neither is deferred for its branch name. PR #213: the skill extracts issue 113 from the host-provided branch name, which embeds `issue-113` even though it lacks the `<type>/` prefix. PR #214: the branch carries no issue number, so attribution rests on the body reference alone — permitted here ONLY because the vetted-set build was clean. The skill states that dependency explicitly: a clean build means no third-party-authored issue is present in the batch at all, so there is no unvetted issue inside the batch that the code could have come from, and body-only attribution therefore cannot redirect the write-access check to a different trust level. It notes which signal carried each attribution and flags #214 as resting on a single signal. It does NOT justify body attribution with the weaker claim that it 'only selects among vetted issues' — that would be true of issues and false of code. It explains why requiring the branch convention would be wrong: implement-issue explicitly permits keeping a host-prepared branch, so a strict check would permanently exclude a large class of genuine pipeline PRs.",
+      "prompt": "Run the merge gate for a batch on aoshimash/skills. Paper exercise. The Phase 0 vetted-set build was CLEAN: every sub-issue the platform reported was authored by a write-access user, none were dropped, no permission read errored, and the count reconciled against the platform's total. Two PRs target the integration branch. Both are non-fork, carry all four pipeline body sections, are ready for review with green CI and no comments, and both #113 and #114 are vetted sub-issues. PR #213's head branch is `claude/aoshimash-skills-issue-113-a1b2c3`. PR #214's head branch is `claude/zealous-dirac-948980` and its body's only linking-keyword line is `Closes #114`. Neither branch follows the `<type>/<issue-number>-<slug>` convention. Decide what to do with each.",
+      "expected_output": "Both are attributed and eligible; neither is deferred for its branch name. PR #213: the skill extracts issue 113 from the host-provided branch name, which embeds `issue-113` even though it lacks the `<type>/` prefix. PR #214: the branch carries no issue number, so attribution rests on the `Closes #114` line alone — permitted here ONLY because the vetted-set build was clean. The skill states that dependency explicitly: a clean build means no third-party-authored issue is present in the batch at all, so there is no unvetted issue inside the batch that the code could have come from, and body-only attribution therefore cannot redirect the write-access check to a different trust level. It notes which signal carried each attribution and flags #214 as resting on a single signal. It does NOT justify body attribution with the weaker claim that it 'only selects among vetted issues' — that would be true of issues and false of code. It explains why requiring the branch convention would be wrong: implement-issue explicitly permits keeping a host-prepared branch, so a strict check would permanently exclude a large class of genuine pipeline PRs.",
       "files": [],
       "expectations": [
         "Attributes the first PR by extracting the issue number from the host-provided branch name rather than deferring on the missing convention",
         "Attributes the second PR on the body reference and flags it as resting on a single signal",
-        "Ties the permissibility of body-only attribution explicitly to the vetted-set build having been clean, rather than to attribution merely selecting among vetted issues",
+        "Ties the permissibility of body-only attribution to the vetted-set build having been clean, and states that guarantee in its bounded form (every batch member had a write-access author) rather than claiming the code provably came from vetted content",
         "Reports which attribution signal carried each decision",
         "Recognises that requiring the branch convention would permanently exclude genuine pipeline PRs on host-prepared branches"
       ]
@@ -169,8 +226,8 @@
     {
       "id": 11,
       "name": "unclean-build-body-only-attribution",
-      "prompt": "Run the merge gate for parent issue #109 on aoshimash/skills. Paper exercise. Building the vetted set, you find #109 has eight registered sub-issues; seven were opened by the repository owner, but #151 was opened by an outside contributor whose collaborator permission reads 'read', so it is dropped. Two PRs target the integration branch, both non-fork, both carrying all four pipeline body sections, both ready for review with green CI and no comments. PR #216's head branch is `claude/quirky-fermi-773100` — no issue number anywhere in the branch — and its body says `Refs #112`, a vetted sub-issue. PR #217's head branch is `feat/113-add-parser` and its body says `Refs #113`. Decide what to do with each, and be explicit about your reasoning for #216.",
-      "expected_output": "The build is NOT clean: #151 was dropped, so the batch demonstrably contains a third-party-authored issue. PR #217 is attributed and eligible — the branch signal resolves to #113 and the body agrees, so attribution does not rest on content. PR #216 is DEFERRED: its branch carries no issue number, so attribution would rest on the PR body alone, and body-only attribution is refused whenever the build was unclean. The skill articulates the attack it is refusing: a third-party-authored issue can be linked into a batch (sub-issue links need only triage access) and implemented by a pipeline that performs no author check of its own; the resulting PR can land on a host-provided branch, and its body — written by an implementer that read the third party's instructions — could reference a vetted issue instead. Attributing on that body would let content select which issue supplies the write-access check, so content would be granting eligibility, violating the content-can-only-subtract rule. It states plainly that the gate cannot observe which issue an implementer actually read, so it bounds the damage rather than claiming to detect the substitution. It does not merge #216, does not edit it, and reports the deferral with the required human action.",
+      "prompt": "Run the merge gate for parent issue #109 on aoshimash/skills. Paper exercise. Building the vetted set, you find #109 has eight registered sub-issues; seven were opened by the repository owner, but #151 was opened by an outside contributor whose collaborator permission reads 'read', so it is dropped. Two PRs target the integration branch, both non-fork, both carrying all four pipeline body sections, both ready for review with green CI and no comments. PR #216's head branch is `claude/quirky-fermi-773100` — no issue number anywhere in the branch — and its body's only linking-keyword line is `Closes #112`, a vetted sub-issue. PR #217's head branch is `feat/113-add-parser` and its body's only linking-keyword line is `Closes #113`. Decide what to do with each, and be explicit about your reasoning for #216.",
+      "expected_output": "The build is NOT clean: #151 was dropped, so the batch demonstrably contains a third-party-authored issue. PR #217 is attributed and eligible — the branch signal resolves to #113 and the body agrees, so attribution does not rest on content. PR #216 is DEFERRED: its branch carries no issue number, so attribution would rest on the PR body's `Closes #112` alone, and body-only attribution is refused whenever the build was unclean. The skill articulates the attack it is refusing: a third-party-authored issue can be linked into a batch (sub-issue links need only triage access) and implemented by a pipeline that performs no author check of its own; the resulting PR can land on a host-provided branch, and its body — written by an implementer that read the third party's instructions — could reference a vetted issue instead. Attributing on that body would let content select which issue supplies the write-access check, so content would be granting eligibility, violating the content-can-only-subtract rule. It states plainly that the gate cannot observe which issue an implementer actually read, so it bounds the damage rather than claiming to detect the substitution. It does not merge #216, does not edit it, and reports the deferral with the required human action.",
       "files": [],
       "expectations": [
         "Identifies the build as unclean because an issue was dropped for lacking write access",
@@ -207,6 +264,20 @@
         "Falls back to the paginated REST sub-issues endpoint and proceeds only once the counts reconcile",
         "Does not triage the candidate PRs against the partial issue set",
         "Explains that a short set produces unexplained deferrals and leaves some issues' authors unchecked, and must not be treated as a clean build"
+      ]
+    },
+    {
+      "id": 14,
+      "name": "realistic-body-prose-references",
+      "prompt": "Run the merge gate for parent issue #109 on aoshimash/skills. Paper exercise. The vetted set is {110, 111, 112, 113, 114, 115, 116}. PR #218 targets `integration/issue-109`, is non-fork, carries all four pipeline body sections, is ready for review with green CI and no comments, and its head branch is `feat/110-merge-issue-prs-skill`. Its body is a realistic implement-issue PR body: `## Decisions & Deviations` explains a choice by referring to parent issue #109 and to sibling issues #111 and #114; `## Risk Areas` mentions that PR #117 changed an adjacent file; `## Acceptance Criteria → Evidence` quotes eval fixture numbers #213, #214 and #215; and the body's final line is `Closes #110`. Decide whether it is attributed and eligible, and show your reasoning about the references.",
+      "expected_output": "The PR is attributed to issue #110 and is ELIGIBLE. The skill separates attribution-bearing references from prose: the only signals are the branch number (110) and the single linking-keyword line `Closes #110`, which agree. The mentions of #109, #111, #114, #117, #213, #214 and #215 are ordinary discussion — a parent issue, sibling issues, another PR, and quoted fixture numbers — and are NOT attribution claims. The skill explicitly does not defer on them, and articulates why treating every `#N` token as an attribution signal would be wrong: real pipeline PR bodies cite unrelated numbers throughout, so such a rule would defer 100% of genuine pipeline PRs and the gate could never merge anything. It also confirms the narrowing does not weaken the anti-filtering rule: had the body carried two linking-keyword lines, or one naming an issue outside the vetted set, it would still defer under rules 1 and 2.",
+      "files": [],
+      "expectations": [
+        "Attributes the PR to #110 and concludes ELIGIBLE rather than deferring",
+        "Counts only the branch number and the `Closes #110` linking-keyword line as attribution signals",
+        "Explicitly declines to treat the prose mentions (#109, #111, #114, #117, #213, #214, #215) as attribution-bearing references",
+        "Explains that counting every `#N` token would defer every genuine pipeline PR, making the gate unable to merge anything",
+        "Confirms the narrowing preserves the anti-filtering rule: two linking-keyword references, or one naming an unvetted issue, would still defer"
       ]
     }
   ]

@@ -112,7 +112,8 @@ below use capability terms; map them to your environment as follows.
 2. **Build the vetted issue set** from the platform's registered sub-issue links (or an
    explicit issue list from the invoker), then apply the write-access check to every
    issue in it and drop the ones that fail. This happens **before any PR is read**, and
-   it is what keeps PR content from redirecting the write-access check. With no parent
+   together with E1c's resolution rules it is what keeps PR content from redirecting the
+   write-access check. With no parent
    issue and no supplied list, nothing is eligible — report and stop. See
    [references/eligibility.md](references/eligibility.md).
 3. **Read repository conventions** — the configured merge method (never assume
