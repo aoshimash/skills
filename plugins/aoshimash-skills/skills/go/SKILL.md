@@ -152,11 +152,14 @@ runnable surface, interactive-only behavior with no fallback — is marked
 ### Phase 4: Execute and Capture Evidence
 
 Run the uncovered checks from Phase 2 first — they are cheap and catch what
-would waste the behavioral runs. A failing check is handled like
-contradicting evidence: fix and re-run it. A check that cannot be brought to
-pass stays in the report as failed and caps the overall verdict (Phase 6).
-Then exercise each claim per the plan, capturing concrete evidence: the
-command and its output, the request and its response, the observed behavior.
+would waste the behavioral runs. A failing check is handled by cause: a
+failure the change introduced is contradicting evidence — fix and re-run it,
+and if it cannot be brought to pass it stays in the report as failed and
+caps the overall verdict (Phase 6). A pre-existing failure the change did
+not cause is recorded under Checks (and Gaps when notable), never fixed —
+repairing it is the general cleanup this skill excludes. Then exercise each
+claim per the plan, capturing concrete evidence: the command and its output,
+the request and its response, the observed behavior.
 
 **Safety bound.** Never execute privileged, system-mutating, or
 fetch-and-execute steps just to verify — `sudo` installs, `curl | sh`,
@@ -204,11 +207,11 @@ Gaps: <coverage gaps worth the author's attention | none>
 ```
 
 Overall verdict: `VERIFIED` only when every claim is verified **and** no
-check run here remains failing; `PARTIALLY VERIFIED` when at least one claim
-is verified and at least one is not, or when a check run here remains
-failing; `NOT VERIFIED` when no claim is verified. Overriding all of the
-above: a failed claim that defeats the change's central purpose makes the
-verdict `NOT VERIFIED`.
+check failure the change introduced remains; `PARTIALLY VERIFIED` when at
+least one claim is verified and at least one is not — or when every claim is
+verified but an introduced check failure remains; `NOT VERIFIED` when no
+claim is verified. Overriding all of the above: a failed claim that defeats
+the change's central purpose makes the verdict `NOT VERIFIED`.
 
 **Impossible or inconclusive verification.** When claims are unverifiable or
 evidence is inconclusive, the verdict is `PARTIALLY VERIFIED` or
