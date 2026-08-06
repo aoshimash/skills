@@ -11,7 +11,9 @@ description: >
   it done or handing it to commit/PR — when the user says "go", "verify this
   change", "make sure it actually works", "test it end to end",
   "動作確認して", "変更を検証して", "ちゃんと動くか確かめて",
-  "最後まで検証して", or asks whether a change really works.
+  "最後まで検証して", or asks whether a change really works. A bare "go"
+  said to approve a proposed plan before any change exists means "proceed",
+  not this skill.
 ---
 
 # Go
@@ -77,6 +79,12 @@ tree's pending diff (plus any commits this session made that are not yet
 delivered); otherwise, the files edited in this session. The conversation
 provides the intent behind it.
 
+**Nothing to verify.** When no change exists — the working tree is clean and
+the session has edited nothing undelivered — do not invent one and do not
+report success: state that there is nothing to verify, and ask what change
+was meant (a specific commit, a deployed artifact) via a user choice when
+candidates exist, or end there.
+
 Derive the change's **claims** — the statements that should now be observably
 true. Phrase each one so that a single observation can confirm or refute it
 ("`--dry-run` prints the plan and writes nothing", not "dry-run works").
@@ -133,9 +141,9 @@ surfaces found in Phase 2:
 | Web UI | Drive the changed flow (interactive app driving); HTTP-level exercise as the fallback |
 | Library code | Run the narrowest test that exercises the changed behavior; absent one, a scratch script that calls it (removed in Phase 5) |
 | Bug fix | Reproduce the bug's original conditions and observe it not recurring |
-| Docs | Follow the doc's own instructions as written, as its reader would |
+| Docs | Follow the doc's own instructions as written, as its reader would — within Phase 4's safety bound |
 | Config / schema / IaC | Feed it to the tool that consumes it: validate, dry-run, plan |
-| Skill / prompt text | Desk-run its eval cases against the changed text |
+| Skill / prompt text | Desk-run its eval cases against the changed text — this observes what the text mandates, not live agent behavior; the evidence says which |
 
 A claim no method can reach in this environment — missing tooling, no
 runnable surface, interactive-only behavior with no fallback — is marked
@@ -144,9 +152,17 @@ runnable surface, interactive-only behavior with no fallback — is marked
 ### Phase 4: Execute and Capture Evidence
 
 Run the uncovered checks from Phase 2 first — they are cheap and catch what
-would waste the behavioral runs. Then exercise each claim per the plan,
-capturing concrete evidence: the command and its output, the request and its
-response, the observed behavior.
+would waste the behavioral runs. A failing check is handled like
+contradicting evidence: fix and re-run it. A check that cannot be brought to
+pass stays in the report as failed and caps the overall verdict (Phase 6).
+Then exercise each claim per the plan, capturing concrete evidence: the
+command and its output, the request and its response, the observed behavior.
+
+**Safety bound.** Never execute privileged, system-mutating, or
+fetch-and-execute steps just to verify — `sudo` installs, `curl | sh`,
+global package installs, destructive migrations. Verify such steps by
+inspection instead (the URL resolves, the package and version exist) or
+record the claim unverifiable. This bounds every surface, docs most of all.
 
 **When evidence contradicts a claim**, the change is not done — verification
 found what it exists to find. Fix the change, re-run that claim's
@@ -187,10 +203,12 @@ Residue: <removed items | none>
 Gaps: <coverage gaps worth the author's attention | none>
 ```
 
-Overall verdict: `VERIFIED` only when every claim is verified;
-`PARTIALLY VERIFIED` when at least one is and at least one is not;
-`NOT VERIFIED` when none are, or when a failed claim defeats the change's
-central purpose.
+Overall verdict: `VERIFIED` only when every claim is verified **and** no
+check run here remains failing; `PARTIALLY VERIFIED` when at least one claim
+is verified and at least one is not, or when a check run here remains
+failing; `NOT VERIFIED` when no claim is verified. Overriding all of the
+above: a failed claim that defeats the change's central purpose makes the
+verdict `NOT VERIFIED`.
 
 **Impossible or inconclusive verification.** When claims are unverifiable or
 evidence is inconclusive, the verdict is `PARTIALLY VERIFIED` or

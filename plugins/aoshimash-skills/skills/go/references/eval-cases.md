@@ -9,6 +9,12 @@ For each test case:
 4. Evaluate against the acceptance criteria listed per case
 5. Record results in the Evaluation Log section at the bottom
 
+A **desk-run** — reasoning a case through against the SKILL.md text and
+checking the text mandates the expected behavior — is recorded as
+`Pass (desk)` / `Fail (desk)`. It verifies what the text prescribes, not
+live agent behavior; an interactive run in a matching environment supersedes
+it and is recorded as plain `Pass` / `Fail`.
+
 ## Test Cases
 
 ### Case 1: CLI change verified end to end
@@ -125,6 +131,8 @@ For each test case:
 ### Case 9: Issue-driven implementation request (should NOT trigger)
 
 - **Persona**: User who wants issue #42 implemented
+- **Setup**: A repository with open issue #42; both go and `implement-issue`
+  are registered
 - **Initial input**: "implement issue #42"
 - **Expected behavior**:
   - `implement-issue` triggers, not go — the request is an implementation
@@ -146,6 +154,34 @@ For each test case:
 - **Key criteria**: Non-responsibility boundary holds under a direct request;
   the boundary is stated, not silently ignored
 
+### Case 11: Nothing to verify
+
+- **Persona**: User who says "go" in a session where nothing has been changed
+- **Setup**: Clean working tree; the session has edited no files and
+  delivered no commits
+- **Initial input**: "go"
+- **Expected behavior**:
+  - The skill states there is nothing to verify — it does not invent a
+    change, run checks for their own sake, or report success
+  - If candidate targets exist (a recent commit, a deployed artifact), it
+    asks what change was meant via a user choice; otherwise it ends there
+- **Key criteria**: Phase 1 "Nothing to verify" rule; no fabricated
+  verification, no silent success
+
+### Case 12: "go" as plan approval (should NOT trigger)
+
+- **Persona**: User who was just shown an implementation plan and replies
+  "go" to approve it
+- **Setup**: The session proposed a plan; no change has been made yet
+- **Initial input**: "go"
+- **Expected behavior**:
+  - The skill does not trigger — "go" before any change exists means
+    "proceed with the plan", per the description's exclusion
+  - The session proceeds with the proposed plan; verification can be
+    invoked after the change lands
+- **Key criteria**: Trigger boundary for the bare word "go"; pre-change
+  approval is not a verification request
+
 ---
 
 ## Evaluation Log
@@ -154,13 +190,15 @@ Record results here after each evaluation run.
 
 | Date | Case # | Pass/Fail | Notes | SKILL.md revision needed? |
 |------|--------|-----------|-------|---------------------------|
-| 2026-08-07 | 1 | Pass | Desk-run against SKILL.md as written: Phase 1 derives the claim, Phase 3 CLI row mandates a real run, Phase 6 format carries evidence. Interactive eval in a real CLI repo pending. | No |
-| 2026-08-07 | 2 | Pass | Desk-run: Check Coverage step 1 makes the instruction authoritative; Principle 4 forbids the re-run; Phase 2/3 keep behavioral verification independent of check coverage. | No |
-| 2026-08-07 | 3 | Pass | Desk-run: Coverage step 3 assigns uncovered checks to the skill, auto-fix first; Phase 4 runs them before behavioral work. | No |
-| 2026-08-07 | 4 | Pass | Desk-run: Environment Adaptation row for interactive app driving prescribes the HTTP fallback and UNVERIFIABLE recording; Phase 6 verdict rules force PARTIALLY VERIFIED. | No |
-| 2026-08-07 | 5 | Pass | Desk-run: Phase 1 Ambiguity rule mandates one batched round and forbids guessing or partial silent verification. | No |
-| 2026-08-07 | 6 | Pass | Desk-run: Phase 4 contradiction handling covers fix-and-re-verify and FAILED recording; claim-weakening explicitly prohibited. | No |
-| 2026-08-07 | 7 | Pass | Desk-run: Phase 3 Docs row (follow instructions as a reader); Principle 3 excludes toolchain assumptions. | No |
-| 2026-08-07 | 8 | Pass | Desk-run: Phase 3 Library row creates the scratch script, Phase 5 removes it and re-verifies touched files, Phase 6 Residue line records it. | No |
-| 2026-08-07 | 9 | Pass | Desk-run: go's description scopes it to verifying an existing change before done/commit/PR; "implement issue #N" matches implement-issue's triggers, not go's. Interactive eval with both skills registered pending. | No |
-| 2026-08-07 | 10 | Pass | Desk-run: "What This Skill Does Not Do" names delivery as out of scope and requires the boundary to be stated with the verdict handed off. | No |
+| 2026-08-07 | 1 | Pass (desk) | Phase 1 derives the claim, Phase 3 CLI row mandates a real run, Phase 6 format carries evidence. Interactive eval in a real CLI repo pending. | No |
+| 2026-08-07 | 2 | Pass (desk) | Check Coverage step 1 makes the instruction authoritative; Principle 4 forbids the re-run; Phase 2/3 keep behavioral verification independent of check coverage. | No |
+| 2026-08-07 | 3 | Pass (desk) | Coverage step 3 assigns uncovered checks to the skill, auto-fix first; Phase 4 runs them before behavioral work and defines failing-check handling. | No |
+| 2026-08-07 | 4 | Pass (desk) | Environment Adaptation row for interactive app driving prescribes the HTTP fallback and UNVERIFIABLE recording; Phase 6 verdict rules force PARTIALLY VERIFIED. Interactive eval pending. | No |
+| 2026-08-07 | 5 | Pass (desk) | Phase 1 Ambiguity rule mandates one batched round and forbids guessing or partial silent verification. Interactive eval pending. | No |
+| 2026-08-07 | 6 | Pass (desk) | Phase 4 contradiction handling covers fix-and-re-verify and FAILED recording; claim-weakening explicitly prohibited. | No |
+| 2026-08-07 | 7 | Pass (desk) | Phase 3 Docs row (follow instructions as a reader, within Phase 4's safety bound); Principle 3 excludes toolchain assumptions. | No |
+| 2026-08-07 | 8 | Pass (desk) | Phase 3 Library row creates the scratch script, Phase 5 removes it and re-verifies touched files, Phase 6 Residue line records it. | No |
+| 2026-08-07 | 9 | Pass (desk) | go's description scopes it to verifying an existing change before done/commit/PR; "implement issue #N" matches implement-issue's triggers, not go's. Interactive eval with both skills registered pending. | No |
+| 2026-08-07 | 10 | Pass (desk) | "What This Skill Does Not Do" names delivery as out of scope and requires the boundary to be stated with the verdict handed off. | No |
+| 2026-08-07 | 11 | Pass (desk) | Phase 1 "Nothing to verify" rule states the stop-and-ask behavior; added with the rule in the Stage 2 review round. Interactive eval pending. | No |
+| 2026-08-07 | 12 | Pass (desk) | Description's exclusion sentence covers "go" as pre-change plan approval; added in the Stage 2 review round. Interactive eval with a plan-approval session pending. | No |
