@@ -191,19 +191,50 @@ PR.
 
 ### Recording and querying the permanent exclusion
 
-On first detection, record it on the PR so a later run cannot lose it to a deleted
-comment, and so the human queue is queryable:
+**Phase 0 — ensure the label exists.** `gh pr edit --add-label` applies an *existing*
+label; a repository that has never run this gate does not have one, and the write fails.
+Check and create once per run:
+
+```bash
+# 1. Does it already exist?
+gh label list --limit 200 --json name --jq '[.[].name] | index("merge-gate:human-review") != null'
+
+# 2. Only if that returned false — create it
+gh label create "merge-gate:human-review" \
+  --color B60205 \
+  --description "Human commented or reviewed; permanently excluded from autonomous merge"
+```
+
+Check first and create only when absent. Do **not** reach for `--force`: it would overwrite
+the colour and description of a label the repository may already use for its own purpose,
+and this gate has no business rewriting repository metadata it did not create.
+
+**On detection — apply, then verify.** This is the only write eligibility triage performs,
+and a silent failure destroys the durability guarantee, so confirm it landed rather than
+trusting the exit status:
 
 ```bash
 gh pr edit {pr} --add-label "merge-gate:human-review"
 
-# The human queue is exactly this query — no state file
+# Verify — the label must actually be present afterwards
+gh pr view {pr} --json labels \
+  --jq '[.labels[].name] | index("merge-gate:human-review") != null'
+```
+
+If that returns `false`, or either command errors, the PR still defers this run (the human
+comment is present) but its **permanence was not recorded** — escalate it in the report by
+PR number, per eligibility.md E5. Do not let it pass as a routine deferral.
+
+**Query the human queue** — this is the whole store, no state file:
+
+```bash
 gh pr list --state open --label "merge-gate:human-review" --limit 200 \
   --json number,title,baseRefName
 ```
 
-E5 fails if **either** the label is present **or** a human comment is found. Only a human
-removes the label.
+E5 fails if **either** the label is present **or** a human comment is found. Removing the
+label is a deliberate human act; dismissing a label needs only Triage while deleting a
+comment needs Write, which is why both signals are checked rather than the label alone.
 
 ## Integration branch state (Phase 0)
 

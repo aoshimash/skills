@@ -141,14 +141,14 @@
     {
       "id": 9,
       "name": "host-provided-branch-name",
-      "prompt": "Run the merge gate for a batch on aoshimash/skills. Paper exercise. Two PRs target the integration branch. Both are non-fork, carry all four pipeline body sections, are ready for review with green CI and no comments, and both #113 and #114 are vetted sub-issues. PR #213's head branch is `claude/aoshimash-skills-issue-113-a1b2c3`. PR #214's head branch is `claude/zealous-dirac-948980` and its body contains `Refs #114`. Neither branch follows the `<type>/<issue-number>-<slug>` convention. Decide what to do with each.",
-      "expected_output": "Both are attributed and eligible; neither is deferred for its branch name. PR #213: the skill extracts issue 113 from the host-provided branch name, which embeds `issue-113` even though it lacks the `<type>/` prefix. PR #214: the branch carries no issue number at all, so the skill falls through to the body reference `Refs #114`, attributes it to vetted issue #114, and notes in the report which signal carried the attribution. The skill justifies relying on a body reference here: attribution only chooses among issues that are ALREADY in the vetted set and have already passed the write-access check, so a body reference cannot admit an unvetted issue — it can only mis-label a PR among vetted ones. It explains why requiring the branch convention would be wrong: implement-issue explicitly permits a run to keep a branch the host environment prepared, so a strict convention check would permanently exclude a large class of genuine pipeline PRs with no escape hatch.",
+      "prompt": "Run the merge gate for a batch on aoshimash/skills. Paper exercise. The Phase 0 vetted-set build was CLEAN: every sub-issue the platform reported was authored by a write-access user, none were dropped, no permission read errored, and the count reconciled against the platform's total. Two PRs target the integration branch. Both are non-fork, carry all four pipeline body sections, are ready for review with green CI and no comments, and both #113 and #114 are vetted sub-issues. PR #213's head branch is `claude/aoshimash-skills-issue-113-a1b2c3`. PR #214's head branch is `claude/zealous-dirac-948980` and its body contains `Refs #114` and no other issue reference. Neither branch follows the `<type>/<issue-number>-<slug>` convention. Decide what to do with each.",
+      "expected_output": "Both are attributed and eligible; neither is deferred for its branch name. PR #213: the skill extracts issue 113 from the host-provided branch name, which embeds `issue-113` even though it lacks the `<type>/` prefix. PR #214: the branch carries no issue number, so attribution rests on the body reference alone — permitted here ONLY because the vetted-set build was clean. The skill states that dependency explicitly: a clean build means no third-party-authored issue is present in the batch at all, so there is no unvetted issue inside the batch that the code could have come from, and body-only attribution therefore cannot redirect the write-access check to a different trust level. It notes which signal carried each attribution and flags #214 as resting on a single signal. It does NOT justify body attribution with the weaker claim that it 'only selects among vetted issues' — that would be true of issues and false of code. It explains why requiring the branch convention would be wrong: implement-issue explicitly permits keeping a host-prepared branch, so a strict check would permanently exclude a large class of genuine pipeline PRs.",
       "files": [],
       "expectations": [
         "Attributes the first PR by extracting the issue number from the host-provided branch name rather than deferring on the missing convention",
-        "Falls through to the body reference for the second PR, whose branch carries no issue number, and attributes it to the vetted issue",
+        "Attributes the second PR on the body reference and flags it as resting on a single signal",
+        "Ties the permissibility of body-only attribution explicitly to the vetted-set build having been clean, rather than to attribution merely selecting among vetted issues",
         "Reports which attribution signal carried each decision",
-        "Justifies using a body reference by noting attribution only selects among already-vetted issues and cannot admit an unvetted one",
         "Recognises that requiring the branch convention would permanently exclude genuine pipeline PRs on host-prepared branches"
       ]
     },
@@ -164,6 +164,49 @@
         "Identifies that an unpaginated read fails OPEN and would have merged over the owner's objection",
         "Treats a truncated or possibly-truncated list read as an unknown and therefore a deferral, including a row count equal to the requested limit",
         "Applies the same completeness discipline to the candidate PR list, not only to comment reads"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "unclean-build-body-only-attribution",
+      "prompt": "Run the merge gate for parent issue #109 on aoshimash/skills. Paper exercise. Building the vetted set, you find #109 has eight registered sub-issues; seven were opened by the repository owner, but #151 was opened by an outside contributor whose collaborator permission reads 'read', so it is dropped. Two PRs target the integration branch, both non-fork, both carrying all four pipeline body sections, both ready for review with green CI and no comments. PR #216's head branch is `claude/quirky-fermi-773100` — no issue number anywhere in the branch — and its body says `Refs #112`, a vetted sub-issue. PR #217's head branch is `feat/113-add-parser` and its body says `Refs #113`. Decide what to do with each, and be explicit about your reasoning for #216.",
+      "expected_output": "The build is NOT clean: #151 was dropped, so the batch demonstrably contains a third-party-authored issue. PR #217 is attributed and eligible — the branch signal resolves to #113 and the body agrees, so attribution does not rest on content. PR #216 is DEFERRED: its branch carries no issue number, so attribution would rest on the PR body alone, and body-only attribution is refused whenever the build was unclean. The skill articulates the attack it is refusing: a third-party-authored issue can be linked into a batch (sub-issue links need only triage access) and implemented by a pipeline that performs no author check of its own; the resulting PR can land on a host-provided branch, and its body — written by an implementer that read the third party's instructions — could reference a vetted issue instead. Attributing on that body would let content select which issue supplies the write-access check, so content would be granting eligibility, violating the content-can-only-subtract rule. It states plainly that the gate cannot observe which issue an implementer actually read, so it bounds the damage rather than claiming to detect the substitution. It does not merge #216, does not edit it, and reports the deferral with the required human action.",
+      "files": [],
+      "expectations": [
+        "Identifies the build as unclean because an issue was dropped for lacking write access",
+        "Attributes and accepts the PR whose branch signal resolves, since its attribution does not rest on content",
+        "DEFERS the PR whose branch carries no issue number, refusing body-only attribution in an unclean build",
+        "Explains the concrete attack: a third-party issue linked into the batch and implemented, whose PR body could name a vetted issue instead",
+        "Identifies that body-only attribution would let content select which issue supplies the write-access check, violating content-can-only-subtract",
+        "Acknowledges that the gate cannot observe which issue an implementer actually read, and bounds the damage rather than claiming detection"
+      ]
+    },
+    {
+      "id": 12,
+      "name": "no-issue-set-refuse-triage",
+      "prompt": "A user says: 'run the merge gate on aoshimash/skills for the integration branch integration/2026-08-07-cleanup — merge whatever is ready.' Paper exercise. That branch exists and has four open PRs targeting it, all non-fork, all carrying the pipeline body structure, all ready for review with green CI and no comments. There is no parent issue for this batch, and the user has not supplied a list of issues. Describe what you do.",
+      "expected_output": "The skill cannot build a vetted issue set: there is no parent issue whose registered sub-issue links define the batch, and no explicit issue list was supplied. Without that set, no PR can be attributed to a vetted issue and the write-access check has nothing to run against. It therefore declares NOTHING eligible and stops — it does not merge any of the four PRs, and specifically it does NOT fall back to reading issue numbers out of the PR bodies to reconstruct a set, because that is exactly the path where PR content would be granting eligibility. It reports the situation clearly, names what is missing, and asks the user for the parent issue or an explicit issue list so a subsequent run can proceed. It treats the four PRs looking perfectly healthy as irrelevant: the missing input is a precondition, not a tiebreaker, and 'they all look fine' is not evidence.",
+      "files": [],
+      "expectations": [
+        "Recognises that without a parent issue or an explicit issue list the vetted set cannot be built",
+        "Declares nothing eligible and stops rather than merging any PR",
+        "Explicitly refuses to reconstruct the issue set from PR body content as a fallback",
+        "Reports what is missing and asks for the parent issue or an explicit issue list",
+        "Does not treat the PRs' otherwise-healthy state as a reason to proceed"
+      ]
+    },
+    {
+      "id": 13,
+      "name": "subissue-count-disagreement",
+      "prompt": "Run the merge gate for parent issue #109 on aoshimash/skills. Paper exercise. Reading the sub-issue links returns 6 issues, but the platform's own sub-issue summary for #109 reports a total of 8. Several PRs target the integration branch and look otherwise eligible, including two that attribute to issues not among the 6 returned. Describe how you proceed.",
+      "expected_output": "The skill notices the disagreement between the returned sub-issue nodes (6) and the platform's reported total (8) and treats it as a truncated or incomplete read — an UNKNOWN, not an absence. It does not triage against the partial set of 6. It falls back to the paginated REST sub-issues endpoint to obtain the complete set, and only proceeds once the counts reconcile. It explains the specific harm of proceeding on a short set: the two PRs attributing to the missing issues would fail attribution and be deferred, producing a run full of unexplained deferrals that looks like a policy problem rather than a truncated read — and, worse, an issue missing from the set never gets its author's write access checked. It also notes that a short set makes the build unclean in effect, so it must not be treated as clean for the purpose of allowing body-only attribution.",
+      "files": [],
+      "expectations": [
+        "Detects the disagreement between the returned sub-issue count and the platform's reported total",
+        "Treats the disagreement as an incomplete read rather than an accurate smaller set",
+        "Falls back to the paginated REST sub-issues endpoint and proceeds only once the counts reconcile",
+        "Does not triage the candidate PRs against the partial issue set",
+        "Explains that a short set produces unexplained deferrals and leaves some issues' authors unchecked, and must not be treated as a clean build"
       ]
     }
   ]

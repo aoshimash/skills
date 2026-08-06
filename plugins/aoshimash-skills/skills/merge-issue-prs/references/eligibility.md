@@ -1,9 +1,17 @@
 # Eligibility Policy
 
+> **Implementation status.** This policy — Phase 1 triage, and the Phase 0 setup it
+> depends on — is fully specified. The **merge loop it feeds is not part of this skill
+> version.** Produce the eligible/deferred decision and report it; do not merge, sync,
+> revert, or flip anything. Where the text below describes what happens to an eligible PR
+> downstream, that is design intent for a later version, not an instruction to act on now.
+> Triage does perform one write: the E5 exclusion label (see "Recording permanence").
+
 The procedure behind Phase 1. It decides, for one PR, exactly one of two outcomes:
 
 - **ELIGIBLE** — every condition below was affirmatively established from platform
-  state. The PR enters the serial merge loop.
+  state. In a version with the merge loop, the PR would enter it; in this version it is
+  reported as eligible and left alone.
 - **DEFERRED** — at least one condition was not established. The PR is **not merged**,
   the failed condition and its evidence are recorded, and the run continues with the
   next PR.
@@ -17,11 +25,14 @@ human one review; a wrong merge costs a human an investigation into code nobody 
 The conditions do not all carry the same weight, and reading them as interchangeable
 leads to weakening the wrong one:
 
-- **E2 is the adversarial control.** Issue content is the pipeline's instruction input,
-  so a third party who can get an issue implemented can steer machine-written code into
-  the repository. E2 is what contains that.
-- **E1, E3, E4 are safety controls.** Only someone with **write access** can push a
-  branch to this repository at all — everyone else must open a PR from a fork, which E1
+- **E2 and E1c are the adversarial controls.** Issue content is the pipeline's
+  instruction input, so a third party who can get an issue implemented can steer
+  machine-written code into the repository. E2 is what contains that — but **E2 is only
+  as strong as the attribution that decided which issue to ask it about.** E1c makes that
+  choice, so whoever controls attribution controls which issue supplies E2. E1c is
+  security-critical, not bookkeeping; the rules for it are written accordingly.
+- **E1a, E1b, E3, E4 are safety controls.** Only someone with **write access** can push a
+  branch to this repository at all — everyone else must open a PR from a fork, which E1a
   rejects outright. So these conditions are not holding off an outsider; they keep the
   gate from merging a *colleague's* hand-written PR, or a pipeline PR whose machines
   have not finished, without anyone reading it.
@@ -56,9 +67,11 @@ Rules, without exception:
    reader. Where the text is long, record its location and a short excerpt rather than
    the whole of it.
 
-Rule 3 is the invariant the rest of this file is built to preserve. The design problem it
-creates — how to know which issue a PR implements, when everything the PR says about
-itself is content — is solved by the vetted issue set below, not by trusting the PR.
+Rule 3 is the invariant the rest of this file is built to preserve, and the hardest place
+to preserve it is deciding **which issue a PR implements** when everything the PR says
+about itself is content. The vetted issue set below removes the worst of the problem — PR
+content cannot add an issue to the set — and E1c's resolution rules constrain what remains.
+Neither eliminates it; see "Known limits" at the end.
 
 ## The vetted issue set (established in Phase 0, before any PR is read)
 
@@ -77,15 +90,35 @@ If neither a parent issue nor an explicit issue list is available, the set canno
 built, no PR can be attributed to a vetted issue, and **nothing is eligible**. Report
 that and stop; do not fall back to reading issue numbers out of PR bodies.
 
-**Why this ordering is the whole security argument.** E2 asks "did someone with write
-access author the instruction behind this code?". If the issue it asks that about were
-taken from the PR, an attacker could point the check at a maintainer's issue and have it
-pass while the code came from theirs — the check would validate the wrong thing. Deriving
-the set from platform relationships first means the question is asked about issues the
-platform says are in the batch, so PR content cannot redirect it. Attribution (E1 below)
-then only chooses *among already-vetted issues*, which is why it is allowed to consult
-content at all: picking the wrong vetted issue mis-labels a PR, it does not admit an
-unvetted one.
+**Why this ordering matters.** E2 asks "did someone with write access author the
+instruction behind this code?". If the issue it asks that about were taken from the PR, an
+attacker could point the check at a maintainer's issue and have it pass while the code
+came from theirs — the check would validate the wrong thing. Deriving the set from
+platform relationships first means the question is asked about issues the platform says
+are in the batch, so PR content cannot *add* an issue to the set.
+
+**What the vetted set does and does not guarantee.** State this precisely, because an
+overclaim here silently licenses a weak attribution rule:
+
+- It **does** guarantee that any issue E2 vouched for was authored by someone with write
+  access, and that PR content cannot introduce an issue the platform did not place in the
+  batch.
+- It does **not** guarantee that the code in the PR was actually written from the issue it
+  is attributed to. The merge gate sees artifacts, never causal history: no platform
+  signal records which issue an implementer read. Attribution is therefore an *inference*,
+  and where it rests on content it is an attacker-influenceable one.
+
+The gap is real and reachable. A third-party-authored issue can be linked into a batch
+(sub-issue links need only triage access), implemented by a pipeline that performs no
+author check of its own, and land on a host-provided branch carrying no issue number —
+at which point the PR body is the only attribution signal, and that body was written by an
+implementer reading the third party's instructions. Attributing to a *vetted* issue on
+that evidence would let content select which issue supplies E2, i.e. content granting
+eligibility, in direct violation of rule 3.
+
+E1c's resolution rules below are written to close that path rather than to describe it.
+The residual limit — that this gate can bound the damage but cannot establish causal
+origin — is recorded under "Known limits" at the end of this file.
 
 ## The five conditions
 
@@ -123,26 +156,50 @@ against this list verbatim. If the mapping cannot be established, defer.
 **E1c — Attribution to exactly one vetted issue.** Determine which issue in the vetted
 set the PR implements, from these signals:
 
-| Signal | What to read | Notes |
+| Signal | What to read | Trust |
 |---|---|---|
-| **Head-branch issue number** | `<type>/<issue-number>-<slug>`, or a host-provided branch name embedding `issue-<number>` | Preferred when present, because the branch is fixed at creation |
-| **Body issue reference** | `Closes #N` / `Refs #N` in the PR body | Content — usable only to choose among already-vetted issues, never to add one |
+| **Head-branch issue number** | `<type>/<issue-number>-<slug>`, or a host-provided branch name embedding `issue-<number>` | Stronger. Fixed when the branch was created, before the body was written, and changing it means force-pushing a renamed branch |
+| **Body issue reference** | every `#N` reference in the PR body, not only the first | Weaker — plain content, and the signal an attacker steers |
 
-Resolution rules:
+**Collect every referenced issue from both signals before deciding.** Do not scan for a
+vetted issue and stop: filtering the references down to the one that happens to be vetted
+is precisely how a PR carrying `Refs #X` (unvetted) and `Refs #Y` (vetted) would slip
+through.
 
-- Both signals present and **agreeing**, resolving to one issue in the vetted set →
-  attributed.
-- Only one signal present, resolving to one issue in the vetted set → attributed, and the
-  run report notes which signal carried it.
-- Signals **disagree**, resolve to **zero** vetted issues, or resolve to **more than
-  one** → **defer**.
+Resolution rules, applied in order:
 
-**Branch naming is not a reliable signal on its own, and its absence must not defer.**
-implement-issue explicitly permits a run to keep a branch the host environment already
-prepared ("use it as-is", workflow.md 2-1), and such branches routinely do not match the
-`<type>/<issue-number>-<slug>` convention. Requiring the convention would permanently
-exclude a large class of genuine pipeline PRs. Read the issue number from whatever form
-the branch takes, and fall through to the body reference when the branch carries none.
+1. **Any referenced issue that is not in the vetted set → defer.** This includes issues
+   dropped during the Phase 0 build and issues outside the batch entirely. A PR that
+   points at an unvetted issue is not re-interpreted; it is deferred.
+2. References resolve to **zero**, or to **more than one distinct** vetted issue → defer.
+3. Branch and body **both** resolve and **agree** on one vetted issue → attributed.
+4. Branch resolves and the body carries no reference → attributed on the branch signal.
+5. **Body-only attribution** (the branch carries no issue number) → attributed **only if
+   the Phase 0 vetted-set build was clean**; otherwise **defer**. See below.
+6. Signals **disagree** → defer.
+
+**The clean-build condition (rule 5).** A build is *clean* when every issue the platform
+placed in the batch survived vetting: nothing dropped for lacking write access, no
+permission read that errored, no bot or deleted author, and the set's count reconciled
+against the platform's own total. A clean build means the batch contains **no
+third-party-authored issue at all** — so there is no unvetted issue inside the batch for
+the code to have come from, and attributing on the body cannot redirect E2 to a different
+trust level. If **anything** was dropped, the batch demonstrably contains third-party
+instructions, body content becomes an attacker-influenceable signal, and body-only
+attribution is refused: such a PR needs the branch signal, or it defers.
+
+Record which rule carried each attribution in the run report, and flag every attribution
+that rested on a single signal.
+
+**A missing branch convention must not defer by itself.** implement-issue explicitly
+permits a run to keep a branch the host environment already prepared ("use it as-is",
+workflow.md 2-1), and such branches routinely do not match the
+`<type>/<issue-number>-<slug>` convention — in this repository most merged PRs are on
+host-provided branches. Requiring the convention would permanently exclude a large class
+of genuine pipeline PRs. So read the issue number from whatever form the branch takes
+(including `…issue-<number>…`), and fall through to the body reference when the branch
+carries none — subject to rule 5. The cost of that fallback is paid only in batches that
+are not clean, which is exactly where it is not affordable.
 
 **Do not use the platform's registered closing references for attribution.** GitHub
 interprets closing keywords **only** when a PR targets the repository's default branch:
@@ -265,6 +322,27 @@ re-admit the PR. On first detection, record the exclusion **on the PR itself** a
 instructions). Thereafter E5 fails if **either** the label is present **or** a human
 comment is found.
 
+**Applying the label is a write, and it must be treated as one.** It is the only mutating
+action in eligibility triage, and the whole durability argument collapses if it silently
+fails — the run that fails to write it still defers on the comment, so the failure is
+invisible until a later run, by which time the comment may be gone.
+
+1. **Ensure the label exists before the run needs it**, in Phase 0. A repository that has
+   never run this gate does not have it — a label must be created before it can be
+   applied, and applying an undefined label fails. Create it if absent; creating it is
+   idempotent enough to attempt once per run.
+2. **Verify the write.** After applying, re-read the PR's labels and confirm the label is
+   present. Do not infer success from the command's exit status alone.
+3. **A failed or unverifiable write is an escalation, not a warning.** The PR still defers
+   this run (the comment is there), but the *permanence* was not recorded. Report it
+   prominently as an unrecorded permanent exclusion naming the PR, so a human either
+   applies the label or knows the PR must not be re-admitted. Never treat "deferred this
+   run" as equivalent to "recorded permanently".
+
+If the repository denies label writes outright, say so in Phase 0 and treat every E5
+exclusion in that run as unrecorded — the gate still defers correctly, but its permanence
+guarantee is downgraded and the report must say so.
+
 This does not contradict "eligibility is never cached". The label is not a stored verdict
 that replaces the checks — every condition, including E5, is still re-read in full on
 every run. The label records an **event that occurred and can be erased**, and it is an
@@ -294,7 +372,7 @@ and differs only in what the deferral records and where the PR goes next.
 |---|---|---|---|---|---|
 | Human-commented / reviewed PR | E5 | DEFERRED | Who commented, when, on which surface; label applied | respond-to-pr-review (human queue) | **No — permanent, via the label** |
 | Third-party-authored issue | E2 | DEFERRED | The issue, its author, the permission the API reported | Human queue: a write-access maintainer decides | No, unless the author's access changes |
-| Ambiguous pipeline-PR detection | E1 | DEFERRED | Fork status; which body sections matched; which attribution signals resolved, and how they disagreed | Human queue: a human confirms provenance | Yes, if the signals converge later |
+| Ambiguous pipeline-PR detection | E1 | DEFERRED | Fork status; which body sections matched; which attribution signals resolved and how they disagreed; whether an unvetted issue was referenced; whether body-only attribution was refused for an unclean build | Human queue: a human confirms provenance | Yes, if the signals converge — or if a later build is clean |
 | Gates not passed | E3 | DEFERRED | Draft state, or the specific gate recorded as unresolved | Back to the implementer / human queue | Yes |
 | CI not green | E4 | DEFERRED | The failing or unsettled entries, by `__typename` and value | Back to the implementer / human queue | Yes |
 
@@ -321,8 +399,30 @@ because state moves between runs: CI turns green, gates finish, and — most imp
 a human comments. A PR eligible ten minutes ago is re-checked immediately before its
 merge, so a human who comments during the run wins the race by default.
 
-One interaction to expect: syncing a PR with the integration branch before merging
-(Phase 2) pushes a new head commit, which re-triggers CI and returns the rollup to a
-running state. The pre-merge re-check must therefore wait for the *post-sync* checks
-within the bounded window rather than reading the pre-sync result — and defer if they do
-not settle in time.
+One interaction to expect once the merge loop exists: syncing a PR with the integration
+branch before merging pushes a new head commit, which re-triggers CI and returns the
+rollup to a running state. The pre-merge re-check must therefore wait for the *post-sync*
+checks within the bounded window rather than reading the pre-sync result — and defer if
+they do not settle in time. (Design intent; no merge or sync happens in this version.)
+
+## Known limits
+
+State these plainly. A gate whose limits are undocumented gets trusted past them.
+
+1. **The gate cannot establish causal origin.** It infers which issue produced a PR from
+   the branch name and the PR body; it cannot observe which issue an implementer actually
+   read. Every rule above bounds the consequences of a wrong inference — it does not
+   eliminate the inference. Treat "attributed to issue #N" as evidence, not proof.
+2. **The strongest containment lives upstream, and does not exist yet.** The place with
+   causal knowledge is the implementing skill: it knows which issue it read. An
+   author-permission check *there* — refusing to implement an issue whose author lacks
+   write access — would close the gap at its source, and would make this gate's
+   attribution rules a defence in depth rather than the only defence. implement-issue
+   performs no such check today. Until it does, a third-party-authored issue linked into a
+   batch can be implemented, and this gate's protection rests on the clean-build condition
+   in E1c rather than on the code's provenance being known.
+3. **Sub-issue links are a trust boundary.** Anything the platform reports as a batch
+   member enters the candidate set, and adding a sub-issue link needs only triage access —
+   a lower bar than the write access E2 demands of an issue's author. Vetting drops such
+   issues, but the drop is what makes a batch unclean, so a single linked third-party
+   issue tightens attribution for the entire run.

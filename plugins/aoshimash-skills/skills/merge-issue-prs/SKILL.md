@@ -41,7 +41,11 @@ assertions that must **all** hold, and every gap in evidence resolves to *defer*
 > **Implementation status.** Phase 0 and Phase 1 (eligibility) are fully specified in
 > this version. Phases 2 and 3 are summarised below as design intent only — their
 > detailed procedures are **not part of this skill version**. Do not execute a merge, a
-> revert, or a milestone-PR flip from those summaries; run eligibility triage and report.
+> revert, or a milestone-PR flip from those summaries: run eligibility triage, then report
+> the eligible and deferred sets. Triage is read-only with **one exception** — it applies,
+> and first creates if absent, the label recording a permanent E5 exclusion on a PR. That
+> write is required, and a failed write is escalated; see
+> [references/eligibility.md](references/eligibility.md).
 
 ## Core Principles
 
@@ -85,7 +89,7 @@ below use capability terms; map them to your environment as follows.
 | Capability | With native support (example) | Fallback |
 |---|---|---|
 | **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`) | Numbered options as plain text; wait for the user's reply |
-| **Background execution** — run long waits without blocking | Background shell (e.g. Claude Code's background Bash) | Poll sequentially at a fixed interval; the bounded window is a wall-clock cap either way |
+| **Background execution** — run long commands without blocking | Background shell (e.g. Claude Code's background Bash) | Run commands sequentially |
 | **Scheduled invocation** — run this skill again later without a user present | Recurring or cron-scheduled agent runs (e.g. Claude Code's scheduled tasks) | Re-invoke manually once per session; every run re-derives its state from the tracker and git, so a fresh session resumes at no cost |
 
 - *User choice* is used when the run scope is ambiguous, when a run-level precondition
@@ -114,7 +118,11 @@ below use capability terms; map them to your environment as follows.
 3. **Read repository conventions** — the configured merge method (never assume
    squash), the CI configuration, the bounded-wait and label overrides, and any PR
    template. See [references/platform-github.md](references/platform-github.md).
-4. **Verify run-level preconditions** — most importantly that a verifiable CI signal
+4. **Ensure the E5 exclusion label exists**, creating it if the repository does not have
+   it yet. A label must exist before it can be applied, and this one is the durable record
+   of a permanent exclusion — discovering it is missing at the moment a human comment is
+   found is too late.
+5. **Verify run-level preconditions** — most importantly that a verifiable CI signal
    exists for the integration branch, since post-merge verification depends on it.
    A failed precondition never produces a quieter autonomous mode: state which one
    failed and fall back to human merge.
@@ -154,10 +162,15 @@ through respond-to-pr-review.
 
 ### Phase 4: Report
 
-Report what was **merged and verified**, what was **deferred** (with the failed
-condition and the human action each needs), what was **reverted** and why, and anything
-**escalated**. Deferred PRs are the run's most important output — they are where the
-human's attention is needed.
+In **this version**, the report covers what triage produced: the **eligible** set (found
+and left alone — nothing is merged), the **deferred** set with each PR's failed condition,
+evidence, and the human action it needs, and anything **escalated** — including any E5
+exclusion whose label write could not be verified. Deferred PRs are the run's most
+important output; they are where the human's attention is needed.
+
+Once the merge loop and milestone PR exist, the same report also covers what was **merged
+and verified** and what was **reverted** and why. Those categories cannot occur in this
+version — do not emit them, and do not imply a merge happened.
 
 If the batch has not reached a terminal state — PRs still unsettled, implementers still
 working — say so explicitly and state what the next run will pick up. Nothing is
