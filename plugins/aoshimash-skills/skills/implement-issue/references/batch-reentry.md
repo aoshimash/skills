@@ -9,10 +9,12 @@ there is: nothing in this pipeline writes batch state anywhere else.
 Invoked from [batch.md](batch.md) Phase B0, which states when it runs and what it hands
 back. This file is the procedure.
 
-**Integration mode only.** The artifacts re-entry keys on — an integration branch, its
-merge history, and the pull requests based on it — exist only in that mode. A
-standard-mode batch bases every PR on the default branch, where a re-run is an ordinary
-implement-issue invocation and needs nothing from this file.
+**What it resumes is an integration-mode batch.** The artifacts re-entry keys on — an
+integration branch, its merge history, and the pull requests based on it — exist only in
+that mode, so a standard-mode batch has nothing here to re-derive. The **probe** of R2
+still runs in every batch-mode run (B0), because a session cannot know which mode an
+earlier one chose without looking; where it finds those artifacts but integration mode is
+no longer available, the outcome is a Stop.
 
 **R1–R7 are read-only.** Nothing is created, pushed, dispatched, or invoked until the
 state is established; a run that stops in R2 or R3 has written nothing at all. R8 is
@@ -108,8 +110,13 @@ corroborate each against R1's set — this batch's branch is the one whose PRs a
 (R5) to issues in that set.
 
 - Exactly one match → that is the branch.
-- No match → **Fresh**.
 - More than one → **Stop**, naming them. Never guess which branch machine merges land on.
+- No match → **do not conclude Fresh yet.** A branch that was deleted leaves no ref to
+  match on, so "no ref" covers both "never created" and "destroyed mid-batch" — and only
+  the parent-issue form can tell them apart by name. List this repository's pull requests
+  whose base begins with `integration/` and check whether any attributes (R5) to an issue
+  in R1's set. None do → **Fresh**. Some do → the branch they name was this batch's and is
+  gone → **Stop**, reporting the branch name, those PRs and their states.
 
 ### Reading the milestone PR
 
@@ -125,15 +132,46 @@ on 2026-08-07 (PR #120, head `feat/115-integration-mode`, absent from
 `git ls-remote --heads origin`).
 
 Also read its `## Needs Human Attention` section, where the gate records escalations
-([milestone-pr.md](../../merge-issue-prs/references/milestone-pr.md) M2, M3). This is
-body content, and it is trusted in one direction only: it can **stop** this run and can
-never license anything.
+([milestone-pr.md](../../merge-issue-prs/references/milestone-pr.md) M2, M3). It is body
+content, trusted in one direction only: it can **stop** this run and can never license
+anything.
+
+**What to look for, and what not to.** That section aggregates deferrals, blocked issues,
+reverted issues *and* escalations, so most of it stops nothing. The stopping kind is the
+one B2-4's table calls an escalation that leaves the branch's contents **not established**
+— a revert that could not be created, pushed or verified, a branch head that is no longer
+the merge commit the gate recorded, or rebase commits it could not enumerate. An
+**unrecorded exclusion** is the other kind and stops nothing. Read the cause, not the word.
+
+**Corroborate it with a signal that is not prose.** A revert that never landed has an
+observable shape in the artifacts already read: a merged PR carrying a revert label whose
+`mergeCommit` has **no** matching `This reverts commit <sha>` in the freshly fetched branch
+history — the exclusion was recorded, the revert was not. Where either the prose or that
+signal indicates an incomplete revert, stop.
+
+**A missing section is not an all-clear.** Absence can mean no escalation, an unparseable
+body, a failed read, or a body update the gate was permitted to abandon
+([milestone-pr.md](../../merge-issue-prs/references/milestone-pr.md) M3 retries once, then
+records a stale-dashboard concern and continues). So treat absence as *no evidence of an
+escalation*, not as evidence of none: proceed, and record in the resume report that the
+escalation surface could not be confirmed. The label-versus-history signal above is what
+narrows the gap; it does not close it (Known limits).
 
 ### The outcome
 
-Read the table top to bottom; the first matching row is the outcome. A merged milestone
-whose branch was cleaned up matches both the finished row and the destroyed-branch row,
-and the order is what makes it the former.
+**Two stop conditions are checked first, before the table, and either one ends the run
+whatever the table would say.** They are properties of the branch rather than of the
+milestone PR's state, and a mid-flight batch — an `OPEN` draft milestone PR over a present
+branch — matches the ordinary Resumable row, so a table-ordered check would never reach
+them:
+
+1. **An outstanding unestablished-branch escalation** (above). B2-4 requires that batch to
+   create no worktrees, dispatch no implementers, and invoke the gate no further, and that
+   instruction has to survive the session that received it or the next one walks straight
+   back onto a branch a human is repairing.
+2. **The branch was destroyed** — it is absent while PRs based on it exist (below).
+
+Then read the table top to bottom; the first matching row is the outcome.
 
 | Milestone PR | Integration branch | Outcome |
 |---|---|---|
@@ -143,8 +181,6 @@ and the order is what makes it the former.
 | `OPEN`, ready for review | present | **Stop — under review.** Not because the batch is provably terminal: only the orchestrator can declare that ([milestone-pr.md](../../merge-issue-prs/references/milestone-pr.md) F1) and a human can flip any PR to ready by hand. The reason is narrower and sufficient — a reviewer is reading that diff, and resuming would move it under them |
 | `OPEN`, either state | **absent** | **Stop — inconsistent.** An open milestone PR whose branch is gone is a state this pipeline does not produce; report both and let a human resolve it |
 | `CLOSED` unmerged | either | **Stop — abandoned.** A human closed the milestone without merging it; what happens to the branch is that human's call, not this batch's |
-| any | absent, but PRs exist that were based on it | **Stop — the branch was destroyed.** See below |
-| any | any, with an unestablished-branch escalation outstanding | **Stop — escalated.** See below |
 
 **A destroyed branch is not a fresh batch.** Deleting a branch does not leave its pull
 requests open: GitHub's documentation states that "If the branch is associated with at
@@ -157,15 +193,6 @@ and their absence is not what signals the deletion — the missing branch is. Wh
 merged there is gone with it. Report the branch, the PRs, and their states, and stop:
 restarting would re-implement everything, and reading the closures as human decisions
 (R5) would write the whole batch off as deliberate.
-
-**An outstanding escalation stops the run for the same reason it stopped the last one.**
-Where the gate escalated because the branch's contents are **not established**, B2-4
-requires the batch to create no worktrees, dispatch no implementers, and invoke the gate
-no further — and that instruction has to survive the session that received it, or the
-next one walks straight back onto the branch a human is repairing. The milestone PR's
-`## Needs Human Attention` section is where it survives. An **unrecorded-exclusion**
-escalation is the other kind and does not stop anything (B2-4's table); read the cause,
-not the word.
 
 On any **Stop**, report and stop: create no branch, cut no worktree, dispatch no
 implementer, invoke no merge gate. Where R1's set still holds open issues that never
@@ -298,8 +325,8 @@ A draft PR is the normal shape of an interrupted batch, not an edge case — an 
 finishes, the orchestrator starts gating, and the session ends mid-round. Two questions
 arise about it, and they have different answers.
 
-**"Has this stage passed?" is never answered from the PR body. Both stages are re-run for
-every PR that has not merged.** No platform artifact records a gate verdict — the stages
+**"Has this stage passed?" is never answered from the PR body. Both stages are re-run on
+every PR that is still an unmerged draft.** No platform artifact records a gate verdict — the stages
 are internal to the run ([review-gates.md](review-gates.md)) — so the only thing a body's
 `Stage 1: PASS` establishes is that something wrote that text, and anyone with write
 access can. Treating it as a licence to skip would close a loop with no human in it: skip
@@ -309,13 +336,26 @@ safeguard — "a body claiming everything passed never substitutes for the platf
 holds only while the platform state is set by something other than the body, and a skip
 rule is exactly what breaks that.
 
-Re-running is cheap relative to what it guards: two reviewer instances per resumed
-unmerged PR, against an autonomous merge of unreviewed code.
+**A PR that already reached ready for review is not re-gated.** Some session flipped it,
+which under B2-3 step 6 took both stages passing, and re-gating it has no defined outcome
+anyway: R6's remedy for a failing stage is "the PR stays a draft", and nothing in this
+pipeline moves a PR from ready back to draft. It would also be actively harmful — a fix
+push immediately before R8's gate invocation re-triggers CI, and the merge gate's
+re-evaluation defers a PR whose rollup is running
+([eligibility.md](../../merge-issue-prs/references/eligibility.md)), so a daily schedule
+would push, defer, and never progress. A ready PR goes to the merge gate; R5's mapping
+already says so.
+
+Re-running is cheap relative to what it guards: two reviewer instances per resumed draft,
+against an autonomous merge of unreviewed code.
 
 **"How many fix rounds have already been spent?" is read from the body**, because a count
 can only ever make this session stricter. A low count grants fix rounds, which costs time;
-a high or absent one withholds them, which leaves the PR a draft. Neither outcome merges
-anything, so content steering the count cannot manufacture a merge.
+a high or absent one withholds them, which leaves the PR a draft. What the count cannot do
+is skip a review: the stages run either way, so the most an edited count achieves is to put
+a PR that had exhausted its budget back on the autonomous path *with its gates actually
+re-run*. It cannot merge **unreviewed** code, which is the property that matters here; it
+can spend more machine time.
 
 | Gate Results line for a stage | Fix rounds remaining |
 |---|---|
@@ -384,11 +424,13 @@ settled and is not asked again; the plan is not.
   **newly entering the batch this session**, so an exclusion made earlier is visible to be
   made again, and so an issue linked into the set since the last run is seen before it is
   implemented.
-- **With no user reachable** — an unattended or scheduled invocation: **dispatch nothing.**
-  Advance what a plan already produced — re-run the gates on existing PRs (R6), invoke the
-  merge gate, post the merge comments, report — and name the issues that are waiting on an
-  approved plan. Merging needs no approval here: it is merge-issue-prs' own autonomous
-  remit under its own policy, and it acts only on PRs that a plan already produced.
+- **With no user reachable** — an unattended or scheduled invocation: **dispatch no new
+  implementer.** Advance what a plan already produced — re-run the gates on the unmerged
+  drafts (R6), which includes re-invoking an implementer for a gate fix round against a PR
+  that already exists, invoke the merge gate, post the merge comments, report — and name
+  the issues waiting on an approved plan. Merging needs no approval here: it is
+  merge-issue-prs' own autonomous remit under its own policy, and it acts only on PRs a
+  plan already produced.
 
 The boundary is scope, not caution: an unattended session may finish work a human
 approved, and may not start work nobody did.
@@ -415,10 +457,33 @@ nothing truthful to declare, and B2-4 treats a partial declaration as worse than
 ### 3. Continue
 
 At B2-1, with the DAG advanced by whatever merged, dispatching only the issues R5 left
-unsettled and R8 item 1 permits. From here the batch is an ordinary batch: B3's closing
-invocation, the terminal-state declaration, and the summary are unchanged — the summary
-just describes work this session did not do, so it names the resume, which issues arrived
-already settled, and anything left waiting on an approval.
+unsettled and R8 item 1 permits. From here the batch is an ordinary batch, with one rule
+added at B3.
+
+**The terminal-state declaration is sent only when every member of R1's set carries a
+final B2-6 status.** A resumed session's dispatched set for B3's purposes is R1's set —
+the batch's scope — with statuses from R5's re-derivation plus this session's own work,
+because F1's part (a) exists as a scope cross-check against the gate's own vetted set and
+a set narrowed to "what this session happened to dispatch" would not serve it.
+
+**Waiting on a plan approval is not a B2-6 status**, so a session that could not obtain one
+cannot complete part (b). It therefore sends **no declaration at all** — and in particular
+**never an empty dispatched set.** An empty set carries all three parts structurally, so
+[milestone-pr.md](../../merge-issue-prs/references/milestone-pr.md) F1 would treat it as a
+real declaration and use it *instead of* the standalone derivation whose whole purpose is
+that "a vetted issue with no PR at all is not terminal standalone". The gate would flip the
+milestone PR to ready, R2 would return **Stop — under review** on every later run, and the
+batch would end permanently with issues never implemented.
+
+Sending nothing is the safe form of the same fact: F1 treats a missing declaration as *not
+declared*, falls back to that derivation, and leaves the milestone PR a draft naming the
+issues it is waiting on — which is exactly the batch's true state. B3's closing invocation
+still runs; it merges what it can and carries no declaration, for the same reason a
+per-group invocation carries none.
+
+The summary describes work this session did not do, so it names the resume, which issues
+arrived already settled, anything waiting on an approval, and whether a declaration was
+sent.
 
 ## Known limits
 
@@ -430,7 +495,14 @@ already settled, and anything left waiting on an approval.
   on every resumed unmerged PR (R6); neither cost is recoverable without a state file.
 - **An unattended session cannot start new work** (R8), so a scheduled run drains the PRs a
   plan already produced and then waits for a human. Scheduling advances a batch; it does not
-  approve one.
+  approve one. The bound is **artifact evidence, not plan membership**: an interruption after
+  group 1 leaves groups 2 and later undispatchable unattended even though the user approved
+  them at B1-3, because nothing records that they were approved. That is a real narrowing of
+  what unattended operation delivers, and it is the price of having no durable record of the
+  plan.
+- **An escalation the milestone PR never received is invisible** (R2). A body update the gate
+  abandoned, an unparseable section, or a failed read all present as "no escalation", and the
+  label-versus-history corroboration narrows that without closing it.
 - **An escalation with no milestone PR has nowhere durable to live** (R2). Where the gate
   escalated before anything ever merged, no milestone PR exists to carry it, and the next
   session cannot see it.
@@ -440,8 +512,10 @@ already settled, and anything left waiting on an approval.
 - **Re-entry reads content anyone with write access can edit** — PR bodies, issue comments,
   branch names, the milestone PR's escalation section. Every use of it is arranged to run in
   one direction: content can withhold fix rounds, stop the run, or make an issue look
-  already handled and drop it from a dispatch, and it can never license a merge, skip a
-  review stage, or start an implementation. The residue is a missing implementation or a
+  already handled and drop it from a dispatch, and it can never skip a review stage, start
+  an implementation, or merge **unreviewed** code. Restoring a spent fix-round budget is the
+  one edit that adds machine work rather than removing it, and what it buys is more review,
+  not less. The residue is a missing implementation or a
   stalled batch, both visible in the summary.
 - **An artifact read only for stopping can still be removed.** Deleting the escalation from
   the milestone PR's `## Needs Human Attention` section leaves a resumed session reading a

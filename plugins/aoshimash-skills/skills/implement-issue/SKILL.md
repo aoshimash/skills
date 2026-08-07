@@ -95,7 +95,7 @@ frees the agent during them, it does not supply the bound.
 
 *Scheduled invocation* is the **repeated-invocation operating pattern**: one invocation
 advances the batch as far as that session gets, and the next one re-derives where it
-stopped and continues from there (batch.md B0,
+stopped and carries on from there — within the scope limit below (batch.md B0,
 [references/batch-reentry.md](references/batch-reentry.md)). The pattern is the same
 whether the repeat is scheduled or typed by hand — same batch source, one invocation per
 session, until the milestone PR is ready — because nothing is persisted between sessions
@@ -104,10 +104,12 @@ the person from the loop; it is not what makes resumption work.
 
 The two differ in **scope**, not mechanism. Which issues a batch implements is settled at
 the execution-plan approval and recorded nowhere durable, so an invocation with no user
-reachable advances the work an approved plan already produced — review gates, the merge
-gate, the reports — and **dispatches no new implementer**, naming instead whatever is
-waiting on an approval. A scheduled run drains a batch toward its milestone PR without
-ever widening it. That, and the rest of what re-derivation cannot recover, is in
+reachable advances the work an approved plan already produced — review gates on the drafts,
+the merge gate, the reports — and **dispatches no new implementer**, naming instead whatever
+is waiting on an approval. Since that bound is artifact evidence rather than plan
+membership, an unattended run drains the group the last session dispatched and then stalls
+on the next one, even though the user approved it; a batch is advanced without ever being
+widened, and finishing one still takes a session with a user in it. That, and the rest of what re-derivation cannot recover, is in
 batch-reentry.md's Known limits.
 
 ## Phase 0: Setup and Mode Selection

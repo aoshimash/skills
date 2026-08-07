@@ -412,6 +412,20 @@ git ls-remote --heads origin 'refs/heads/integration/*'
 applies to it. Corroborate a candidate by checking that read 2 returns PRs attributing to
 this batch's issues; more than one surviving candidate is a stop, never a guess.
 
+When **no** ref matches, that is not yet a fresh batch — a deleted branch leaves no ref
+either. Look for the PRs it would have left behind before concluding anything:
+
+```bash
+gh pr list --state all --limit 200 \
+  --json number,state,baseRefName,headRefName,body \
+  --jq '[.[] | select(.baseRefName | startswith("integration/"))]'
+```
+
+The filter is client-side, so `--limit` caps what is **fetched** and the truncation rule
+matters more here than anywhere else: raise the limit until the row count is below it. PRs
+whose base is an `integration/` branch and which attribute to this batch's issues mean the
+branch existed and is gone ([batch-reentry.md](batch-reentry.md) R2).
+
 **2. Every PR based on the integration branch, in any state** — the primary artifact, and
 the same result serves the recency check, the per-issue mapping, and the gate budget:
 
@@ -445,7 +459,8 @@ head `feat/115-integration-mode`, absent from `git ls-remote --heads origin`). T
 lets a merged milestone be distinguished from a batch that never started, both of which
 present as "the integration branch does not exist". `body` carries the
 `## Needs Human Attention` section, where the merge gate records an escalation that has to
-outlive the session it was reported to.
+outlive the session it was reported to. The same truncation rule applies — `--limit` is a
+cap, and a row count equal to it means the read may be short.
 
 **4. Remote branches an earlier session pushed** — including per-issue branches that never
 became a PR:
@@ -454,8 +469,10 @@ became a PR:
 git ls-remote --heads origin
 ```
 
-Match the batch's branch naming (`<type>/<issue-number>-…`) against read 2: a branch with
-no PR is an orphan ([batch-reentry.md](batch-reentry.md) R7), never a base to build on.
+As in read 1, `git ls-remote` returns the complete ref list in one response, so no
+pagination rule applies. Match the batch's branch naming (`<type>/<issue-number>-…`)
+against read 2: a branch with no PR is an orphan
+([batch-reentry.md](batch-reentry.md) R7), never a base to build on.
 
 **5. Timestamps for the recency check** ([batch-reentry.md](batch-reentry.md) R3). GitHub
 returns `createdAt` as ISO-8601 UTC with a `Z` suffix, and such timestamps compare
@@ -473,11 +490,23 @@ TZ=UTC0 git log -1 --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ \
 # every remote branch head time in one pass — ref name and time together
 TZ=UTC0 git for-each-ref \
   --format='%(refname:short) %(committerdate:format-local:%Y-%m-%dT%H:%M:%SZ)' \
-  'refs/remotes/origin/*'
+  --exclude=refs/remotes/origin/HEAD \
+  'refs/remotes/origin/**'
 
 # now, for the comparison
 date -u +%Y-%m-%dT%H:%M:%SZ
 ```
+
+**The pattern needs `**`, not `*`.** `for-each-ref` matches with pathname semantics, so a
+single `*` does not cross a `/` — and every branch in this convention is
+`<type>/<issue-number>-<slug>`, which contains one. Run against this clone on 2026-08-07,
+`'refs/remotes/origin/*'` returned 2 refs (`origin`, `origin/main`) while
+`'refs/remotes/origin/**'` returned all 10, including `origin/feat/112-resumable-reentry`
+and `origin/integration/issue-109`. The single-star form fails **open**: it silently drops
+every per-issue branch from the recency comparison, and a just-pushed branch with no PR yet
+is exactly the signal R3 needs it for. `--exclude` drops `refs/remotes/origin/HEAD`, which
+`for-each-ref` otherwise prints as `origin` — a symbolic ref to the default branch, not a
+batch artifact.
 
 `git ls-remote` returns SHAs rather than times, which is why the per-branch times come from
 `for-each-ref` over freshly fetched remote-tracking refs. Filter its output down to the
