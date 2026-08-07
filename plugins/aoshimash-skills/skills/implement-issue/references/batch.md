@@ -34,11 +34,25 @@ do not restate its rules here, and never second-guess its verdicts.
 **The one fact only this file knows is whether the batch is finished.** The gate reads
 pull requests and issues; it cannot see a running implementer, so "no PR yet" and "no PR
 ever" are identical to it, and it will not call a milestone terminal on its own while any
-vetted issue has no PR. The orchestrator is the only party that knows. So exactly one bit
-of batch state travels with the invocation — terminal or not — and nothing else: no
-per-issue statuses, no DAG, no record of what merged before. Everything else the gate
-re-derives from the tracker and git on every run, and no file is shared in either
-direction.
+vetted issue has no PR. The orchestrator is the only party that can tell the difference, so
+it declares it — once, at the end (B3).
+
+**The declaration has three parts, and a partial one does not count.** The merge gate
+accepts a declaration only when it carries the **issue set this batch dispatched**, a
+**final status for every member of that set**, and an **explicit assertion that no
+implementer is still running**; anything less is treated as *not declared* and the gate
+falls back to its own conservative inference, under which a batch's milestone PR never
+leaves draft. So all three travel together or none of them does.
+
+**It is a report, not an instruction, and that is what keeps the extension thin.** All
+three parts are things this file computes anyway — the dispatched set and the status table
+are exactly what B3 already prints in the summary, and the third is the observation the
+gate structurally cannot make. Nothing is persisted: the declaration rides on the
+invocation, never a file. And it confers **no authority**: not over eligibility, ordering,
+merge method, verification, revert, or what goes in the milestone PR. The gate re-derives
+every one of those from the tracker and git on every run and may disagree with any status
+in the declaration; this file records that disagreement rather than overriding it (B2-4,
+B2-6).
 
 **Integration mode is batch-only.** Single mode has no execution-plan approval and no
 dependency graph, so nothing in this file reaches it: a single-issue run never offers the
@@ -114,11 +128,23 @@ in the B1-3 plan, since the batch cannot satisfy it.
      resolves to the edge: an unnecessary edge costs wall-clock, a missing one costs a
      deferred PR and its dependents.
 
+   **Repeat this step until a pass adds no edge.** Recomputing the levels moves the higher
+   issue down into a level whose members it was never compared against, and a collision
+   with one of *those* would then be dispatched in parallel — the outcome the step exists
+   to prevent. One pass is not enough; a fixed point is.
+
    These edges are a scheduling judgment, not a dependency — mark them as such in the plan
    so the user can drop any of them through Reorder (B1-3), and add them only for the
    integration-mode reading of the plan.
 
 ### B1-3. Visualize and Approve
+
+**Integration mode: read the branch's state before drawing the plan.** Whether the
+integration branch already exists, and what it carries, changes what the user is
+approving — so both reads happen here, not after the approval. Both are read-only (see
+[platform-github.md](platform-github.md)): `git show-ref` for existence, and a
+default-branch comparison for how far ahead and behind an existing branch is. B1-4 acts on
+what this establishes; it does not discover it.
 
 Display the execution plan:
 
@@ -152,8 +178,12 @@ Integration mode available: integration/issue-100
     take both in parallel without a conflict the merge gate will not resolve.
 ```
 
-If the integration branch already exists, say so here instead of "would create", together
-with what B1-4 found about it.
+If the branch already exists, say "reuses" rather than "would create", and state both
+consequences the reuse carries: how far behind the default branch it is, and that an
+earlier run's commits are already on it — including any work that run reverted, which will
+make the merge gate defer this batch's PRs for those issues. Bringing the branch forward,
+or starting a fresh milestone under a new name, is the user's call to make here, while the
+plan is still open.
 
 Ask the user to choose (see Environment Adaptation in SKILL.md) — "Proceed with this execution plan?" with options:
 
@@ -180,10 +210,12 @@ The merge mode is chosen inside this one approval — there is no separate mode 
 Reorder round re-presents the same option set, so the mode is still open until the plan is
 approved.
 
-### B1-4. Create the Integration Branch (integration mode only)
+### B1-4. Create or Reuse the Integration Branch (integration mode only)
 
-Once the plan is approved in integration mode, create the branch before dispatching the
-first group. Naming:
+Once the plan is approved in integration mode, act — before dispatching the first group —
+on what B1-3 already established about the branch. Nothing is discovered here; the reads
+happened while the plan was still open, because their answers change what the user
+approved. Naming:
 
 - `integration/issue-<parent-number>` when the batch source is a parent issue.
 - `integration/<date>-<slug>` (e.g. `integration/2026-08-07-search-milestone`) for a
@@ -192,11 +224,10 @@ first group. Naming:
   lower-case letters, digits, and hyphens before it goes anywhere near a command, and
   never interpolate tracker text into a shell command as it stands.
 
-**Probe before creating** — the same name may already be on the remote, from an earlier
-run of this milestone. `git branch` on an existing name fails outright (`fatal: a branch
-named '<name>' already exists`, exit 128), and pushing a freshly cut branch over an
-advanced remote branch is rejected non-fast-forward, so the two paths cannot share one
-command:
+The two paths cannot share one command — `git branch` on an existing name fails outright
+(`fatal: a branch named '<name>' already exists`, exit 128), and pushing a freshly cut
+branch over an advanced remote branch is rejected non-fast-forward — so branch on B1-3's
+answer:
 
 ```bash
 git fetch origin
@@ -210,12 +241,8 @@ fi
 
 - **A branch created now starts at the current default branch**, so the milestone PR's
   diff is this batch's own work and nothing else.
-- **An existing branch is reused as-is**, and it does *not* have that property. Report both
-  consequences in the plan (B1-3) rather than discovering them later: it may sit behind the
-  default branch, and it may already carry an earlier run's commits — including work whose
-  merge that run reverted, which makes the merge gate defer this batch's PRs for those same
-  issues. Bringing the branch forward, or starting a fresh milestone on a new name, is a
-  human's call; the batch does neither on its own.
+- **An existing branch is reused as-is**, and it does *not* have that property — which is
+  why B1-3 states the consequences before the approval rather than here.
 - **Never reset, force-push, or delete the branch.** Implementers have it checked out as
   their base, and the merge gate reads its history to decide which work it already
   reverted. Deleting it is not the batch's business at all — that follows the milestone PR.
@@ -347,11 +374,26 @@ not a candidate. Group boundaries decide *when* the gate runs, nothing more.
 3. **The dependency graph**, where the gate accepts one — it orders merges by it. The graph,
    not "the group's order": a group's issues are independent of each other by construction,
    so a within-group order carries no information.
-4. **Whether the batch has reached a terminal state** — one bit, described in Merge Modes.
-   It is `false` for every per-group invocation by definition, since later groups are still
-   outstanding, and it is the closing invocation of B3 that carries `true`. This is the one
-   piece of batch state that crosses the boundary, and it crosses in the invocation, never
-   in a file.
+4. **The terminal-state declaration** — and only on the closing invocation of B3. A
+   per-group invocation carries **none**: later groups are still outstanding, so there is
+   nothing truthful to declare, and a partial declaration is worse than none (the gate
+   treats it as not declared anyway). The closing one carries all three parts from Merge
+   Modes:
+   - the issue set this batch dispatched;
+   - a final status for every member of that set, from B2-6's table — including
+     `BLOCKED`, `NEEDS_CONTEXT`, and `SKIPPED` issues, which are final for this batch even
+     though they produced no PR, and which are exactly the members the gate cannot resolve
+     on its own;
+   - the explicit assertion that no implementer is still running.
+
+   Carry **issue numbers and statuses only** — never titles, bodies, PR text, or anything
+   else fetched from the platform. The statuses are this run's own judgments, so a
+   declaration built this way adds nothing to the untrusted-content surface, and there is
+   nothing in it for injected text to ride on.
+
+   This is the whole of what crosses the boundary, it crosses in the invocation rather than
+   a file, and it is a report of what this run did — see Merge Modes for why that keeps the
+   extension thin.
 
 **What comes back is a report**: what merged and verified, what was reverted and under
 which of the two causes, what was deferred with the human action each deferral needs, what
@@ -404,10 +446,14 @@ of it. The batch's response:
 
 1. Report the named precondition and its fix **once**, at the top of the summary. It
    blocks the whole batch, not one issue.
-2. **Do not invoke the gate again this batch.** The failed precondition is a property of
-   the repository's configuration rather than of the group, so re-invoking per group turns
-   one actionable report into one per group. A human who fixes the configuration re-runs
-   the batch, or invokes the merge gate standalone against the same branch.
+2. **Stop invoking the gate per group.** The failed precondition is a property of the
+   repository's configuration rather than of the group, so re-invoking per group turns one
+   actionable report into one per group. A human who fixes the configuration re-runs the
+   batch, or invokes the merge gate standalone against the same branch. B3's **closing
+   invocation still runs**, though: it merges nothing either, but it is the only thing that
+   ever delivers the terminal-state declaration, and on a reused branch a milestone PR may
+   already exist and would otherwise sit in draft forever waiting for it. Say in the summary
+   that this invocation was for the declaration alone.
 3. Treat every unmerged dependency as unsatisfied — dependents cascade to `SKIPPED`
    (B2-5) — while independent issues continue and deliver their PRs as usual. Those PRs
    are exactly the "ready for a human to merge" set the gate reported.
@@ -425,8 +471,8 @@ escalation, and they need opposite responses:
 
 | Escalation | What it says about the branch | The batch's response |
 |---|---|---|
-| **A revert that could not be completed** — not created, not pushed, not verified, or (under rebase) not enumerable | The branch's contents are **not established** | Stop using the branch |
-| **An unrecorded exclusion** — a revert comment that could not be posted, or an exclusion label whose write could not be verified | Nothing. The revert succeeded and the branch is healthy; one PR's permanent exclusion just is not durably recorded | Carry it into the summary's human-queue section, named by PR, and **continue normally** |
+| **A revert that could not be completed** — the branch head is not the merge commit the gate recorded (so it never attempts one), or the revert cannot be created, pushed, or verified, or under a rebase merge its commits cannot be enumerated with certainty | The branch's contents are **not established** | Stop using the branch |
+| **An unrecorded exclusion** — a revert comment that could not be posted, an exclusion label whose write could not be verified, or a reverted PR the gate could not attribute to an issue | Nothing. The revert succeeded and the branch is healthy; what is missing is one PR's durable record of a permanent exclusion | Carry it into the summary's human-queue section, named by PR, and **continue normally** |
 
 Only the first stops the batch, and then completely: create no new worktrees, dispatch no
 new implementers, and invoke the gate no more times this batch — every worktree cut from
@@ -530,13 +576,20 @@ After each issue completes (regardless of status):
 
 ## Phase B3: Summary and Harvest
 
-**Integration mode: run B2-4 once more, declaring the batch terminal, before writing
-anything below.** Every per-group invocation ran while later groups were still outstanding,
-so none of them could carry the terminal bit — and the gate will not call a milestone
-terminal on its own while a vetted issue has no PR, because it cannot tell a missing PR from
-one an implementer is still writing. This closing invocation is what supplies the judgment
-only this file has, and it is what lets the gate finish the milestone PR. This file never
-opens, updates, or flips that PR itself.
+**Integration mode: run B2-4 once more, carrying the terminal-state declaration, before
+writing anything below.** No per-group invocation could carry it — later groups were still
+outstanding, so there was nothing truthful to declare — and the gate will not call a
+milestone terminal on its own while a vetted issue has no PR, because it cannot tell a
+missing PR from one an implementer is still writing. This closing invocation supplies the
+judgment only this file has, and it is what lets the gate finish the milestone PR. This file
+never opens, updates, or flips that PR itself.
+
+**Assemble the declaration from what the summary below already needs** (Merge Modes, B2-4
+item 4): the issue set this batch dispatched, a final B2-6 status for every one of them, and
+the assertion that no implementer is still running. Send all three or none — the gate treats
+a partial declaration as no declaration, and then the milestone PR never leaves draft. Do
+not soften a status to make the set look complete: `BLOCKED`, `NEEDS_CONTEXT`, and `SKIPPED`
+are final statuses and belong in the declaration as themselves.
 
 **It is a full B2-4, not a notification.** The gate runs its whole loop and may merge PRs
 in it — the not-attempted set that stop-the-line left behind reaches its next run here, and
@@ -544,12 +597,13 @@ for the last group that next run is this one. So every part of B2-4 applies: the
 read the same way, statuses are updated under the same precedence, merges are confirmed by
 the same two-part read, and newly merged issues get their comment. Only then is the summary
 written, so it describes the batch as it finally stands rather than as it stood one
-invocation ago.
+invocation ago. Re-derive the declaration's statuses **after** that report is applied, so
+what was sent and what the summary prints are the same thing.
 
-Skip the closing invocation in exactly two cases, because the gate has already said it will
-not act and asking again only repeats one report: the run ended in **human-merge mode**, or
-in an **unestablished-branch escalation** (B2-4). An unrecorded exclusion is not one of
-them — that batch continues normally and gets its closing invocation like any other.
+Skip the closing invocation in exactly one case: an **unestablished-branch escalation**
+(B2-4), where every further use of the branch is unsafe. **Human-merge mode is not a skip** —
+the gate merges nothing there either, but it is the only route the declaration has, and a
+reused branch may already carry a milestone PR that would otherwise wait on it forever.
 
 After all issues are processed, present a summary table:
 

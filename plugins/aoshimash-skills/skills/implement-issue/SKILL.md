@@ -222,8 +222,10 @@ approval — never as a separate gate, and never in Single mode:
    reverted, or never merged cascades the same way — merged-into-integration is
    the only satisfied state.
 3. **Summary and harvest** — in integration mode, first invoke the merge gate
-   once more declaring the batch terminal (batch.md B3), since only the
-   orchestrator knows implementers have stopped. Then present a status table
+   once more with the terminal-state declaration (batch.md B3): the dispatched
+   issue set, a final status for each of its members, and the assertion that no
+   implementer is still running — only the orchestrator can supply that, and a
+   partial declaration counts as none. Then present a status table
    (issue, title, status, PR) covering DONE / DONE_WITH_CONCERNS /
    NEEDS_CONTEXT / BLOCKED / SKIPPED, plus MERGED / DEFERRED / NOT_ATTEMPTED /
    REVERTED in integration mode, where the deferred and reverted PRs are the

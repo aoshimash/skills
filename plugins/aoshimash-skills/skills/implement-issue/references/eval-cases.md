@@ -48,7 +48,7 @@ integration mode (batch.md Merge Modes, B1-4, B2-4).
 | 36 | Integration base, and the timing that makes it work | In integration mode every worktree and every PR is based on the integration branch; the branch is probed before creation and reused rather than recreated; a worktree is cut only after that issue's dependencies have merged; and same-file collisions inside a group become ordering edges at DAG-build time, visible in the approved plan, with unestablished disjointness resolving to the edge |
 | 37 | Merged-and-not-reverted is the satisfaction rule | A dependency counts as satisfied only when platform state shows its PR MERGED against the integration branch **and** carrying neither revert signal; deferred, reverted, not-attempted, draft, and missing dependencies all cascade SKIPPED with the cause named, while independent DAG branches continue |
 | 38 | Status table separates merged from queued | The summary distinguishes MERGED / DEFERRED / NOT_ATTEMPTED / REVERTED, keeps not-attempted out of the human queue and the two revert causes apart, leads with any batch-wide blocker, applies the gate's report under a stated precedence, and never un-cascades silently |
-| 39 | The gate's own limits are handled, not assumed away | A merge gate that declines the whole run (human-merge mode) is reported once and not re-invoked; a stopped line is re-attempted by the next invocation; an unestablished-branch escalation stops all further use of the branch while an unrecorded-exclusion escalation does not; the vetted-set source and the terminal-state bit are both supplied at invocation; and none of it is worked around by the batch merging, retargeting, or closing anything itself |
+| 39 | The gate's own limits are handled, not assumed away | A merge gate that declines the whole run (human-merge mode) is reported once and not re-invoked per group, though its closing invocation still runs; a stopped line is re-attempted by the next invocation; an unestablished-branch escalation stops all further use of the branch while an unrecorded-exclusion escalation does not; the vetted-set source is supplied at invocation and the terminal-state declaration is complete or absent, never partial; and none of it is worked around by the batch merging, retargeting, or closing anything itself |
 | 40 | Merged issues stay open, and the batch says so | The batch keeps `Closes #N` in PR bodies, does not expect it to fire on a non-default base, never retargets or hand-closes to compensate, and states in the summary why merged issues are still open |
 
 ## Single-Mode Test Cases
@@ -571,7 +571,10 @@ precondition and its fix once, at the top of the summary; it does not invoke the
 gate again for later groups, does not merge the PR itself, and does not weaken
 anything to compensate. Every dependent cascades `SKIPPED`, independent issues
 still run and deliver PRs, and those PRs are described as ready for a human to
-merge.
+merge. B3's closing invocation **does** still run — it merges nothing either, but
+it is the only route the terminal-state declaration has, and on a reused branch a
+milestone PR may already exist and would otherwise wait on it forever; the
+summary says that invocation was for the declaration alone.
 
 **Criteria to test**: 39, 37
 
@@ -685,14 +688,19 @@ it reaches a command. Merges proceed exactly as in a parent-issue batch.
 leaves #504's eligible PR untouched. #504 is recorded `NOT_ATTEMPTED`. The batch
 then reaches B3.
 
-**Expected behavior**: the closing invocation is a full B2-4 — it declares the
-batch terminal *and* runs the gate's loop, which picks up #504 and merges it.
-Everything B2-4 requires follows: #504's status moves to `MERGED` under the
-precedence rules, the merge is confirmed by the two-part platform read, and #504
-gets its issue comment. Only then is the summary written, so it shows `MERGED`
-rather than the stale `NOT_ATTEMPTED`, and the terminal-state statement is
-computed from the final statuses. Any dependent already `SKIPPED` behind #504
-stays skipped, and the summary says re-running picks it up.
+**Expected behavior**: the closing invocation is a full B2-4 — it carries the
+terminal-state declaration *and* runs the gate's loop, which picks up #504 and
+merges it. Everything B2-4 requires follows: #504's status moves to `MERGED`
+under the precedence rules, the merge is confirmed by the two-part platform read,
+and #504 gets its issue comment. The declaration itself carries all three parts —
+the dispatched issue set, a final status for every member of it, and the
+assertion that no implementer is still running — since a partial one is treated
+as no declaration and would leave the milestone PR in draft; `BLOCKED`,
+`NEEDS_CONTEXT`, and `SKIPPED` members appear as themselves rather than being
+softened to make the set look complete. Its statuses are re-derived after the
+gate's report is applied, so the declaration and the summary agree: both show
+#504 as `MERGED`, not the stale `NOT_ATTEMPTED`. Any dependent already `SKIPPED`
+behind #504 stays skipped, and the summary says re-running picks it up.
 
 **Criteria to test**: 38, 39, 37
 
@@ -719,15 +727,17 @@ summary reports the revert with its cause.
 `integration/issue-109` is already on the remote from an earlier run — behind
 the default branch, and carrying a merge that the earlier run reverted.
 
-**Expected behavior**: the existence probe runs first, so nothing is created and
-nothing is pushed; `git branch` is never invoked on the existing name. The
-branch is reused as-is — never reset, force-pushed, or deleted — and the plan
-states both consequences: it is behind the default branch, and it carries an
-earlier run's reverted work, which will make the gate defer this batch's PRs for
-those issues. Bringing it forward or starting a new milestone is left to the
-user.
+**Expected behavior**: the existence probe and the branch comparison run **before
+the plan is presented**, because their answers change what the user is
+approving — so the plan says "reuses" rather than "would create" and states both
+consequences: the branch is behind the default branch, and it carries an earlier
+run's reverted work, which will make the gate defer this batch's PRs for those
+issues. Bringing it forward or starting a new milestone is the user's call while
+the plan is still open. After approval, nothing is created and nothing is pushed;
+`git branch` is never invoked on the existing name, and the branch is never
+reset, force-pushed, or deleted.
 
-**Criteria to test**: 36
+**Criteria to test**: 36, 35
 
 ## Evaluation Log
 
@@ -1441,13 +1451,27 @@ Design decisions recorded here because they shape the eval expectations:
   eligibility, the merge loop, verification, revert, or the milestone PR. Where the gate's
   behavior matters to the batch, the text points at that skill rather than paraphrasing its
   rules — a paraphrase would be a second copy to drift.
-- **Terminal batch state is the fourth item, and it is one bit.** The gate reads PRs and
-  issues; it cannot see a running implementer, so "no PR yet" and "no PR ever" are identical
-  to it and it will not call a milestone terminal on its own. The milestone PR's flip
-  condition is written to expect the orchestrator's declaration, and this is the channel for
-  it: one bit, carried in the invocation, false on every per-group call and true on the
-  closing one. Not a file, per the initiative's no-state-files decision, and not a batch-state
-  protocol — everything else the gate re-derives.
+- **Terminal batch state is the fourth item, and it is a three-part declaration.** The gate
+  reads PRs and issues; it cannot see a running implementer, so "no PR yet" and "no PR ever"
+  are identical to it and it will not call a milestone terminal on its own. The milestone
+  PR's flip condition is written to expect the orchestrator's declaration, and this is the
+  channel for it. It began as a single bit and was widened to match what the receiving side
+  accepts: the **dispatched issue set**, a **final status for every member**, and an
+  **explicit assertion that no implementer is running** — partial declarations are treated
+  as none, which would leave a batch's milestone PR in draft permanently. Widening was the
+  right direction because the receiving side defines what it can verify, and a bare boolean
+  from an unverified caller is thin evidence on which to invite a human to review a whole
+  milestone.
+- **The widening does not break the thin-extension decision, and the text says why.** Items
+  1 and 2 are not new state: they are the dispatched set and the status table B3 already
+  computes for its summary, so what crosses the boundary is a **report of what this run did**,
+  not a protocol built for the gate. It still rides on the invocation rather than a file, per
+  the no-state-files decision. And it confers no authority — not over eligibility, ordering,
+  merge method, verification, revert, or milestone-PR content, all of which the gate
+  re-derives and may decide against the declaration's own statuses. The obligation the
+  widening does add is honesty about status: `BLOCKED`, `NEEDS_CONTEXT`, and `SKIPPED`
+  members go in as themselves, and the declaration is re-derived after the closing report is
+  applied so it cannot disagree with the summary printed beside it.
 - **Mode selection is options, not a gate.** It rides on the plan approval that already
   exists, so an integration-mode batch costs the same one interaction a standard batch
   does. Standard is the plain-language default; integration is recommended only when the
@@ -1459,7 +1483,7 @@ Design decisions recorded here because they shape the eval expectations:
   matches the machinery: the DAG barrier is already per group, and the gate is strictly
   serial and re-derives its state every time, so per-PR invocation multiplies the
   re-derivation without changing a verdict. The closing invocation exists because no
-  per-group call can carry the terminal bit.
+  per-group call can carry the terminal-state declaration.
 - **The invocation is timed by the group, not scoped to one.** The gate's candidates are
   every open PR on the branch and its vetted set is the parent's whole sub-issue set;
   neither can be narrowed. So each report names issues outside the current group, and B2-4
@@ -1521,8 +1545,22 @@ Verified live in this repository before writing, on `gh` 2.97.0 (2026-07-31) and
   branch at the default branch's tip with no upstream configured (checked with `git config
   --get branch.<name>.remote`, which exits non-zero). Re-running the same command on an
   existing name fails with `fatal: a branch named '<name>' already exists` and exit 128 —
-  which is why B1-4 probes with `git show-ref --verify --quiet` before creating. All test
-  branches were deleted.
+  which is why B1-3 probes with `git show-ref --verify --quiet` before the plan is drawn.
+  All test branches were deleted.
+- `gh api repos/{owner}/{repo}/compare/main...integration/issue-109 --jq
+  '{ahead:.ahead_by,behind:.behind_by,status:.status}'` returns
+  `{"ahead":10,"behind":5,"status":"diverged"}` here. The two counts are independent, which
+  is what lets B1-3 state "behind the default branch" and "already carries commits" as the
+  separate facts they are.
+- `gh pr view <n> --json …,labels` accepts `labels` beside the merge fields and returns
+  `[]` on PR #118 — the field B2-4's revert check reads for the merge gate's exclusion
+  labels.
+- **The revert grep matches both message forms**, checked by experiment in a throwaway
+  repository rather than from memory, since a miss here would silently confirm reverted work
+  as merged. `git revert -m 1` on a merge commit writes `This reverts commit <sha>, reversing
+  changes made to …`, `git revert` on an ordinary commit writes `This reverts commit
+  <sha>.`, and `git log <ref> --grep="This reverts commit <sha>"` matched each of them. The
+  repository was deleted afterwards.
 
 Two capabilities are declared: **Skill invocation** for invoking the merge gate, and
 **Background execution** for the bounded waits that gate performs. The first draft argued
@@ -1593,3 +1631,24 @@ Two findings were process lessons rather than defects in the mode:
 - **A capability was argued away by a mechanism that does not hold** (Background execution,
   above). "It happens inside the other skill" is only true when the other skill runs as a
   separate process, which the fallback path explicitly does not.
+
+**Fix round 2** was a cleanup pass over ordering and enumeration, plus one interface change
+from the receiving side:
+
+- **The branch probe was ordered after the approval it was supposed to inform.** B1-3 said
+  to report what B1-4 found; B1-4 ran only after the plan was approved and then required the
+  consequences to be "in the plan rather than discovered later". Followed literally the plan
+  would say "would create" about a branch that already existed. The two read-only reads moved
+  into B1-3 as plan inputs, and B1-4 kept only the create-or-reuse action.
+- **The collision step was not iterated.** Adding an edge recomputes the levels, which moves
+  the higher issue into a level whose members it was never compared against — so a second
+  collision could still be dispatched in parallel. It now repeats to a fixed point.
+- **Two escalation rows were enumeration-short**, though their categories and responses were
+  right: an unestablished branch also covers the gate finding its recorded merge commit is no
+  longer the branch head (it escalates without attempting a revert at all), and an unrecorded
+  exclusion also covers a reverted PR the gate could not attribute to an issue.
+- **Human-merge mode was skipping the closing invocation**, which is the only route the
+  terminal-state declaration has — on a reused branch that could leave an existing milestone
+  PR in draft forever. Only an unestablished-branch escalation skips it now.
+- **The terminal-state declaration was widened** (above) after the merge gate tightened what
+  it accepts.
