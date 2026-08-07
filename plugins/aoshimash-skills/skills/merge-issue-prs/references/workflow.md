@@ -79,8 +79,21 @@ Three rules keep this from manufacturing a signal that never arrives:
 
 Read the repository's enabled merge methods; never assume squash. Use the method the
 repository's configuration and its own merge history establish. Record it: **the revert
-form depends on it** (a merge commit is reverted against its first parent; a squash or
-rebase merge produces ordinary commits reverted directly).
+form depends on it**, and the three methods do not produce the same revert target —
+
+| Method | What lands on the integration branch | Revert target |
+|---|---|---|
+| **merge** | One merge commit | That commit, reverted against its **first parent** |
+| **squash** | One ordinary commit | That commit, reverted directly |
+| **rebase** | The PR's commits, **individually** | **Every** one of them, reverted **newest first** |
+
+The rebase row is the one that bites: `mergeCommit` names a single commit, so a revert
+built from it alone would undo one commit of several and leave most of the bad change on
+the branch — while R-3's recovery verification could still pass on the partial result and
+the run would report a successful recovery. Under rebase, **enumerate the landed commits
+before reverting** (see [platform-github.md](platform-github.md)); if the enumeration
+cannot be established with certainty, that is a **revert failure** — escalate rather than
+revert partially. merge-renovate-prs states the same rule for the same reason.
 
 Never `--admin`, never a required-check bypass, in any circumstance. A merge the platform
 refuses is a deferral, not something to force.
@@ -91,8 +104,13 @@ Auto-revert is a promise this run has to be able to keep, so confirm before the 
 merge — not after a failure — that:
 
 1. The authenticated account has **push access** to the repository.
-2. The integration branch accepts a **direct commit**: it is either unprotected, or its
-   protection permits this account to push.
+2. The integration branch accepts a **direct commit**. Check **both** protection
+   mechanisms: classic branch protection *and* repository **rulesets**, which are separate
+   systems. A ruleset can block direct pushes to a branch whose classic-protection
+   endpoint reports `404 Branch not protected` — verified live against this repository —
+   so probing only the classic endpoint lets P3 pass on a branch that will reject the
+   revert push. That failure would surface as an R-2 revert failure *after* a bad merge had
+   already landed, which is exactly what confirming beforehand exists to prevent.
 
 If direct pushes are refused, the revert path becomes a revert PR, which needs its own
 merge and therefore its own preconditions. Confirm that path explicitly or fail P3. **No
@@ -128,13 +146,44 @@ Immediately before merging, re-run the **full** eligibility check on the PR's cu
 head. Eligibility is never cached, and state moves during a run — most importantly a human
 can comment while the loop is running, and this re-check is what lets them win that race.
 
-One **loop-level exclusion** is checked here as well, before anything else: a PR is
-deferred without further checks if **either** it carries the revert-exclusion label
-(`merge-gate:reverted` by default, overridable in the repository's agent instructions)
-**or** its recorded merge commit has been reverted on the integration branch. Its content
-already broke the branch once; re-merging it unchanged would reproduce the failure on the
-next run, and stop-the-line only binds the run it happened in. Both signals and why there
-are two: see [Auto-revert](#auto-revert) R-4.
+One **loop-level exclusion** is checked here as well, before anything else: a PR
+attributing to an issue in the **reverted-issue set** is deferred without further checks.
+Stop-the-line binds only the run it happened in, so without this the next scheduled run
+walks straight back into the merge that broke the branch.
+
+**The exclusion is keyed to the issue, not to the PR, because a PR-keyed one cannot
+fire.** Candidates are *open* PRs on the integration branch; a reverted PR is `MERGED`,
+so it is never enumerated as a candidate again, and an open PR's `mergeCommit` is `null`
+(both verified live). A rule reading "this PR carries the revert label" or "this PR's merge
+commit was reverted" is therefore vacuous for every input it would ever see. What *is*
+reachable — and what actually re-admits the reverted content — is a **new PR for the same
+issue**: an implement-issue re-run, or the author redoing the work. That PR carries neither
+signal and is otherwise fully eligible.
+
+**Build the reverted-issue set once per run**, before the loop, from the merged PRs based
+on the integration branch. A merged PR counts as reverted when **either**:
+
+- it carries a revert label (`merge-gate:reverted` for a verification failure,
+  `merge-gate:unverified` for a timeout — both overridable as `reverted_label` /
+  `unverified_label` in the repository's agent instructions), **or**
+- its `mergeCommit` appears in a `This reverts commit <sha>` line in the integration
+  branch's history — read against a **freshly fetched** ref, since a stale
+  remote-tracking branch makes this half silently miss.
+
+Attribute each such PR to its issue with E1c's rules; those issues are the set. The second
+signal is what survives a stripped label: removing a label needs only triage access, and
+re-admitting known-bad content is a fail-*open*.
+
+If a reverted PR **cannot** be attributed to an issue, the exclusion has no key. Report it
+as an **unrecorded exclusion**, named by PR number, exactly as an unverifiable label write
+is — the run continues, but a human has to know that one reverted PR's work is not being
+kept out.
+
+State the bound rather than implying more (Known limits #5): this defers **later work on a
+reverted issue**. It does not detect the same change reintroduced under a *different*
+issue, and its git half holds only while the branch retains the revert commit. A human
+clears it by removing the label — after which only the history signal remains, and only
+while that history does.
 
 Record the head SHA that passed — it is the value the merge is guarded on in 2-3.
 
@@ -174,14 +223,18 @@ settle red, or do not settle in time, **defers**. Never merge on a pre-sync resu
 
 ### 2-3: merge
 
-- Merge with the method recorded in P2, **guarded on the head SHA** that passed 2-1. If
-  the head moved in between, the platform refuses the merge rather than merging something
-  that was never checked — documented behaviour: `409 Conflict` "is returned if a SHA
-  parameter was provided and the pull request head did not match that SHA"
-  ([GitHub REST docs, "Pull requests"](https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28)).
-  On a head-match failure, re-run 2-1 once; if the head moves again, **defer**.
-- **Never `--admin`, never a required-check bypass.** A refused merge (protection, a
-  required check, a missing review the agent cannot supply) is a **deferral**.
+- Merge with the method recorded in P2, **guarded on the head SHA** that passed 2-1, so a
+  PR that moved in between is refused rather than merged unchecked. The guard travels as
+  `expectedHeadOid` on the platform's merge mutation (see
+  [platform-github.md](platform-github.md)).
+- **Discriminate a refusal by re-reading the head, not by its error text.** The mutation
+  reports failures in a payload rather than as a distinct HTTP status, so there is no
+  status code to branch on. After any failed merge, re-read the PR's head SHA: **changed**
+  from the recorded value → the guard fired; re-run 2-1 once against the new head, and if
+  it moves again, **defer**. **Unchanged** → the refusal was something else (protection, a
+  required check, a review the agent cannot supply) → **defer**. Both paths defer, so a
+  misread costs a deferral, never a merge.
+- **Never `--admin`, never a required-check bypass.** A refused merge is a **deferral**.
 - **Confirm the merge from platform state, not from the command's exit status:** the PR
   reports as merged, and its merge commit is reachable from the integration branch's new
   head. Record the merge commit SHA — it is both the verification target and the revert
@@ -201,10 +254,23 @@ Two states, both required:
 
 Rules:
 
-- **Find runs by commit SHA**, not by "the latest run on the branch" — the latest run can
-  belong to an earlier commit, and reading it would verify the wrong thing.
-- **Wait within a bounded window** — 30 minutes per merge by default, overridable in the
-  repository's agent instructions. Use background execution so the wait does not block.
+- **Find runs by commit SHA *and* `push` event.** The SHA alone is not enough, and this is
+  the same miscount P1 guards against, arriving from the other side: a `pull_request` run
+  reports its PR's head branch and the head-branch tip as its SHA, so once a PR whose head
+  is the integration branch exists — precisely the Phase 3 milestone PR — every merge onto
+  the branch re-triggers that PR's workflows with the merge commit as their SHA. Without
+  the event filter, **V-2 could be satisfied by a milestone-PR review run while the
+  branch's own CI never ran**, and, in the other direction, a routine `pull_request`
+  failure would trigger a needless revert and stop-the-line. Filter the event server-side.
+- **Never read "the latest run on the branch"** — it can belong to an earlier commit.
+- **Wait within a bounded window** — 30 minutes per merge by default, overridable as
+  `verification_window` in the repository's agent instructions.
+  - The window needs an **enforcement mechanism the agent owns**: poll for the commit's
+    runs on an interval against a wall-clock deadline. Do **not** delegate the bound to a
+    blocking watch command — the platform CLI's watch has no timeout flag (verified), so a
+    run stuck in `queued` would wait forever, on the one path whose expiry is supposed to
+    *trigger* the auto-revert. Background execution keeps the **agent** free; it does not
+    make the **wait** bounded, and only the second one matters here.
 - **Judge each completed run by its conclusion**, mirroring E4's asymmetry between
   "passed" and "did not run":
 
@@ -239,7 +305,7 @@ anyway".
 | Situation | Detected at | Outcome for the PR | The loop |
 |---|---|---|---|
 | Every condition holds on the post-sync head | 2-1 / 2-2 | **merge** | continues |
-| Loop-level exclusion (revert label) | 2-1 | **defer** | continues |
+| Loop-level exclusion — the PR's issue is in the reverted-issue set (label **or** revert-in-history) | 2-1 | **defer** | continues |
 | Any eligibility condition fails on re-check (incl. a human comment landing mid-run) | 2-1 | **defer** | continues |
 | Mergeability still unknown when its window closes | 2-2 | **defer** | continues |
 | **Conflict on sync** | 2-2 | **defer**, unresolved and untouched | continues |
@@ -254,13 +320,22 @@ anyway".
 Entered only from a verification failure or timeout in 2-4. Serial discipline is what makes
 it sound: exactly one merge is in flight, so the revert target is unambiguous.
 
-**R-1 — Create the revert commit on the integration branch.** First confirm the branch head
-is still the recorded merge commit. If it is not, something landed outside this loop, the
-one-in-flight invariant is broken, and the revert target is no longer unambiguous:
+**R-1 — Create the revert commit(s) on the integration branch.** First confirm the branch
+head is still the recorded merge commit. If it is not, something landed outside this loop,
+the one-in-flight invariant is broken, and the revert target is no longer unambiguous:
 **escalate instead of reverting**. Otherwise, in a clean checkout of the integration
-branch, revert the recorded merge commit in the form P2's merge method requires — a merge
-commit is reverted against its **first parent**, which is the integration branch's own
-history; a squash or rebase merge produces ordinary commits reverted directly.
+branch, revert what the merge landed, in the form P2's table requires:
+
+- **merge** — revert the merge commit against its **first parent**, the integration
+  branch's own history.
+- **squash** — revert the single ordinary commit directly.
+- **rebase** — the PR's commits landed **individually**. Enumerate them on the integration
+  branch and revert **each, newest first**; `mergeCommit` names only one of them, so
+  reverting from it alone leaves most of the change on the branch. If the enumeration
+  cannot be established with certainty — the range is ambiguous, or the count does not
+  match the PR's commits — that is a **revert failure**: escalate. A partial revert is the
+  worst outcome available here, because R-3 can pass on it and the run would then report a
+  recovery that did not happen.
 
 **Never reset, force-push, or rewrite the branch.** Implementers may have the integration
 branch checked out as a base; rewriting its history turns one failure into many. The revert
@@ -280,27 +355,36 @@ its author — human or machine — will look. The comment states, in English pe
 convention:
 
 1. What was merged, with the merge commit SHA.
-2. What failed: the run or check, its conclusion, and a link.
-3. What was reverted, with the revert commit SHA.
+2. **The cause, named as one of two** (below): the change failed verification, or nothing
+   verified it — with the run or check, its conclusion, and a link.
+3. What was reverted, with the revert commit SHA(s).
 4. The integration branch's state after the revert.
-5. That the PR is now in the human queue and **will not be re-merged autonomously** until
-   a human clears the exclusion.
+5. That further work on this issue **will not be merged autonomously** until a human clears
+   the exclusion, and what clearing it requires — which differs by cause.
 
-Then **record the exclusion durably**: apply the revert-exclusion label (2-1) and verify
-the write by re-reading the PR's labels, exactly as eligibility.md E5 requires of its own
-label. A failed comment is not a revert failure — the revert already succeeded — but an
-unposted comment or an unverified label write is an **escalation in the report**, named by
-PR number, so the record does not silently lapse.
+**Record the exclusion durably, split by cause.** Both causes revert and both defer, but
+they blame different things and need different human action, so they are recorded with
+different labels rather than one:
 
-**The exclusion is `label OR revert-in-history`, not the label alone.** Removing a label
-needs only triage access on GitHub, so a label-only check could be cleared by an actor who
-could not have merged the PR in the first place — and re-merging known-bad code is a
-fail-*open*. The second signal is git: a PR's merge commit stays readable after the merge,
-and a revert of it stays in the integration branch's history, so 2-1 also defers a PR whose
-recorded merge commit has been reverted on the branch. State the bound honestly: this
-signal holds only while the branch retains that history, so it is defence in depth for the
-label, not a replacement for it. Only a human deliberately clearing the label **and**
-changing the PR puts it back on the autonomous path.
+| Cause | Label (default) | What it means | What clears it |
+|---|---|---|---|
+| Verification **failure** — a run concluded non-success | `merge-gate:reverted` | The change is implicated | Fixing the change |
+| Verification **timeout** — no run, no completion, or nothing concluding `success` | `merge-gate:unverified` | Nothing was proven either way; the change may be perfectly healthy | Confirming CI health, then re-running |
+
+Collapsing the two would permanently blame a healthy PR for a slow or exhausted runner —
+not hypothetical: CI capacity limits and usage limits both interrupt real runs. Apply the
+label and **verify the write** by re-reading the PR's labels, exactly as eligibility.md E5
+requires of its own label. A failed comment is not a revert failure — the revert already
+succeeded — but an unposted comment or an unverified label write is an **escalation in the
+report**, named by PR number, so the record does not silently lapse.
+
+**Why both a label and git history feed the reverted-issue set.** Removing a label needs
+only triage access on GitHub, so a label-only check could be cleared by an actor who could
+not have merged in the first place — and re-admitting known-bad content is a fail-*open*.
+The second signal is git: a merged PR's `mergeCommit` stays readable, and a revert of it
+stays in the branch's history, so 2-1's set is built from either. What that pair does and
+does not cover is stated at 2-1 and in Known limits #5 — it defers **later work on a
+reverted issue**, not the same change reintroduced under a different one.
 
 **R-5 — Stop the line.** Even after a clean recovery, process no further PR this run. One
 verification failure means the pre-merge gates missed something, and the rest of the queue
@@ -309,8 +393,14 @@ deserves human eyes before the automation continues.
 ## Escalation: when the revert itself fails
 
 Stop immediately and return to a human when any of these holds: the branch head is not the
-recorded merge commit (R-1); the revert commit cannot be created; the push is rejected
-(R-2); or the recovery verification fails or times out (R-3).
+recorded merge commit (R-1); the revert commit cannot be created (R-1); **under a rebase
+merge, the set of landed commits cannot be enumerated with certainty, or its count does not
+reconcile against the PR's** (R-1); the push is rejected (R-2); or the recovery verification
+fails or times out (R-3).
+
+Escalating on an uncertain enumeration rather than reverting what is certain is deliberate:
+a partial revert is the one failure mode that can pass R-3 and be reported as a successful
+recovery.
 
 Escalate with the **full state** — the PR that was merged, its merge commit, what failed,
 what was attempted, and the integration branch's current head — surfaced through the run's
@@ -321,7 +411,8 @@ Then stop. Specifically:
 
 - Do not retry destructive operations in a loop.
 - Do not attempt creative alternative recoveries: **no force-push, no reset, no branch
-  deletion, no re-creating the branch, no second revert on top of a failed one.**
+  deletion, no re-creating the branch, no second revert on top of a failed one, and no
+  partial revert of the commits you could identify.**
 - Do not continue to the next PR, and do not report the run as a completed pass.
 
 This is the one place the autonomous path always comes back to a person.
@@ -343,15 +434,20 @@ re-running once the failure is understood.
 
 ## The human queue at run end
 
-Deferred PRs accumulate through the run and are reported at the end. The queue has four
+Deferred PRs accumulate through the run and are reported at the end. The queue has five
 kinds of member, and the report distinguishes them:
 
 | Kind | Source | Permanent? |
 |---|---|---|
 | Eligibility deferrals | eligibility.md's exclusion classes | E5 only; the rest are re-evaluated |
 | Loop deferrals — conflict, red CI, unknown mergeability, refused merge | 2-2 / 2-1 / 2-3 | No — re-evaluated next run |
-| Reverted | auto-revert R-4 | Yes, until a human clears the label |
+| **Reverted — verification failed** | auto-revert R-4 | Yes, until a human fixes the change and clears the label |
+| **Reverted — unverified (timeout)** | auto-revert R-4 | Yes, until a human confirms CI health and clears the label |
 | Not attempted | stop-the-line | No — the next run picks them up |
+
+The two revert rows stay separate in the report as well as in the labels. "Reverted"
+without a cause reads as "this change was bad", which is true of one row and an unfair
+accusation in the other.
 
 Each entry carries the PR number and title, the reason with concrete evidence, the
 required human action stated **as an action** ("resolve the conflict in #123 against
@@ -377,4 +473,13 @@ State these plainly. A gate whose limits are undocumented gets trusted past them
    where merging deploys.
 4. **A verification timeout cannot distinguish "CI is broken" from "the change broke CI".**
    Both revert and stop the line. A repository with flaky or slow CI will therefore see
-   reverts of healthy changes — the fix is the CI or the window, not a looser rule.
+   reverts of healthy changes — the fix is the CI or the window, not a looser rule. The
+   exclusion labels keep the two apart afterwards (R-4) so the blame lands correctly, but
+   the revert itself cannot be avoided.
+5. **The reverted-issue exclusion covers later work on a reverted issue, and nothing
+   wider.** It defers a new PR attributing to an issue whose earlier PR was reverted. It
+   does **not** detect the same change reintroduced under a *different* issue; once the
+   label is cleared it survives only as long as the integration branch keeps the revert
+   commit in its history; and because the set is keyed by attribution, it inherits E1c's
+   limits — the gate infers which issue a PR belongs to, it cannot observe it. It is a
+   brake on the obvious repeat, not a content check.

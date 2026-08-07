@@ -325,9 +325,11 @@ Overall:
   still produce a PR with no checks, so neither check subsumes the other.
 
 **The bounded window.** Waiting is capped so an unattended run cannot hang: **15 minutes
-per PR** by default, re-reading at a sensible interval, overridable by the repository's
-agent instructions. It is a per-PR cap, not a per-run one. A PR that has not settled when
-the window closes is deferred, not merged.
+per PR** by default, re-reading at a sensible interval, overridable as `ci_wait_window` in
+the repository's agent instructions. It is a per-PR cap, not a per-run one. A PR that has
+not settled when the window closes is deferred, not merged. Enforce the cap by polling
+against a wall-clock deadline — a blocking watch command with no timeout would defeat it
+(see [platform-github.md](platform-github.md)).
 
 ### E5 — No human comment or review
 
@@ -436,10 +438,14 @@ bounded window rather than reading the pre-sync result — and defer if they do 
 in time. See [workflow.md](workflow.md) 2-2.
 
 The loop also applies **one exclusion of its own**, outside these five conditions: a PR
-that was merged and then auto-reverted carries a revert label and is deferred before any
-condition is read ([workflow.md](workflow.md) 2-1). It is not a sixth eligibility
-condition — it records what happened *after* a PR was found eligible — but it is checked
-in the same place and cleared the same way, by a human.
+attributing to an issue whose earlier PR was merged and then auto-reverted is deferred
+before any condition is read ([workflow.md](workflow.md) 2-1). That set is built from a
+revert label **or** a matching revert in the integration branch's history — never the label
+alone, since stripping a label needs only triage access. It is not a sixth eligibility
+condition — it records what happened *after* a PR was found eligible, and it is keyed to
+the **issue** rather than the PR, because a reverted PR is merged and therefore never
+enumerated as a candidate again — but it is checked in the same place and cleared the same
+way, by a human.
 
 ## Known limits
 

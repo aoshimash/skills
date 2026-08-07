@@ -119,10 +119,12 @@ below use capability terms; map them to your environment as follows.
    template. See [references/platform-github.md](references/platform-github.md).
 4. **Ensure the exclusion labels exist**, creating any the repository does not have yet:
    the E5 human-contact label ([references/eligibility.md](references/eligibility.md)) and
-   the revert label ([references/workflow.md](references/workflow.md) 2-1). A label must
-   exist before it can be applied, and these are the durable records of permanent
-   exclusions — discovering one is missing at the moment a human comment is found, or a
-   revert has just landed, is too late.
+   the **two** revert labels — one for a verification failure, one for a timeout, kept
+   apart so a slow runner never permanently blames a healthy change
+   ([references/workflow.md](references/workflow.md) R-4). A label must exist before it can
+   be applied, and these are the durable records of permanent exclusions — discovering one
+   is missing at the moment a human comment is found, or a revert has just landed, is too
+   late.
 5. **Verify run-level preconditions** — a verifiable CI signal on the integration branch,
    the configured merge method, and an executable revert path. See
    [references/workflow.md](references/workflow.md). A failed precondition never produces
@@ -153,11 +155,12 @@ The shape of the decisions:
   all defer that PR unmerged and the loop continues.
 - **Verification is integration-branch CI for the merge commit**, plus any checks the
   repository defines — never the PR's own pre-merge CI. A timeout is treated as a failure.
-- **A verification failure triggers auto-revert**: a revert commit on the integration
-  branch, a mandatory explanatory comment on the reverted PR, a durable exclusion so the
-  next run does not re-merge it, and **stop-the-line** for the rest of the run.
+- **A verification failure triggers auto-revert**: revert commit(s) on the integration
+  branch — one, or several under a rebase merge — a mandatory explanatory comment on the
+  reverted PR, a durable exclusion recorded **by cause** so a later run does not walk back
+  into the same merge, and **stop-the-line** for the rest of the run.
 - **A failed revert escalates to a human immediately** — no force-push, no reset, no
-  alternative recovery attempted.
+  partial revert, no alternative recovery attempted.
 
 Stop-the-line halts merging, not the batch: implementers on independent branches of the
 dependency graph carry on.
@@ -180,8 +183,10 @@ The report covers, in this order:
 - Anything **escalated** — a failed revert, or an exclusion whose label write could not be
   verified — first and marked as requiring human action.
 - What was **merged and verified**, with each merge commit and the run that verified it.
-- What was **reverted** and why, with the failure, the revert commit, and the recovery
-  state.
+- What was **reverted**, split by cause and never merged into one category: *verification
+  failed* (the change is implicated) and *unverified* (verification never concluded — the
+  change may be perfectly healthy and a slow runner is to blame). Each with the evidence,
+  the revert commit(s), and the recovery state.
 - The **deferred** set — the human queue — with each PR's failed condition, the concrete
   evidence, the required human action stated as an action, and whether it is permanent or
   re-evaluated next run. Deferred PRs are the run's most important routine output.

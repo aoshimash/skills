@@ -52,11 +52,15 @@ fail-closed paths where a wrong answer would restore the original failure mode; 
 the regression test for attribution **scoping**, the counterpart to Case 11 — together they
 pin both directions, too loose and too tight.
 
-**Merge loop (Cases 15–19).** Case 15 pins the happy-path merge end to end; Case 16 pins
+**Merge loop (Cases 15–23).** Case 15 pins the happy-path merge end to end; Case 16 pins
 conflict deferral (the loop continues); Cases 17–18 pin the two halves of failure handling
-— auto-revert that works, and the escalation when it does not; Case 19 pins the run-level
-precondition and its human-merge fallback, and is modelled on this repository's actual
-configuration, where no workflow fires on a commit landing on the integration branch.
+— auto-revert that works, and the escalation when it does not; Cases 19–20 pin the
+run-level preconditions and their shared human-merge fallback, P1 and P3 respectively, with
+Case 19 modelled on this repository's actual configuration; Case 21 pins the rebase-merge
+revert, where reverting from `mergeCommit` alone would silently leave most of the change on
+the branch; Case 22 is the regression test for the reverted-issue exclusion — the control
+that has to fire on a *later* run, and the case that would have caught it being keyed to the
+wrong object; Case 23 pins the head-moved race between the pre-merge re-check and the merge.
 
 ### Case 1: Eligible pipeline PR (`eligible-clean-pipeline-pr`)
 
@@ -320,7 +324,11 @@ and #220, which is `CLEAN`.
   integration branch — not from the merge command's exit status, and records the merge
   commit SHA.
 - Verifies against **integration-branch CI for that merge commit**, located by commit SHA
-  rather than "the latest run on the branch", and not against #219's own pre-merge CI.
+  **and `push` event** — not by "the latest run on the branch", and not by SHA alone, since
+  a `pull_request` run on a PR whose head is the integration branch carries the same SHA.
+  Not against #219's own pre-merge CI.
+- Bounds that wait by polling against a wall-clock deadline, rather than a blocking watch
+  command that has no timeout.
 - Only after that verification passes does it start #220 — one merge in flight throughout.
 
 ### Case 16: Conflict on sync defers, the loop continues (`sync-conflict-deferral`)
@@ -357,12 +365,10 @@ eligible PRs are still queued.
 - Pushes the revert, confirms from platform state that the branch head is now the revert
   commit, and **verifies the recovery** by re-running the same integration-branch check
   against the revert commit — an unverified revert is just another unverified change.
-- Posts the **mandatory** comment on #224 carrying the merge commit, the failing run, the
-  revert commit, the resulting branch state, and that the PR will not be re-merged
-  autonomously. Records the exclusion durably as a label, verifies the write, and treats
-  the exclusion as `label OR the merge commit reverted in branch history` — a label alone
-  could be stripped by an actor with only triage access, and re-merging known-bad code is
-  a fail-open.
+- Posts the **mandatory** comment on #224 carrying the merge commit, the named cause, the
+  revert commit, the resulting branch state, and that further work on the issue will not be
+  merged autonomously. Records the exclusion durably as the **verification-failure** label
+  (not the timeout one) and verifies the write.
 - **Stops the line**: the two queued PRs are not merged, and are reported as *not
   attempted* — distinct from deferrals, since they failed no condition.
 - States that stop-the-line halts merging, not the batch: implementers on independent
@@ -373,6 +379,10 @@ eligible PRs are still queued.
   costs one re-merge, an unverified merge costs an investigation into code nobody read.
 - Requires at least one run concluding `success` for verification to hold, rather than
   accepting "no run failed".
+- Records a **timeout** under the separate `unverified` label rather than the failure one,
+  so a slow or exhausted runner never permanently blames a healthy change.
+- Locates the verifying run by commit SHA **and `push` event**, not by SHA alone — a
+  `pull_request` run on the milestone PR carries the same SHA.
 
 ### Case 18: The revert itself fails (`revert-failure-escalation`)
 
@@ -398,8 +408,8 @@ rejected.
 ### Case 19: No CI signal on the integration branch (`no-ci-signal-human-merge-fallback`)
 
 The realistic precondition case, taken from this repository as it actually is: its three
-workflows trigger on `pull_request`, `issue_comment`, `issues` and
-`pull_request_review` — none on `push`.
+workflows trigger on `pull_request`, `issue_comment`, `issues`, `pull_request_review` and
+`pull_request_review_comment` — none on `push`.
 
 **Setup**: A run on `integration/issue-109`. Querying workflow runs for that branch returns
 an empty list, and no workflow definition declares a trigger that fires on a commit landing
@@ -421,9 +431,98 @@ on it. Four PRs pass every eligibility condition.
   integration→main milestone PR's own runs would appear under a branch-only query and must
   not be counted as integration-branch CI.
 
+### Case 20: A ruleset blocks the revert path (`no-revert-path-human-merge-fallback`)
+
+The P3 counterpart to Case 19 — the precondition that guards the entire auto-revert promise.
+
+**Setup**: A run on `integration/issue-109` where P1 is confirmed (a completed
+`push`-triggered run exists) and the account has `push: true`. The classic branch-protection
+endpoint returns `404 Branch not protected` for the integration branch, but a repository
+**ruleset** applies to it and restricts updates. Three PRs are eligible.
+
+**Expected behavior**:
+- Probes **both** protection mechanisms and does not conclude "unprotected" from the classic
+  `404` alone — rulesets are a separate system, and a branch can be `404` there while a
+  ruleset still blocks the push.
+- Fails P3 and enters **human-merge mode** for the whole run: nothing merged, the three PRs
+  reported as ready for a human to merge, the failed precondition and its fix named.
+- Explains why this is checked before the first merge rather than discovered later: a revert
+  path that does not work only surfaces as an R-2 revert failure *after* a bad merge has
+  landed, which is the state the precondition exists to prevent.
+- Does not merge "just the safe-looking one", and does not proceed on the assumption that a
+  revert PR would be available without confirming that path.
+
+### Case 21: Rebase-merge revert (`rebase-merge-revert-enumeration`)
+
+**Setup**: A repository whose only enabled merge method is **rebase**. PR #226 carries four
+commits; they land individually on the integration branch. Integration-branch CI for the
+resulting head concludes `failure`. `gh pr view 226 --json mergeCommit` returns a single
+commit SHA.
+
+**Expected behavior**:
+- Recognises that under rebase the PR's commits landed **individually**, so `mergeCommit`
+  names only one of four and is **not** the revert target.
+- Enumerates the landed commits on the integration branch and reverts **each, newest
+  first**, without `-m` (they are ordinary commits, not merge commits).
+- Reconciles the enumerated count against the PR's own commit count **before** reverting,
+  and **escalates as a revert failure** if the range is ambiguous or the counts disagree,
+  rather than reverting partially.
+- Names the specific danger: a partial revert can still pass the recovery verification, so
+  the run would report a successful recovery with most of the bad change still on the
+  branch — the worst available outcome.
+- Does not fall back to `-m 1`, which applies to a merge commit and not to these.
+
+### Case 22: The reverted-issue exclusion fires on a later run (`reverted-issue-exclusion-later-run`)
+
+The regression test for the exclusion added to stop a revert from repeating. It fails if the
+exclusion is ever re-keyed to the PR.
+
+**Setup**: A previous run merged PR #227 for issue #131, verification failed, and the run
+auto-reverted and labelled #227. Today, a fresh run finds a **new** PR #228 for issue #131 —
+implement-issue re-ran and produced it — passing all five eligibility conditions, on a clean
+branch, with green CI and no comments. #227 is `MERGED` and carries the revert label.
+
+**Expected behavior**:
+- **Defers #228**, before checking any eligibility condition, because its issue is in the
+  reverted-issue set.
+- Explains why the exclusion is keyed to the **issue** and not the PR: candidates are *open*
+  PRs, a reverted PR is `MERGED` and is never enumerated again, and an open PR's
+  `mergeCommit` is `null` — so a PR-keyed check could never fire on any input it would see,
+  while the reintroduction it is meant to stop arrives as a new PR.
+- Builds the set from the **merged** PRs on the integration branch, counting one as reverted
+  when it carries a revert label **or** its merge commit appears in a revert message in the
+  branch's history — so stripping the label (which needs only triage access) does not
+  re-admit the work.
+- States the bound rather than overclaiming: this defers **later work on a reverted issue**;
+  it does not detect the same change reintroduced under a different issue, and the history
+  signal lasts only as long as the branch keeps that commit.
+- Does not treat #228's clean eligibility as a reason to proceed, and does not stop the line
+  — this is a deferral.
+
+### Case 23: The head moves between the re-check and the merge (`head-moved-race-guard`)
+
+**Setup**: PR #229 passes the pre-merge re-check at head `aaa1111`. Between that check and
+the merge call, the author pushes a new commit, moving the head to `bbb2222`. The merge is
+issued guarded on `aaa1111` and fails.
+
+**Expected behavior**:
+- Recognises the guard fired: the merge was refused rather than merging a head that was
+  never checked.
+- **Discriminates by re-reading the head, not by an error status** — the guard travels as
+  `expectedHeadOid` on the platform's merge mutation, which reports failures in a payload
+  rather than as a distinct HTTP status, so there is no code to branch on. The head differs
+  from the recorded SHA → the guard fired.
+- Re-runs the full re-check **once** against `bbb2222` — including the fresh CI on the new
+  commit — and merges only if it passes.
+- **Defers** if the head moves again, rather than looping.
+- Notes that an unchanged head would have meant a different refusal (protection, a required
+  check, a review the agent cannot supply) and also defers — so a misread costs a deferral,
+  never a merge.
+- Never reaches for `--admin` to get past the refusal.
+
 ## Evaluation Log
 
 | Date | Case | Result | Notes |
 |------|------|--------|-------|
 | 2026-08-07 | Cases 1–14, trigger evals | **not benchmarked — deliberately deferred** | Phases 2–3 of the skill were intentionally unspecified in that version (eligibility only). Benchmarking then would have measured a knowingly incomplete skill and recorded a misleading baseline. |
-| 2026-08-07 | Cases 1–19, trigger evals | **not benchmarked — deferral extended** | Phase 2 (merge loop, verification, auto-revert) is now specified, but Phase 3 (the milestone PR) is still design intent, so a run would still score a knowingly incomplete skill. The deferral point is unchanged: the full suite is owed before the integration→main milestone PR for this initiative, once the milestone-PR lifecycle lands. |
+| 2026-08-07 | Cases 1–23, trigger evals | **not benchmarked — deferred to the completion of the skill** | Not because the suite would score an incomplete skill — every case here exercises the specified surface, and none touches Phase 3. The reason is that the benchmark is being run **once, against the finished skill**, rather than three times mid-construction: the suite grew 14 → 19 → 23 across #110 and #114, and a baseline recorded against a surface that is still being extended is superseded before it is useful. **Owed immediately after #111 lands**, not merely "before the milestone PR". This deferral must not survive a third task. |
