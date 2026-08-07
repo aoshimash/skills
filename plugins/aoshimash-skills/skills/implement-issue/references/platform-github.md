@@ -398,60 +398,90 @@ truncated list fails open — it under-reports the human queue.
 Used by [batch-reentry.md](batch-reentry.md) to rebuild a batch's state in a session that
 has no memory of it. Every read here is read-only.
 
-**1. Every PR based on the integration branch, in any state** — the primary artifact:
+**1. Find the integration branch when its name cannot be computed** (batch-reentry.md R2).
+`integration/issue-<parent-number>` is derivable from a parent-issue batch source;
+`integration/<date>-<slug>`, used for a milestone, a label, or a manual list, is not — its
+date is the day the first session ran. Enumerate instead, and match on the slug:
 
 ```bash
-gh pr list --base integration/issue-<parent-number> --state all --limit 200 \
-  --json number,title,state,isDraft,baseRefName,headRefName,updatedAt,mergeCommit,labels,body
+git fetch origin --prune
+git ls-remote --heads origin 'refs/heads/integration/*'
+```
+
+`git ls-remote` returns the complete ref list in one response, so no pagination rule
+applies to it. Corroborate a candidate by checking that read 2 returns PRs attributing to
+this batch's issues; more than one surviving candidate is a stop, never a guess.
+
+**2. Every PR based on the integration branch, in any state** — the primary artifact, and
+the same result serves the recency check, the per-issue mapping, and the gate budget:
+
+```bash
+gh pr list --base <integration-branch> --state all --limit 200 \
+  --json number,title,state,isDraft,baseRefName,headRefName,createdAt,mergeCommit,labels,body
 ```
 
 `state` is `OPEN` / `MERGED` / `CLOSED`. `mergeCommit` is `null` while a PR is open and
 carries `.oid` once it merged. `body` carries the Gate Results section, which is where a
-resumed run reads each stage's remaining fix rounds. Apply the truncation rule of
+resumed run reads each stage's remaining fix rounds — never a verdict it may act on
+([batch-reentry.md](batch-reentry.md) R6). Apply the truncation rule of
 [List the PRs on the Integration Branch](#list-the-prs-on-the-integration-branch) — a row
 count equal to `--limit` means the read may be short, and a short read here fails **open**:
 a hidden PR is one re-entry would re-implement.
 
-**2. The milestone PR** — the integration branch as the **head**, not the base:
+`createdAt`, not `updatedAt`, is the recency field. `updatedAt` moves on any comment or
+label change, including from the repository's own automated reviewers, so keying on it
+would stop every unattended run in a repository with routine bot activity.
+
+**3. The milestone PR** — the integration branch as the **head**, not the base:
 
 ```bash
-gh pr list --head integration/issue-<parent-number> --base <default-branch> --state all \
-  --limit 200 --json number,state,isDraft,updatedAt,url,title
+gh pr list --head <integration-branch> --base <default-branch> --state all \
+  --limit 200 --json number,state,isDraft,url,title,body
 ```
 
 This read survives the branch's deletion: `--head` matched a PR whose head branch had
 already been deleted when this was checked against this repository on 2026-08-07 (PR #120,
 head `feat/115-integration-mode`, absent from `git ls-remote --heads origin`). That is what
 lets a merged milestone be distinguished from a batch that never started, both of which
-present as "the integration branch does not exist".
+present as "the integration branch does not exist". `body` carries the
+`## Needs Human Attention` section, where the merge gate records an escalation that has to
+outlive the session it was reported to.
 
-**3. Remote branches an earlier session pushed** — including per-issue branches that never
+**4. Remote branches an earlier session pushed** — including per-issue branches that never
 became a PR:
 
 ```bash
 git ls-remote --heads origin
 ```
 
-`git ls-remote` returns the complete ref list in one response, so no pagination rule
-applies to it. Match the batch's branch naming (`<type>/<issue-number>-…`) against the PR
-list from read 1: a branch with no PR is an orphan ([batch-reentry.md](batch-reentry.md)
-R5), never a base to build on.
+Match the batch's branch naming (`<type>/<issue-number>-…`) against read 2: a branch with
+no PR is an orphan ([batch-reentry.md](batch-reentry.md) R7), never a base to build on.
 
-**4. Timestamps for the recency check** (batch-reentry.md R0). GitHub returns `updatedAt`
-as ISO-8601 UTC with a `Z` suffix, and such timestamps compare lexicographically without
-conversion. `git log --format=%cI` does **not** — it carries the local offset
-(`2026-08-07T15:21:25+09:00`), which sorts wrongly against a `Z` string. Normalize it:
+**5. Timestamps for the recency check** ([batch-reentry.md](batch-reentry.md) R3). GitHub
+returns `createdAt` as ISO-8601 UTC with a `Z` suffix, and such timestamps compare
+lexicographically without conversion. `git log --format=%cI` does **not** — it carries the
+local offset (`2026-08-07T15:21:25+09:00`), which sorts wrongly against a `Z` string.
+Normalize the integration branch's head and the per-issue branch heads into that shape:
 
 ```bash
 git fetch origin --prune
 
-# branch head time, in the same shape as GitHub's timestamps
+# the integration branch's head time
 TZ=UTC0 git log -1 --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ \
-  origin/integration/issue-<parent-number>
+  origin/<integration-branch>
+
+# every remote branch head time in one pass — ref name and time together
+TZ=UTC0 git for-each-ref \
+  --format='%(refname:short) %(committerdate:format-local:%Y-%m-%dT%H:%M:%SZ)' \
+  'refs/remotes/origin/*'
 
 # now, for the comparison
 date -u +%Y-%m-%dT%H:%M:%SZ
 ```
+
+`git ls-remote` returns SHAs rather than times, which is why the per-branch times come from
+`for-each-ref` over freshly fetched remote-tracking refs. Filter its output down to the
+branches matching this batch's per-issue naming, over the issue set R1 established.
 
 ## Monitor CI
 

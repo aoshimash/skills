@@ -100,9 +100,15 @@ stopped and continues from there (batch.md B0,
 whether the repeat is scheduled or typed by hand — same batch source, one invocation per
 session, until the milestone PR is ready — because nothing is persisted between sessions
 either way: no state file, no session memory, only the tracker and git. Scheduling removes
-the person from the loop; it is not what makes resumption work. What re-derivation does
-not recover is listed in batch-reentry.md's Known limits, and a resumed session pays for
-it by re-dispatching issues whose earlier attempt left no PR behind.
+the person from the loop; it is not what makes resumption work.
+
+The two differ in **scope**, not mechanism. Which issues a batch implements is settled at
+the execution-plan approval and recorded nowhere durable, so an invocation with no user
+reachable advances the work an approved plan already produced — review gates, the merge
+gate, the reports — and **dispatches no new implementer**, naming instead whatever is
+waiting on an approval. A scheduled run drains a batch toward its milestone PR without
+ever widening it. That, and the rest of what re-derivation cannot recover, is in
+batch-reentry.md's Known limits.
 
 ## Phase 0: Setup and Mode Selection
 
@@ -201,10 +207,12 @@ approval — never as a separate gate, and never in Single mode:
 
 An integration-mode batch is **resumable across sessions**: before the dependency graph,
 a fresh session re-derives where an earlier one stopped — from the tracker and git only,
-since nothing else persists — and then starts, resumes, or reports the batch complete
-(see [references/batch-reentry.md](references/batch-reentry.md), invoked from batch.md
-B0). Existing PRs, branches, and worktrees are never recreated, and a batch that another
-session appears to be working on is not dispatched at all.
+since nothing else persists — and then starts the batch, resumes it, or stops (see
+[references/batch-reentry.md](references/batch-reentry.md), invoked from batch.md B0).
+Existing PRs, branches, and worktrees are never recreated; a body-recorded gate verdict
+never substitutes for re-running the gate; a batch another session appears to be working
+on is not dispatched at all; and dispatching an implementer needs an approved plan every
+session, so an unattended resume advances existing PRs rather than starting new work.
 
 **Summary:**
 
