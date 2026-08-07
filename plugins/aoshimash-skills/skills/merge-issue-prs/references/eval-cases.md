@@ -97,13 +97,20 @@ where forwarding actually happens, as distinct from Case 7's injection at eligib
 **Regression cases from the benchmark run (Cases 35–36).** Added after executing the suite
 against the finished skill surfaced defects the existing 34 could not catch. Case 35 pins the
 **completeness of the linking-keyword form list** in E1c detection — the case that fails if
-the optional-colon or cross-repository form is ever dropped, and the one that makes the
-failure *direction* explicit, since a missed form there attributes rather than defers. Case 36
-pins **B0**, the branch-level exclusion: a branch whose milestone PR has reached a **terminal**
+the optional-colon form, the cross-repository form, or markup on *either* side of the
+separator is ever dropped, and the one that makes the failure *direction* explicit, since a
+missed form there attributes rather than defers. Case 36 pins **B0**, the branch-level
+exclusion: a branch whose milestone PR has reached a **terminal**
 state — merged, *or closed unmerged* — takes no new candidates, the one hole that strands the
-branch permanently and that no per-PR condition can see. Its two variants also pin the rule's
-*form*, since writing the closure over a list of cases rather than over the milestone PR's state
-is how the closed-unmerged half went missing the first time. Two existing cases were also widened to cover defects they set up but did
+branch permanently and that no per-PR condition can see.
+
+Both carry a second job, and it is the same job: they pin the **form** of a rule, not only its
+content. Case 36's variants exist because writing the closure over a list of cases rather than
+over the milestone PR's state is how the closed-unmerged half went missing; Case 35's
+reference-side PR exists because widening the pattern on the keyword side and then describing
+the adjacency bound as closed *in general* is how `Closes **#133**` kept escaping. Both defects
+were half-fixes announced as whole ones, which is the failure mode this suite is now shaped to
+catch. Two existing cases were also widened to cover defects they set up but did
 not grade: **Case 17** now asks what happens to the milestone PR after a revert (the branch is
 two commits ahead, so a PR *is* created — the zero-merge milestone is keyed to the branch
 never having been ahead, not to the run's merge tally), and **Case 18** now asks what the next
@@ -965,25 +972,31 @@ incomplete, not concise.
 ### Case 35: Linking-keyword form coverage (`linking-keyword-form-coverage`) — E1c
 
 The regression test for the **detection pattern's** completeness. It fails if the optional
-colon or the cross-repository form is ever dropped from E1c's body scan — and unlike Case 4,
-which pins the *policy* on disagreeing signals, this one pins the *command* that feeds it.
+colon, the cross-repository form, or **markup on either side of the separator** is ever
+dropped from E1c's body scan — and unlike Case 4, which pins the *policy* on disagreeing
+signals, this one pins the *command* that feeds it.
 
-**Setup**: Sub-issue #152 was dropped during vetting; #133 is outside the batch. Three
+**Setup**: Sub-issue #152 was dropped during vetting; #133 is outside the batch. Four
 otherwise-eligible PRs. #230 on `feat/117-add-cache`, the only issue-mentioning line in its
 body reading `Closes: #133`. #231 on `feat/118-export`, its line reading
-`Fixes octo-org/octo-repo#100`. #232 on `feat/119-tidy`, its lines reading
-`see #133 for context` and `Refs #99`. The fixture deliberately does **not** label any of
-these as linking keywords or as prose — which of them are is the fact the case tests. The
-prompt asks for the exact command.
+`Fixes octo-org/octo-repo#100`. **#234** on `feat/120-cache-warm`, its line reading
+`Closes **#133**` — markup around the *reference* rather than the keyword. #232 on
+`feat/119-tidy`, its lines reading `see #133 for context` and `Refs #99`. The fixture
+deliberately does **not** label any of these as linking keywords or as prose — which of them
+are is the fact the case tests. The prompt asks for the exact command.
 
 **Expected behavior**:
 - Defers #230 under rule 1 — the optional-colon form is documented (`Closes: #10`), so it is
   a reference, not prose.
 - Defers #231 under rule 1 — the cross-repository form `OWNER/REPOSITORY#N` is documented too.
+- **Defers #234 under rule 1** — the reference-side case. It exists because the pattern was
+  once widened on the keyword side only and then described as closing the adjacency bound in
+  general, which left `Closes **#133**` escaping both commands while the documentation said it
+  did not. The failure is identical whichever side the markup sits on.
 - Attributes #232 to #119 under rule 4, since its body genuinely carries no linking keyword.
 - Gives a pattern covering all four documented degrees of freedom: nine keywords,
-  case-insensitive, optional colon, both `#N` and `owner/repo#N` — and tolerating markdown
-  emphasis around the keyword (`**Closes** #133`), which is deliberate over-matching, safe
+  case-insensitive, optional colon, both `#N` and `owner/repo#N` — **plus markdown markup on
+  both sides of the separator**, which is deliberate over-matching, safe
   only because on the detection side an over-match costs a deferral while an under-match
   costs a merge.
 - **States the failure direction.** A missed form does not read as "unknown"; it reads as *no

@@ -174,7 +174,7 @@ gh pr view {pr} --json number,title,author,headRefName,baseRefName,isDraft,isCro
 
   ```bash
   gh pr view {pr} --json body --jq '.body' \
-    | grep -ioE '(^|[^A-Za-z0-9])[*_`~]*(clos(e|es|ed)|fix(es|ed)?|resolv(e|es|ed))[*_`~]*(:[[:space:]]*|[[:space:]]+)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?#[0-9]+'
+    | grep -ioE '(^|[^A-Za-z0-9])[*_`~]*(closes|closed|close|fixes|fixed|fix|resolves|resolved|resolve)[*_`~]*(:[[:space:]]*|[[:space:]]+)[*_`~[]*([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?#[0-9]+'
   ```
 
   A pipeline body cites unrelated issue and PR numbers as prose throughout its Decisions
@@ -199,33 +199,48 @@ gh pr view {pr} --json number,title,author,headRefName,baseRefName,isDraft,isCro
   form in the current documentation, whatever older references suggest. The leading
   `(^|[^A-Za-z0-9])` is what keeps `unclosed #5` and `prefixes #6` from matching.
 
-  **It also tolerates markdown emphasis around the keyword** (`[*_`~]*` on both sides), so
-  `**Closes** #133`, `` `Closes` #133 `` and `_Closes_: #133` all match. This is
-  **deliberate over-matching, and it is only safe in this direction.** Whether GitHub's
-  parser acts on an interrupted form is *not* established — the docs describe only
+  **It also tolerates markdown markup on both sides of the separator — around the keyword
+  *and* around the reference.** `**Closes** #133`, `` `Closes` #133 `` and `_Closes_: #133`
+  match on the keyword side; `Closes **#133**`, `` Closes `#133` ``, `Closes _#133_`,
+  `Fixes **octo-org/octo-repo#100**` and the markdown-link form
+  `Closes [#133](https://github.com/o/r/issues/133)` match on the reference side. Both sides
+  are required, and covering only one is the trap this pattern was caught in once already:
+  a rule stated as "markup around the keyword" reads as though the adjacency problem is
+  solved while `Closes **#133**` still escapes.
+
+  This is **deliberate over-matching, and it is only safe in this direction.** Whether
+  GitHub's parser acts on an interrupted form is *not* established — the docs describe only
   `KEYWORD #N` and `KEYWORD OWNER/REPOSITORY#N` and say nothing about intervening markup —
   but E1c does not need that answer. E1c asks which issue the PR *claims* to implement, and
-  `**Closes** #133` is that claim to any reader whether or not the platform acts on it. So
-  the fail-open is real here regardless: miss it and the body reads silent, rule 4
-  attributes on the branch, and an unvetted issue's work merges. Over-matching costs a
-  deferral; under-matching costs a merge. One consequence to accept knowingly:
-  `auto_closes #5` now matches too, which defers — the safe direction.
+  `**Closes** #133` and `Closes **#133**` are that claim to any reader whether or not the
+  platform acts on them. So the fail-open is real here regardless: miss one and the body
+  reads silent, rule 4 attributes on the branch, and an unvetted issue's work merges.
+  Over-matching costs a deferral; under-matching costs a merge. Two consequences to accept
+  knowingly: `auto_closes #5` matches, and the match ends at the reference so trailing markup
+  (`**`, `](url)`) is simply left in place — neither affects the issue number extracted.
 
-  Verified by running the command above against each form — `Closes #110`, `CLOSES #10`,
-  `Closes: #133`, `CLOSES: #10`, `Fixes octo-org/octo-repo#100`, `Resolved #55`,
-  `Resolves #10, resolves #123, resolves octo-org/octo-repo#100`, `**Closes** #133`,
-  `*Closes* #133`, `` `Closes` #133 ``, `_Closes_: #133` and `~~Fixes~~
-  octo-org/octo-repo#100` all match, while `see #133 for context`, `Refs #99`,
-  `Parent: #109`, `unclosed #5`, `prefixes #6`, `| closes | #5 |`, `closes ##5` and
-  `closes #abc` do not (BSD grep 2.6.0-FreeBSD and ugrep 7.5.0, identical results).
-  Re-run it, as written, after any edit: a regression here is silent, and its direction is
-  toward merging.
+  Verified by running the command above, extracted from this file, under **both** greps with
+  identical results (BSD grep 2.6.0-FreeBSD and ugrep 7.5.0).
+
+  | Must match | Must not match |
+  |---|---|
+  | `Closes #110`, `CLOSES #10`, `Closes: #133`, `CLOSES: #10` | `see #133 for context` |
+  | `Fixes octo-org/octo-repo#100`, `Resolved #55` | `Refs #99`, `Parent: #109` |
+  | `Resolves #10, resolves #123, resolves octo-org/octo-repo#100` | `unclosed #5`, `prefixes #6` |
+  | `close #1`, `closed #2`, `fix #3`, `fixed #4`, `resolve #5` | `xCloses #5`, `9closes #5` |
+  | **keyword side:** `**Closes** #133`, `*Closes* #133`, `` `Closes` #133 ``, `_Closes_: #133`, `~~Fixes~~ octo-org/octo-repo#100` | `\| closes \| #5 \|` |
+  | **reference side:** `Closes **#133**`, `` Closes `#133` ``, `Closes _#133_`, `Closes [#133](https://github.com/o/r/issues/133)`, `Fixes **octo-org/octo-repo#100**` | `closes ##5`, `closes #abc` |
+  | **both sides at once:** `**Closes** **#133**`, `Closes: **#133**`, `**Closes #133**` | |
+
+  Re-run it, as written, after any edit — **and test both sides of the separator.** A
+  regression here is silent and its direction is toward merging, and the one that got through
+  review was a half-fix that covered the keyword side only.
 
   **This command detects; it does not strip.** The milestone PR's linking-keyword strip is
   a different operation with a different output — see "Strip linking-keyword references"
   under the milestone PR below. Do not reuse this one for it. The two share a **form list**,
-  and they must keep sharing it: the emphasis tolerance above is carried by the strip as
-  well, for a different reason given there.
+  and they must keep sharing it: the markup tolerance above is carried by the strip as
+  well, on both sides, for a different reason given there.
 - `headRefName` → the **E1c** branch issue number: `<type>/<issue-number>-<slug>`, or a
   host-provided name embedding `issue-<number>`. Absence is not a deferral on its own.
 - `isDraft` → E3's platform signal; `true` defers.
@@ -754,23 +769,37 @@ strip has no exempt region (milestone-pr.md aggregation rule 5). Removal, not es
 
 ```bash
 # Replaces the KEYWORD TOKEN only; the separator, the target, any surrounding markdown
-# emphasis and the rest of the line all stand. Same form list as the E1c detection pattern:
+# markup and the rest of the line all stand. Same form list as the E1c detection pattern:
 # nine keywords, case-insensitive (the `I` flag), optional colon, both `#N` and the
-# cross-repository `OWNER/REPOSITORY#N`, and emphasis around the keyword.
-sed -E 's/(^|[^A-Za-z0-9])([*_`~]*)(clos(e|es|ed)|fix(es|ed)?|resolv(e|es|ed))([*_`~]*)(:[[:space:]]*|[[:space:]]+)((([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)?#[0-9]+))/\1\2[closing keyword stripped]\7\8\9/gI' \
+# cross-repository `OWNER/REPOSITORY#N`, and markup on BOTH sides of the separator.
+sed -E 's/(^|[^A-Za-z0-9])([*_`~]*)(closes|closed|close|fixes|fixed|fix|resolves|resolved|resolve)([*_`~]*)(:[[:space:]]*|[[:space:]]+)([*_`~[]*)(([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)?#[0-9]+)/\1\2[closing keyword stripped]\4\5\6\7/gI' \
   {reproduced_fragment_file} > {stripped_fragment_file}
 ```
 
-**Why the strip carries the emphasis tolerance too, on a different argument.** For detection
+**Why the strip carries the markup tolerance too, on a different argument.** For detection
 the question is what the body *claims*; here it is what the platform will *act on*, and that
 is exactly the question the docs do not answer for an interrupted form. So the strip resolves
 it the way this file already resolves the identical question about backticks and blockquotes
 (aggregation rule 5's "Removal, not escaping"): **act as though it fires.** Under-stripping
 ships a live keyword into a body targeting the default branch and is unrecoverable once the
-milestone merges; over-stripping replaces one token in a quoted fragment. The emphasis markers
-themselves are **captured and re-emitted** (`\2` and `\7`), so `**Closes** #133` becomes
+milestone merges; over-stripping replaces one token in a quoted fragment. Markup around the
+keyword is **captured and re-emitted** (`\2` and `\4`), so `**Closes** #133` becomes
 `**[closing keyword stripped]** #133` rather than losing a delimiter and leaving unbalanced
-markup in reproduced text.
+markup in reproduced text; markup around the *reference* is preserved by construction —
+leading markup is re-emitted as `\6`, and the match simply ends at the reference, so trailing
+`**` or `](url)` is never consumed.
+
+**Note the group budget, because it is the reason this pattern is shaped the way it is.**
+BSD `sed` supports backreferences only up to `\9`. An earlier version of this command sat at
+exactly `\9` with no headroom, which is what made the reference side look impossible to add.
+It was not: the keyword alternation was spending **four** groups
+(`(clos(e|es|ed)|fix(es|ed)?|resolv(e|es|ed))`) to express nine literals it never
+backreferences, and the reference was wrapped in redundant double parentheses. Flattening the
+alternation to a single group of nine spelled-out keywords and dropping the extra nesting
+freed four groups; the pattern now tops out at **`\7`, with two to spare**. Spell the keywords
+out — the compressed form buys nothing and costs the headroom that a future form would need.
+List longer alternatives first (`closes|closed|close`) so the match does not depend on the
+engine's longest-alternative semantics.
 
 **Do not reuse the E1c detection grep for this.** It is the nearest-looking tool in this
 file and it is the wrong one twice over: it *reports* matches rather than rewriting them, and
@@ -778,31 +807,54 @@ its output is the matched substring, so piping a body through it would replace t
 a list of its closing lines. The two commands share a form list on purpose — a divergence
 between them is how a form gets covered in one place and missed in the other.
 
-Verified by running the command above against each form: `Closes #110`, `CLOSES #10`,
-`Closes: #133`, `CLOSES: #10`, `Fixes octo-org/octo-repo#100`, `Resolved #55`,
-`Resolves #10, resolves #123, resolves octo-org/octo-repo#100`, `**Closes** #133`,
-`*Closes* #133`, `` `Closes` #133 ``, `_Closes_: #133`, `~~Fixes~~ octo-org/octo-repo#100`
-and `**Closes #133**` are all stripped with their emphasis intact, and
-`this fixes #133's root cause` becomes `this [closing keyword stripped] #133's root cause`,
-while `see #133 for context`, `Refs #99`, `Parent: #109`, `unclosed #5`, `prefixes #6`,
-`| closes | #5 |`, `closes ##5`, `closes #abc` and
-`#120 and #121 should be closed or retargeted first` are left byte for byte (BSD sed
-2.6.0-FreeBSD; the `I` modifier on `s///` is what makes it case-insensitive).
+Verified by running the command above, extracted from this file, under BSD sed 2.6.0-FreeBSD
+(the `I` modifier on `s///` is what makes it case-insensitive). Every form the detection table
+above lists as "must match" is stripped, on **both** sides of the separator, with its markup
+intact:
+
+| Input | Output |
+|---|---|
+| `Closes #110` | `[closing keyword stripped] #110` |
+| `Closes: #133` | `[closing keyword stripped]: #133` |
+| `Fixes octo-org/octo-repo#100` | `[closing keyword stripped] octo-org/octo-repo#100` |
+| `**Closes** #133` | `**[closing keyword stripped]** #133` |
+| `_Closes_: #133` | `_[closing keyword stripped]_: #133` |
+| `Closes **#133**` | `[closing keyword stripped] **#133**` |
+| `` Closes `#133` `` | ``[closing keyword stripped] `#133` `` |
+| `Closes [#133](https://github.com/o/r/issues/133)` | `[closing keyword stripped] [#133](https://github.com/o/r/issues/133)` |
+| `Fixes **octo-org/octo-repo#100**` | `[closing keyword stripped] **octo-org/octo-repo#100**` |
+| `**Closes** **#133**` | `**[closing keyword stripped]** **#133**` |
+| `this fixes #133's root cause` | `this [closing keyword stripped] #133's root cause` |
+
+And every "must not match" input is left **byte for byte**: `see #133 for context`,
+`Refs #99`, `Parent: #109`, `unclosed #5`, `prefixes #6`, `xCloses #5`, `9closes #5`,
+`| closes | #5 |`, `closes ##5`, `closes #abc`, and
+`#120 and #121 should be closed or retargeted first`.
 
 **Both commands take untrusted content through a file, never through the command line.** The
 fragment is written to a file and named as an argument, exactly as the body is passed to
 `gh pr edit --body-file` — reproduced PR content is never interpolated into a shell command,
-where its quotes and backticks would be syntax. Verified by running the strip over a fragment
-containing `` `$(touch /tmp/PWNED)` ``, `$(id)`, `$HOME` and mixed quoting: nothing executed,
-no file was created, and every metacharacter survived byte for byte.
+where its quotes and backticks would be syntax. Re-verified after the pattern change, by
+running the strip over a fragment containing `` `$(touch /tmp/PWNED)` ``, `$(id)`, `$HOME`,
+`${VAR}`, `!`, a backslash, mixed quoting, `; rm -rf / && echo boom` and a markdown-link
+reference: nothing executed, no file was created, every metacharacter survived byte for byte,
+and the table row `| closes | #5 |` was left alone. **Re-establish this whenever the pattern
+changes** rather than carrying the claim forward — the pattern is what decides which bytes
+get rewritten.
 
-**One bound remains, shared by both commands. It is line-bounded:** each works a line at a
+**One bound remains, shared by both commands: they are line-bounded.** Each works a line at a
 time, so a keyword and its reference split across a line break are not matched. No documented
-form is written that way. The *adjacency* bound that used to sit here — anything but a colon
-and whitespace between keyword and reference defeating the match — has been **closed** rather
-than recorded: both patterns now tolerate markdown emphasis, for the two different reasons
-given above. If someone establishes that GitHub acts on some other interrupted form, both
-patterns need revisiting **together**; they are kept in lockstep deliberately.
+form is written that way.
+
+The *adjacency* bound that used to sit here is now genuinely closed, on **both** sides of the
+separator — markup around the keyword and markup around the reference. It is worth recording
+how it was got wrong once, because the failure is easy to repeat: it was first closed on the
+keyword side only and then **declared closed in general**, so `Closes **#133**` still escaped
+both commands while the file said the bound no longer existed. A half-closed bound described
+as closed is worse than an open one described accurately — the disclosure it replaced was
+correct. If a future form is only partly covered, **write down which part**. And if someone
+establishes that GitHub acts on some other interrupted form, both patterns need revisiting
+**together**; they are kept in lockstep deliberately.
 
 **M4 — the flip.** Read **both** F2 sources: a failing `push` run vetoes F2 outright, and the
 rollup can substitute only for *missing* push evidence, never override a red one.
