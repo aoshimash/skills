@@ -181,8 +181,8 @@ milestone merged, then `merge-issue-prs` M5 deleted the integration branch — l
 branch with merged PRs still carrying its `baseRefName`, which matches a destroyed-branch
 check exactly. Ordering is what makes that read **Stop — finished** rather than a report that
 merged work "is gone with it". So: read the table top to bottom, and **the first matching row
-is the outcome**; the destroyed-branch reading applies only where the table would otherwise
-say **Fresh**.
+is the outcome**; the destroyed-branch reading lives in one row and applies only there — the
+state a branch-only check would mistake for Fresh.
 
 | Milestone PR | Integration branch | Outcome |
 |---|---|---|
@@ -528,6 +528,12 @@ sent.
   them at B1-3, because nothing records that they were approved. That is a real narrowing of
   what unattended operation delivers, and it is the price of having no durable record of the
   plan.
+- **A dispatch that produced no artifact is indistinguishable from one that never happened.**
+  The declared set is inferred from PRs and branches, so an issue an earlier session
+  dispatched whose implementer returned `BLOCKED` before pushing anything leaves nothing
+  behind and drops out of it. Harmless on the attended path — R5 sees no PR and no remote
+  branch, re-dispatches, and the issue acquires a status before B3 — but it means the
+  declared set is "what left a trace", not "what was attempted".
 - **An escalation the milestone PR never received is invisible** (R2). A body update the gate
   abandoned, an unparseable section, or a failed read all present as "no escalation", and the
   label-versus-history corroboration narrows that without closing it.
