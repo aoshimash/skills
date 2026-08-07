@@ -139,7 +139,10 @@ at once.
 
   Second, **the title is the only value in this lifecycle that reaches a command line.** The
   platform CLI takes the body from a file but offers no equivalent for the title, so it
-  cannot be kept off the command line the way R-4's revert comment is. Sanitize before it
+  cannot be kept off the command line the way R-4's revert comment is. Sanitize the
+  **assembled** title, not only the parent's portion of it — the identifier-only fallback
+  interpolates the branch name onto the same command line, and git ref names may legally
+  contain backticks, `$` and quotes. Sanitize before it
   gets there: collapse to a single line, strip markdown, remove the characters a shell would
   act on — quotes, backticks, `$`, backslashes, newlines — *then* truncate. It names the PR;
   it never carries instructions and it never carries syntax.
@@ -412,8 +415,10 @@ Rules:
 - The issue behind each keyword comes from E1c attribution, which is an **inference**
   (eligibility.md Known limits #1). A misattributed PR would close the wrong issue on
   merge, so every closing reference is also printed beside its PR in **Per-Issue PRs and
-  Gate Results**, where a reviewer can check the mapping before merging. Never emit a
-  keyword for a PR whose attribution rested on a signal the run flagged as single-sourced
+  Gate Results**, where a reviewer can check the mapping before merging. Print it there as a
+  bare mapping (`#118 → #110`), never as a second keyword-adjacent reference — the closing
+  list is the invariant's only exception, and a mapping is just as checkable without being
+  one. Never emit a keyword for a PR whose attribution rested on a signal the run flagged as single-sourced
   without saying so there.
 
 ### Repository PR templates
@@ -529,8 +534,18 @@ ready PR that isn't.
   becomes a trap exactly when it is given authority. (c) is the only part that tells the gate
   something it could not read itself.
 
-  **(b) is compared, not consumed.** Derive the per-issue outcomes, then compare. On
-  agreement, nothing happens — the declaration was redundant, as intended. On **divergence**,
+  **(b) is compared, not consumed.** Derive the per-issue outcomes, then compare — but
+  compare on the **merge-outcome axis only**. The orchestrator's status vocabulary is wider
+  than the gate's: it also records why an issue produced no mergeable PR at all (its
+  implementer was blocked, stopped for missing context, or was skipped behind a failed
+  dependency). Those map to "no PR the gate could merge" and agree with the gate's own
+  reading of the same issue; they are not disagreements. **A deferral, revert, or
+  not-attempted the gate itself recorded is never a divergence** — those states are exactly
+  what the declaration is expected to report back, and treating them as disagreement would
+  withhold the flip in the case the deferred-items rule below exists to permit. Divergence
+  means the two views contradict each other about whether an issue's work **landed on the
+  integration branch**: declared merged where the gate derives otherwise, or the reverse. On
+  **divergence**,
   the two views of the batch have come apart, which is a real signal and worth more than
   either view alone: report it in Needs Human Attention naming the issues and **both** views,
   fall back to the gate's own derivation for everything downstream, and **withhold the flip**
@@ -627,7 +642,8 @@ What they bind instead is disclosure. The flip is permitted only when **all** of
    PR, the failed condition by identifier, the concrete evidence, the required human action
    stated *as an action* ("resolve the conflict in #123 against `integration/issue-109`", not
    "conflicted") — phrased so that no linking keyword sits immediately before the reference,
-   per [The closing-keyword invariant](#the-closing-keyword-invariant), and whether the exclusion is permanent or re-evaluated next run. This is the
+   per [The closing-keyword invariant](#the-closing-keyword-invariant), and whether the
+   exclusion is permanent or re-evaluated next run. This is the
    same record [eligibility.md](eligibility.md) "What a deferral records" requires of the run
    report — the milestone PR is its second home, not a summary of it.
 2. **The milestone is labelled partial** — in the status line and in the PR title — whenever
@@ -747,3 +763,9 @@ State these plainly. A checkpoint whose limits are undocumented gets trusted pas
    author-written text inside a quoted, labelled region, but a PR title cannot be quoted. M1
    bounds it with a write-access check on the parent's author and a shell sanitization; it is
    still the one unquoted, unlabelled author string in the document.
+9. **The closing-keyword invariant governs this body, and nothing else.** A `Closes #N` in a
+   **commit message** already on the integration branch reaches the default branch when the
+   milestone merges, and fires there independently of anything the body says. This gate
+   cannot rewrite merged history, so the case is out of its reach rather than handled by it.
+   Inert for pipeline commits, whose convention puts closing keywords in the PR body and
+   `Refs #N` in the commit — but a hand-written commit on the branch is not bound by that.
