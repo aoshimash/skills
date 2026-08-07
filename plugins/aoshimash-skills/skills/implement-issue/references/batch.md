@@ -738,6 +738,14 @@ a partial declaration as no declaration, and then the milestone PR never leaves 
 not soften a status to make the set look complete: `BLOCKED`, `NEEDS_CONTEXT`, and `SKIPPED`
 are final statuses and belong in the declaration as themselves.
 
+**A session with no user carries one further condition before it may send anything**: every
+issue in the batch source must be accounted for — finished, or named in the approval record
+it acted on. An issue in neither class arrived after the last human looked at the plan, and
+declaring the milestone terminal over it would flip the milestone PR to ready with that issue
+never implemented. Withhold the whole declaration, name the issue in the summary, and leave
+the PR a draft. [batch-reentry.md](batch-reentry.md) R8 §3 holds this rule; it is repeated
+here because this is the step that assembles the declaration.
+
 **It is a full B2-4, not a notification.** The gate runs its whole loop and may merge PRs
 in it — the not-attempted set that stop-the-line left behind reaches its next run here, and
 for the last group that next run is this one. So every part of B2-4 applies: the report is

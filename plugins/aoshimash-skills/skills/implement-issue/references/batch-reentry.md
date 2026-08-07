@@ -470,9 +470,16 @@ settled and is not asked again; the plan has to come from somewhere.
 B1-5 writes it: a comment on the batch's **parent issue** headed `## Batch Plan Approved`,
 carrying the integration branch it belongs to, the issues B1-3 **Considered**, and the
 subset **Approved**. It is written once at the approval and never updated (see "What is not
-batch state"). Read the parent issue's comments in full — a partial read here silently
-narrows the plan — and apply these rules in order (platform guide, "Record and Read a
-Batch's Approved Plan"):
+batch state").
+
+**A batch whose source is a milestone, a label, or a manual list has no record, and never
+will** — B1-5 does not write one, because there is no parent issue to host it and no single
+ordered place for a later record to supersede an earlier one. Such a batch takes the
+no-record path below directly; there is nothing to read and nothing missing.
+
+Otherwise, read the parent issue's comments in full — a partial read here silently narrows
+the plan — and apply these rules in order (platform guide, "Record and Read a Batch's
+Approved Plan"):
 
 1. **Keep only records naming this batch's integration branch**, as R2 identified it. A
    record for another branch belongs to another batch, not to this one, and is skipped
