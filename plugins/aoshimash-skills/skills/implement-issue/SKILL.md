@@ -84,15 +84,6 @@ below use capability terms; map them to your environment as follows.
 | **Background execution** — run long commands without blocking | Background shell (e.g. Claude Code's background Bash) | Run commands sequentially |
 | **Scheduled invocation** — run this skill again later without a user present | Recurring or cron-scheduled agent runs (e.g. Claude Code's scheduled tasks) | Re-invoke manually once per session; a resumed batch re-derives its state from the tracker and git (see [references/batch-reentry.md](references/batch-reentry.md)) |
 
-*Model selection* is used at two points, both in Batch mode. The orchestrator dispatches each
-issue's implementer on a capability tier matched to that issue's **content** — mechanical
-work runs cheaply, judgment-heavy work does not, uncertainty and the hard-exclusion classes
-resolve upward ([references/model-selection.md](references/model-selection.md)) — and each
-reviewer then runs at least at that tier
-([references/review-gates.md](references/review-gates.md)), so a cheaper implementer is
-reviewed relatively more strongly rather than less. Single mode chooses no tier: its
-implementer is the session itself.
-
 The last three are used only by Batch mode's **integration mode**. *Skill invocation* and
 *background execution* serve its call into the merge-issue-prs skill
 ([references/batch.md](references/batch.md) B2-4). That skill performs
@@ -120,6 +111,16 @@ membership, an unattended run drains the group the last session dispatched and t
 on the next one, even though the user approved it; a batch is advanced without ever being
 widened, and finishing one still takes a session with a user in it. That, and the rest of
 what re-derivation cannot recover, is in batch-reentry.md's Known limits.
+
+*Model selection* is used in **both** modes, for different things. Reviewers use it
+everywhere: each one runs at least at the tier of the dispatch that produced the code it is
+reviewing ([references/review-gates.md](references/review-gates.md)), which in Single mode is
+the session's own model. **Implementer** tiers are Batch-only, because batch dispatch is the
+one point where a model is chosen per unit of work: the orchestrator classifies each issue by
+**content** — mechanical work runs cheaply, judgment-heavy work does not, and uncertainty and
+the hard-exclusion classes resolve upward
+([references/model-selection.md](references/model-selection.md)). Single mode classifies
+nothing; its implementer is the session itself, on the model the user chose.
 
 ## Phase 0: Setup and Mode Selection
 

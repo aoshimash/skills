@@ -307,14 +307,21 @@ For each issue in the current group:
    git worktree add .worktrees/<branch-name> -b <branch-name> <base>
    ```
    Branch naming: `<type>/<issue-number>-<short-description>`
-2. **Choose the implementer's model tier**, where the environment supports model selection
-   (see Environment Adaptation in SKILL.md). Classify the issue's implementation nature —
-   mechanical versus judgment-heavy, from the issue *and* from the repository — and take the
-   tier that classification maps to, per [model-selection.md](model-selection.md). That file
-   holds the rubric, the hard exclusions that are never dispatched cheaply, the
-   uncertainty-resolves-upward rule, and the repository override. Where model selection is
-   unavailable, skip this step entirely rather than approximating it: every instance runs on
-   the session's model.
+2. **Choose the implementer's model tier**, per [model-selection.md](model-selection.md).
+   Classify the issue's implementation nature — mechanical versus judgment-heavy — with the
+   issue saying what the change is and the **repository** establishing every mechanical
+   signal; an issue's own assertion, including a location it points at, is a lead to check
+   rather than an answer. Then take the tier that classification maps to, resolving it through
+   the target repository's `## Implementer Model Tiers` section (in its agent instructions)
+   where one is present. That file holds the rubric, the hard exclusions that are never
+   dispatched cheaply, the uncertainty-resolves-upward rule, and the resolve/fill/check
+   procedure a pinned table goes through before any of it is applied.
+
+   **Skip this step entirely — do not approximate it — in either of two cases**: the
+   environment does not support model selection (see Environment Adaptation in SKILL.md), or
+   this batch is running **sequentially in the current context**, where the orchestrator is
+   executing the implementer's instructions itself and there is no separate instance to place
+   on a tier. Both run everything on the session's model.
 3. **Run the implementer** using the instruction template below — as a separate agent instance where available, otherwise by executing those same instructions yourself in the issue's worktree.
 4. **Wait for completion** of all issues in the current group before proceeding to the next group.
 
@@ -385,7 +392,7 @@ After each issue's PR/MR is created (and the implementer has reported):
 1. Stage 1: Run a **spec compliance reviewer** (see [review-gates.md](review-gates.md)).
 2. Stage 2: Run a **code quality reviewer** (see [review-gates.md](review-gates.md)).
 
-   Where the environment supports model selection, run reviewers on a model at least as capable as the tier this issue's implementer was dispatched on (B2-1, [model-selection.md](model-selection.md)) — and never at the fast tier, whatever the implementer ran on. See review-gates.md "Reviewer model".
+   Where the environment supports model selection, run reviewers on a model at least as capable as the tier of **the dispatch that produced the code under review** ([model-selection.md](model-selection.md)) — the B2-1 tier for a first review, and the **strongest** tier when re-reviewing after a fix round, which step 4 dispatches there. Never at the fast tier, whatever the implementer ran on. See review-gates.md "Reviewer model".
 3. Stage 2.5: **Pattern Propagation** — if a `rule-violation-instance` is found, scan other in-flight PRs for the same pattern and offer to propagate the fix (see [review-gates.md](review-gates.md)). This stage only runs in Batch mode, when 2+ issues are in flight.
 4. If issues are found at Stage 1 or 2 → re-run the implementer to fix → re-review (max 2 fix rounds per stage). **Record each stage's verdict together with its round count** in the PR body's Gate Results as the stage settles — `Spec compliance (Stage 1): PASS (round 1/2)`, `Code quality (Stage 2): FAIL (round 2/2, findings in Risk Areas)`. The count is what a later session reads its remaining budget from — the PR body is the only record of it that survives this one, and a verdict written without a count withholds the budget rather than granting a fresh one. The **verdict** carries no such weight across sessions: on a PR that is still a draft, a resumed run re-runs both stages regardless of what the body records, because nothing on the platform attests that a stage ever ran. A PR already flipped to ready is not re-gated — it goes to the merge gate ([batch-reentry.md](batch-reentry.md) R6). **A fix round is a dispatch, so it takes a model tier like any other** ([model-selection.md](model-selection.md)): the stage that just failed is itself a judgment-heavy signal, so fix rounds run at the strongest tier — including in a session that adopted the PR without having classified the issue itself.
 5. **Automated review response** — once the gates and CI pass, run [automated-review.md](automated-review.md) for this PR/MR: detect the repository's automated reviewers, wait (bounded) for their findings, and address them (fix, push, reply) for at most 2 rounds, recording leftovers in the PR body. Detection results are per repository, so detect once per batch and reuse the reviewer set for every PR in it. Fix rounds run like the gate fix rounds — re-run the implementer, or apply the fix directly where the orchestrator is already doing the work. Human review comments are never auto-addressed. With no automated reviewer configured this step records that and ends immediately.
@@ -695,11 +702,23 @@ Batch Complete: N/M issues implemented
 
 For blocked issues, explain what went wrong and suggest next steps. If the issue tracker supports it, post a summary comment on the parent issue.
 
-**Where model selection was used, name each issue's tier in this summary** — it is where a
-reader learns which PRs were implemented most cheaply, which is worth knowing while reviewing
-them. It is the one part of the summary the parent-issue comment leaves out: the tier is a
-perishable judgment and that comment is a tracker write
-([model-selection.md](model-selection.md)).
+**Where model selection was used, give each issue's tier a column in the table** —
+`| Issue | Title | Status | PR | Tier |`, the same way integration mode adds its merge column
+below, and both together in integration mode. A **fast** tier carries the evidence that
+justified it, and any tier whose executed model was not that tier's own resolution says what
+changed it — a floor raise, a rejected override table, or an upward fallback
+([model-selection.md](model-selection.md)):
+
+```
+| #101 | Add search index | ✅ Done | #201 | fast — precedent src/search/legacy_index.ts, covered by search.test.ts |
+| #102 | Create endpoint  | ✅ Done | #202 | standard — raised from fast by floor: standard |
+| #104 | Error handling   | ❌ Blocked | — | strongest — exclusion; pinned model unresolvable, ran on the most capable available |
+```
+
+This is the only place any of it is recorded, so a reader who wants to know why an issue ran
+cheaply has this table and nothing else. It is also the one part of the summary the
+parent-issue comment leaves out: the tier is a perishable judgment and that comment is a
+tracker write.
 
 **Integration mode: the summary is a merge report, and its most important content is the
 human queue.** The table gains a merge column and the integration-mode statuses:
