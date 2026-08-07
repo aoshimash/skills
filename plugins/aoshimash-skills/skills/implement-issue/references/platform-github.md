@@ -421,8 +421,15 @@ gh pr list --state all --limit 200 \
   --jq '[.[] | select(.baseRefName | startswith("integration/"))]'
 ```
 
-The filter is client-side, so `--limit` caps what is **fetched** and the truncation rule
-matters more here than anywhere else: raise the limit until the row count is below it. PRs
+The filter is client-side, so `--limit` caps what is **fetched** while the `--jq` above
+emits only what *matched* — comparing that number against the limit checks nothing. Compare
+the **fetched** count against the limit, and raise the limit until it is strictly below:
+
+```bash
+gh pr list --state all --limit 200 --json number --jq 'length'   # must be < 200
+```
+
+PRs
 whose base is an `integration/` branch and which attribute to this batch's issues mean the
 branch existed and is gone ([batch-reentry.md](batch-reentry.md) R2).
 

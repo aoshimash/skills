@@ -144,10 +144,16 @@ the merge commit the gate recorded, or rebase commits it could not enumerate. An
 **unrecorded exclusion** is the other kind and stops nothing. Read the cause, not the word.
 
 **Corroborate it with a signal that is not prose.** A revert that never landed has an
-observable shape in the artifacts already read: a merged PR carrying a revert label whose
-`mergeCommit` has **no** matching `This reverts commit <sha>` in the freshly fetched branch
-history — the exclusion was recorded, the revert was not. Where either the prose or that
-signal indicates an incomplete revert, stop.
+observable shape in the artifacts already read: a merged PR whose recorded `mergeCommit` is
+**not** an ancestor of the freshly fetched branch head, or is the head's own commit with no
+`This reverts commit <sha>` above it — the merge landed and the revert did not. Where either
+the prose or that signal indicates an incomplete revert, stop.
+
+Do **not** key this on the revert label. `merge-issue-prs` writes that label at R-4, which
+runs only after R-1 (create), R-2 (push) and R-3 (verify) have all succeeded, while the
+escalation this section exists for stops at R-1, R-2 or R-3 — so on a genuine incomplete
+revert there is no label, and wherever a label exists the revert landed. A label-keyed check
+narrows nothing.
 
 **A missing section is not an all-clear.** Absence can mean no escalation, an unparseable
 body, a failed read, or a body update the gate was permitted to abandon
@@ -159,23 +165,29 @@ narrows the gap; it does not close it (Known limits).
 
 ### The outcome
 
-**Two stop conditions are checked first, before the table, and either one ends the run
-whatever the table would say.** They are properties of the branch rather than of the
-milestone PR's state, and a mid-flight batch — an `OPEN` draft milestone PR over a present
-branch — matches the ordinary Resumable row, so a table-ordered check would never reach
-them:
+**One stop condition is checked first, before the table, and it ends the run whatever the
+table would say:** an **outstanding unestablished-branch escalation** (above). B2-4 requires
+that batch to create no worktrees, dispatch no implementers, and invoke the gate no further,
+and that instruction has to survive the session that received it or the next one walks
+straight back onto a branch a human is repairing. It has to be checked first because it is a
+property of the branch rather than of the milestone PR's state: a mid-flight batch — an
+`OPEN` draft milestone PR over a **present** branch — matches the ordinary Resumable row, so
+a table-ordered check would never reach it.
 
-1. **An outstanding unestablished-branch escalation** (above). B2-4 requires that batch to
-   create no worktrees, dispatch no implementers, and invoke the gate no further, and that
-   instruction has to survive the session that received it or the next one walks straight
-   back onto a branch a human is repairing.
-2. **The branch was destroyed** — it is absent while PRs based on it exist (below).
-
-Then read the table top to bottom; the first matching row is the outcome.
+The other branch-level stop, **the branch was destroyed** (below), stays *inside* the table
+and must not be promoted the same way. It only ever competes with rows whose branch is
+absent, and there the table's order is doing real work: a normally completed batch — the
+milestone merged, then `merge-issue-prs` M5 deleted the integration branch — leaves an absent
+branch with merged PRs still carrying its `baseRefName`, which matches a destroyed-branch
+check exactly. Ordering is what makes that read **Stop — finished** rather than a report that
+merged work "is gone with it". So: read the table top to bottom, and **the first matching row
+is the outcome**; the destroyed-branch reading applies only where the table would otherwise
+say **Fresh**.
 
 | Milestone PR | Integration branch | Outcome |
 |---|---|---|
 | none | absent, and no PR was ever based on it | **Fresh.** Nothing this mode creates exists; treat it as a new batch |
+| none | **absent**, while PRs based on it exist | **Stop — the branch was destroyed** (below). This row sits above Resumable and below Fresh deliberately: it is the only place the destroyed-branch reading applies, because every other absent-branch state is already explained by the milestone PR's own state |
 | none, or `OPEN` draft | present | **Resumable.** The batch is mid-flight. A milestone PR's absence is not evidence that nothing landed — the gate creates it at the first moment the branch is ahead of the default branch, so a batch whose gate has not run yet has none |
 | `MERGED` | absent, or present | **Stop — finished.** The milestone landed on the default branch |
 | `OPEN`, ready for review | present | **Stop — under review.** Not because the batch is provably terminal: only the orchestrator can declare that ([milestone-pr.md](../../merge-issue-prs/references/milestone-pr.md) F1) and a human can flip any PR to ready by hand. The reason is narrower and sufficient — a reviewer is reading that diff, and resuming would move it under them |
@@ -193,6 +205,13 @@ and their absence is not what signals the deletion — the missing branch is. Wh
 merged there is gone with it. Report the branch, the PRs, and their states, and stop:
 restarting would re-implement everything, and reading the closures as human decisions
 (R5) would write the whole batch off as deliberate.
+
+**This reading applies only to the row above — no milestone PR, branch absent, PRs based on
+it.** An absent branch alongside a *merged* milestone PR is the ordinary end of a batch, not
+a destroyed one: `merge-issue-prs` M5 deletes the integration branch after the milestone
+merges, and the per-issue PRs keep their `baseRefName` afterwards, so the two states look
+identical to a branch-only check. What separates them is the milestone PR, which is why the
+table is read in order rather than this check being hoisted above it.
 
 On any **Stop**, report and stop: create no branch, cut no worktree, dispatch no
 implementer, invoke no merge gate. Where R1's set still holds open issues that never
@@ -336,10 +355,12 @@ safeguard — "a body claiming everything passed never substitutes for the platf
 holds only while the platform state is set by something other than the body, and a skip
 rule is exactly what breaks that.
 
-**A PR that already reached ready for review is not re-gated.** Some session flipped it,
-which under B2-3 step 6 took both stages passing, and re-gating it has no defined outcome
-anyway: R6's remedy for a failing stage is "the PR stays a draft", and nothing in this
-pipeline moves a PR from ready back to draft. It would also be actively harmful — a fix
+**A PR that already reached ready for review is not re-gated.** Re-gating it has no defined
+outcome: R6's remedy for a failing stage is "the PR stays a draft", and nothing in this
+pipeline moves a PR from ready back to draft. Note the reason is *not* that ready implies
+both stages passed — B2-3 step 6 is one way a PR gets there, but a human can flip any draft
+by hand. The backstop for that is the merge gate's E3, which defers on a `Gate Results`
+section recording an unresolved failure whatever the platform state says. It would also be actively harmful — a fix
 push immediately before R8's gate invocation re-triggers CI, and the merge gate's
 re-evaluation defers a PR whose rollup is running
 ([eligibility.md](../../merge-issue-prs/references/eligibility.md)), so a daily schedule
@@ -460,11 +481,17 @@ At B2-1, with the DAG advanced by whatever merged, dispatching only the issues R
 unsettled and R8 item 1 permits. From here the batch is an ordinary batch, with one rule
 added at B3.
 
-**The terminal-state declaration is sent only when every member of R1's set carries a
-final B2-6 status.** A resumed session's dispatched set for B3's purposes is R1's set —
-the batch's scope — with statuses from R5's re-derivation plus this session's own work,
-because F1's part (a) exists as a scope cross-check against the gate's own vetted set and
-a set narrowed to "what this session happened to dispatch" would not serve it.
+**The terminal-state declaration is sent only when every member of the batch's dispatched
+set carries a final B2-6 status.** That set is what the *batch* dispatched across all its
+sessions — R5's re-derivation establishes it from the artifacts, and this session's own work
+adds to it — not what this one session happened to dispatch, because F1's part (a) exists as
+a scope cross-check against the gate's own vetted set and a per-session set would not serve
+it. It is equally **not** R1's whole set: R8 item 1 keeps Reorder available on a resume, and
+Reorder can exclude an issue from the batch, so an excluded issue sits in R1's set with no
+B2-6 status and never acquires one. Keying the declaration to R1's set would mean no
+declaration is ever sendable and the milestone PR never leaves draft — on this run and every
+later one. An issue in scope that the batch never dispatched is reported in the summary, not
+declared.
 
 **Waiting on a plan approval is not a B2-6 status**, so a session that could not obtain one
 cannot complete part (b). It therefore sends **no declaration at all** — and in particular
@@ -492,7 +519,8 @@ sent.
   consecutive stops cannot be counted for the same reason.
 - **A `BLOCKED` or `NEEDS_CONTEXT` verdict costs an implementer run to recover** (R5), once
   per resume, for as long as the issue keeps producing it. Both gate stages likewise re-run
-  on every resumed unmerged PR (R6); neither cost is recoverable without a state file.
+  on every resumed unmerged **draft** PR (R6); neither cost is recoverable without a state
+  file.
 - **An unattended session cannot start new work** (R8), so a scheduled run drains the PRs a
   plan already produced and then waits for a human. Scheduling advances a batch; it does not
   approve one. The bound is **artifact evidence, not plan membership**: an interruption after

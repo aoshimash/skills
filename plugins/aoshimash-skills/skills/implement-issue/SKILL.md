@@ -109,8 +109,8 @@ the merge gate, the reports — and **dispatches no new implementer**, naming in
 is waiting on an approval. Since that bound is artifact evidence rather than plan
 membership, an unattended run drains the group the last session dispatched and then stalls
 on the next one, even though the user approved it; a batch is advanced without ever being
-widened, and finishing one still takes a session with a user in it. That, and the rest of what re-derivation cannot recover, is in
-batch-reentry.md's Known limits.
+widened, and finishing one still takes a session with a user in it. That, and the rest of
+what re-derivation cannot recover, is in batch-reentry.md's Known limits.
 
 ## Phase 0: Setup and Mode Selection
 
