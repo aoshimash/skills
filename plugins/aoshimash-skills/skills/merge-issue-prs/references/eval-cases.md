@@ -18,6 +18,8 @@ near-misses that should **not**. Full set in `evals.json` under `trigger_evals`.
 - "which of the implementation PRs from the sprint are safe to auto-merge? check them all"
 - "auto-merge the issue PRs into integration and open the milestone PR when it's done"
 - "the batch finished, go merge the per-issue PRs and tell me what got deferred"
+- "update the milestone PR for issue #109 and flip it to ready if the batch is finished"
+- "issue #109 のマイルストーンPRを最新化して、終わってるならレビュー依頼にして"
 - "issue #109 の実装PRを統合ブランチにマージしていって"
 - "パイプラインが作ったPR、マージできるものを判定してマージして"
 - "自動マージ対象のPRを判定して、対象外は理由をつけて教えて"
@@ -61,6 +63,17 @@ revert, where reverting from `mergeCommit` alone would silently leave most of th
 the branch; Case 22 is the regression test for the reverted-issue exclusion — the control
 that has to fire on a *later* run, and the case that would have caught it being keyed to the
 wrong object; Case 23 pins the head-moved race between the pre-merge re-check and the merge.
+
+**Milestone PR (Cases 24–28).** Case 24 pins the complete lifecycle of a full milestone —
+creation timing against the platform's empty-diff refusal, the live dashboard, the
+aggregation, the closing references, and the flip; Cases 25–26 pin the two directions of the
+flip decision, deferrals disclosed but not holding it (25) versus a non-terminal batch that
+must stay a draft (26), which together are what stop the rule collapsing into "always flip"
+or "never flip"; Case 27 pins the zero-merge milestone, where no PR can exist at all; Case 28
+pins cleanup, including the retarget that deleting the branch performs on PRs still based on
+it. Cases 26 and 27 are modelled on this repository as it actually is — `integration/issue-109`
+with PRs #118 and #119 merged, five sub-issues with no PR yet, and no `push`-triggered
+workflow.
 
 ### Case 1: Eligible pipeline PR (`eligible-clean-pipeline-pr`)
 
@@ -531,9 +544,153 @@ issued guarded on `aaa1111` and fails.
   never a merge.
 - Never reaches for `--admin` to get past the refusal.
 
+### Case 24: Full milestone, end to end (`full-milestone-pr-lifecycle`)
+
+**Setup**: `integration/issue-109`, parent #109 with seven vetted sub-issues #110–#116. A
+`push`-triggered workflow covering the branch exists, merge commits are the only enabled
+merge method, and the branch has **nothing on it yet** — `main...integration/issue-109`
+reports `ahead_by: 0`. All seven PRs are eligible; each merges and verifies in turn. Each
+merged body ends in its own `Closes #N`, and one of them was edited **after** it merged so
+that its Decisions section now also says `Fixes #133`, an issue outside this batch. The
+orchestrator declares the batch terminal at the end.
+
+**Expected behavior**:
+- Does **not** open the milestone PR at the start of the run: with the branch not ahead of
+  `main`, the platform refuses a PR between refs with no commits between them (`422
+  Validation Failed`, `No commits between …`). It opens the draft immediately after the
+  **first** merge passes verification — "as early as the platform allows" resolved to that
+  moment.
+- **Does not bootstrap an empty commit** onto the integration branch to open the PR earlier,
+  and does not push to that branch at all outside the auto-revert path.
+- Finds an existing milestone PR by **head and base**, not by title, and never opens a second.
+- Updates the body after every verified merge, so the draft is a current dashboard mid-run;
+  writes only inside its managed block.
+- Aggregates each merged PR's `## Decisions & Deviations`, `## Risk Areas` and
+  `## Acceptance Criteria → Evidence` **verbatim**, attributed per issue and quoted so a
+  heading inside a reproduced body cannot restructure the milestone body — and does not
+  summarize, rank or judge them.
+- **Strips the linking-keyword references out of the reproduced text**, including the
+  `Fixes #133` added to a body after the merge, leaving a marker that points at Per-Issue
+  PRs and Gate Results. Those lines are inert on the per-issue PRs' non-default base and
+  live here; leaving them in would let aggregated content close issues the run did not
+  decide to close. Removes rather than escapes, because whether backticks or a blockquote
+  stop the platform acting on a keyword was not established.
+- Emits `Closes #110` … `Closes #116` **and** `Closes #109` for the parent, because every
+  vetted issue landed; explains that this is the one PR in the design whose closing keywords
+  work, since the per-issue PRs target a non-default base where they are ignored.
+- Flips to ready only after the batch is terminal, the branch's content is green at the head
+  a human would merge, no escalation is outstanding, **and the body is already final** — it
+  does not flip first and finish writing after.
+- Sanitizes the parent issue title before it reaches the command line building the PR title
+  — single line, no quotes, backticks, `$` or backslashes — since there is no
+  title-from-file option, unlike the body, which is written to a file and passed as one.
+- Never merges, approves or reviews the milestone PR itself.
+
+### Case 25: Partial milestone — deferrals disclosed, flip proceeds (`partial-milestone-deferred-disclosure`)
+
+**Setup**: Same batch. Five of the seven issues merged and verified. #114's PR is deferred
+permanently on a human comment (E5, labelled); #115's PR is deferred on an unresolved
+conflict. Both are still **open** against `integration/issue-109`. The repository has
+automatic head-branch deletion enabled (`delete_branch_on_merge: true`, as this repository
+does). The orchestrator declares the batch terminal.
+
+**Expected behavior**:
+- **Flips the milestone PR to ready.** Deferred and blocked issues do not hold the flip — a
+  milestone that got five of seven in is worth reviewing, and holding the batch's only human
+  checkpoint on one stuck issue defeats the purpose of having it.
+- Lists **both** deferrals under Needs Human Attention, each with the failed condition by
+  identifier, the concrete evidence, the required action stated *as an action*, and whether
+  it is permanent (E5) or re-evaluated next run (the conflict).
+- Marks the milestone **partial** in both the status line and the PR title, so it cannot be
+  read as complete.
+- Emits closing keywords for the five merged-and-verified issues only, and references the
+  parent **without** a closing keyword — merging a partial milestone must not close the issue
+  that tracks all of it.
+- **Discloses the retarget**: with the branch deleted after the milestone merges, GitHub moves
+  the two still-open PRs onto the default branch rather than closing them, which takes
+  human-queued work out of the integration branch's containment and makes their previously
+  inert closing keywords live. States the affected PRs and the action (close or retarget them
+  deliberately first), and explains this is disclosed *before* the flip because with automatic
+  deletion enabled it happens at merge time regardless.
+- Does not attempt to resolve #115's conflict, close either PR, or retarget anything itself.
+
+### Case 26: Non-terminal batch — the flip is withheld (`non-terminal-milestone-stays-draft`)
+
+The counterpart to Case 25, taken from this repository as it actually is: it fails if the
+flip condition is ever reduced to "CI is green".
+
+**Setup**: A **standalone** run (no orchestrator) on `integration/issue-109` in
+aoshimash/skills. PR #118 (issue #110, branch `feat/110-merge-issue-prs-skill`, merge commit
+`b995f0d`) and PR #119 (issue #114, branch `feat/114-merge-loop`, merge commit `f5615fc`) are
+merged. Sub-issues #111, #112, #113, #115 and #116 have **no PR at all**. There are no open
+PRs on the integration branch. The milestone PR's own checks are green.
+
+**Expected behavior**:
+- Maintains the milestone PR — creates it if absent (the branch is ahead of `main`) and
+  updates its dashboard — but **does not flip it to ready**.
+- Names the condition that failed: the batch is not terminal, because five vetted issues have
+  no PR.
+- Explains the bound honestly: this gate reads PRs and issues and **cannot observe a running
+  implementer**, so "no PR yet" and "no PR ever" are indistinguishable to it; standalone it
+  refuses to call the milestone terminal, and only the invoker (the batch orchestrator) can
+  assert otherwise.
+- Does **not** treat green CI, an empty deferral list, or "nothing left to merge right now" as
+  terminality.
+- Records in the status line exactly which issues it is waiting on, so a human can flip the
+  judgment by supplying it.
+
+### Case 27: Zero-merge milestone (`zero-merge-milestone-no-pr`)
+
+**Setup**: A run on a freshly created `integration/issue-109` in this repository as it is
+configured today — its three workflows trigger on `pull_request`, `issue_comment`, `issues`,
+`pull_request_review` and `pull_request_review_comment`, none on `push`. P1 therefore fails
+and the run is in human-merge mode. Four PRs are eligible; nothing merges. `main…integration/issue-109`
+reports `ahead_by: 0`.
+
+**Expected behavior**:
+- Creates **no milestone PR**, and states why in the terms of the platform's own rule: with
+  the branch not ahead of the default branch there are no commits between them, and the
+  platform refuses such a PR.
+- **Refuses to create a commit — empty or otherwise — to make one possible.** There is nothing
+  to review, and a PR that exists only to exist invites a merge of nothing.
+- Delivers the milestone as the Phase 4 **report** instead: no milestone PR and why, the
+  failed precondition with its evidence and concrete fix, and the four PRs reported as
+  eligible and ready for a **human** to merge — never as merged.
+- Does not report the milestone as complete or the batch as delivered.
+- Says what the next run picks up: the moment anything merges and verifies, the draft is
+  created then.
+- Distinguishes this from a run that merges nothing but finds the branch **already ahead**
+  from an earlier run — that is not a zero-merge milestone, and its milestone PR is created or
+  updated as usual.
+
+### Case 28: Cleanup after the human merges (`milestone-cleanup-integration-branch`)
+
+**Setup**: A later, scheduled run on `integration/issue-109`. The milestone PR was merged into
+`main` by a human. One PR deferred on a human comment is **still open** against the integration
+branch. The repository's automatic head-branch deletion did not remove the branch (a repository
+rule prevented it), so `integration/issue-109` still exists.
+
+**Expected behavior**:
+- Re-derives the cleanup state from platform state and git rather than from anything persisted:
+  the milestone PR is `MERGED` (not merely closed) and its merge commit is reachable from
+  `main`, confirmed from git rather than from the PR's reported state alone.
+- **Does not delete the branch**, because a PR is still based on it. Deleting would not fail —
+  GitHub retargets such PRs onto the default branch — which would move human-queued work out of
+  the integration branch's containment silently. Reports the PR, the consequence, and the
+  required human action.
+- Notes that automatic deletion cannot be assumed either way — branch protection and repository
+  rules can prevent it — so the ref is read, never inferred.
+- Deletes only the **remote** integration branch once the open PR is gone, and never local
+  branches or worktrees, which implement-issue owns.
+- Treats a branch that is already absent, with a merged milestone PR, as a **completed**
+  milestone to report — cleanup is idempotent, not a failure.
+- Refuses to delete when the milestone PR was closed **unmerged** (the branch holds the only
+  copy of the merged work) or when the branch is ahead of `main` again after the merge.
+
 ## Evaluation Log
 
 | Date | Case | Result | Notes |
 |------|------|--------|-------|
 | 2026-08-07 | Cases 1–14, trigger evals | **not benchmarked — deliberately deferred** | Phases 2–3 of the skill were intentionally unspecified in that version (eligibility only). Benchmarking then would have measured a knowingly incomplete skill and recorded a misleading baseline. |
+| 2026-08-07 | Cases 1–28, trigger evals | **not benchmarked — deferred once more, with a named owner and a deadline** | The skill's surface is now complete, so the reason given below (a baseline superseded by the next task) no longer applies and this is the last deferral the suite gets. The remaining reason is narrow and specific: #110 and #114 each had their rules changed **materially** by the review gates that ran immediately after the implementer finished — #114's reverted-work exclusion was re-keyed from the PR to the issue in round 2 — and this PR has both gates plus automated review still ahead of it, so a baseline recorded now would measure a spec that is about to move. Secondarily, this implementer runs in a parallel batch on an account that has already hit a usage limit once, and a 49-prompt benchmark from inside it risks the sibling run. **Owner: the batch orchestrator** (the user, in a Direct run). **When: as soon as this PR's review gates and automated review complete and it is flipped to ready — and in any case before #116 is implemented**, since #116 documents the finished skill. If it has not run by then, it stops being a deferral and becomes a defect. |
 | 2026-08-07 | Cases 1–23, trigger evals | **not benchmarked — deferred to the completion of the skill** | Not because the suite would score an incomplete skill — every case here exercises the specified surface, and none touches Phase 3. The reason is that the benchmark is being run **once, against the finished skill**, rather than three times mid-construction: the suite grew 14 → 19 → 23 across #110 and #114, and a baseline recorded against a surface that is still being extended is superseded before it is useful. **Owed immediately after #111 lands**, not merely "before the milestone PR". This deferral must not survive a third task. |

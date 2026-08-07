@@ -2,8 +2,8 @@
 
 Detailed procedure for **Phase 0's run-level preconditions** and **Phase 2's merge
 loop**, including post-merge verification, auto-revert, stop-the-line, and escalation.
-Phase 1 triage is [eligibility.md](eligibility.md); the Phase 3 milestone PR is not
-specified yet.
+Phase 1 triage is [eligibility.md](eligibility.md); the Phase 3 milestone PR is
+[milestone-pr.md](milestone-pr.md).
 
 ## Table of Contents
 
@@ -308,7 +308,11 @@ Rules:
 - **Never fabricate a passing result to keep the loop moving.** A truthful "this failed,
   here is what was reverted" is the correct output.
 
-On success: record the merge as **merged and verified**, and proceed to the next PR.
+On success: record the merge as **merged and verified**, update the milestone PR — creating
+it if this was the merge that first put the integration branch ahead of the default branch
+([milestone-pr.md](milestone-pr.md) M0, M3) — and proceed to the next PR. A milestone-PR
+update that fails never affects the merge: the merge landed and was verified, and the
+dashboard reports that fact rather than being part of it.
 
 ### 2-5: the go / defer / stop table
 
@@ -403,7 +407,9 @@ reverted issue**, not the same change reintroduced under a different one.
 
 **R-5 — Stop the line.** Even after a clean recovery, process no further PR this run. One
 verification failure means the pre-merge gates missed something, and the rest of the queue
-deserves human eyes before the automation continues.
+deserves human eyes before the automation continues. Update the milestone PR with the
+revert and the not-attempted set before reporting ([milestone-pr.md](milestone-pr.md) M3);
+an outstanding escalation also blocks its ready flip (M4, F3).
 
 ## Escalation: when the revert itself fails
 

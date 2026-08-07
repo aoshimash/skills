@@ -38,6 +38,14 @@
       "should_trigger": true
     },
     {
+      "query": "update the milestone PR for issue #109 and flip it to ready if the batch is finished",
+      "should_trigger": true
+    },
+    {
+      "query": "issue #109 のマイルストーンPRを最新化して、終わってるならレビュー依頼にして",
+      "should_trigger": true
+    },
+    {
       "query": "renovate たまってるからやって",
       "should_trigger": false
     },
@@ -417,6 +425,84 @@
         "Defers rather than looping if the head moves again",
         "Notes that an unchanged head means a different refusal which also defers, so a misread never merges",
         "Never uses an administrator override to force the merge"
+      ]
+    },
+    {
+      "id": 24,
+      "name": "full-milestone-pr-lifecycle",
+      "prompt": "Run the merge gate for parent issue #109 on aoshimash/skills, integration branch `integration/issue-109`. A `push`-triggered workflow covering that branch exists and merge commits are the only enabled merge method. Right now `gh api repos/aoshimash/skills/compare/main...integration/issue-109` reports `ahead_by: 0` — nothing has been merged onto the branch yet. Parent #109 has seven vetted sub-issues, #110 through #116, and all seven have eligible PRs. Each merged PR's body ends in its own `Closes #N` line, and one of them was edited after it merged so that its Decisions section now also says `Fixes #133` — an issue outside this batch. Assume each merge succeeds and its integration-branch verification passes, and that the batch orchestrator declares the batch terminal once the last one is in. Issue #109's title is `Enable long-term autonomous operation of the issue pipeline`. Walk me through the milestone PR from beginning to end: when you open it, what goes in it, how it changes as merges land, and what has to be true before you flip it.",
+      "expected_output": "The skill does NOT open the milestone PR at the start of the run: with `ahead_by: 0` there are no commits between `main` and the integration branch, and the platform refuses a pull request between refs with no commits between them (HTTP 422 Validation Failed, \"No commits between ...\"). \"As early as the platform allows\" therefore resolves to the first moment the branch is ahead of the default branch, which here is immediately after the FIRST merge passes post-merge verification — that is when the draft is created. It explicitly refuses to bootstrap an empty commit onto the integration branch to open the PR sooner, and does not push to that branch at all outside the auto-revert path. It looks for an existing milestone PR by head AND base (integration branch as head, default branch as base), never by title, and never opens a second one. After every verified merge it updates the body, so the draft works as a live dashboard for an unattended run — writing only inside its managed block so anything a human added to the body survives. The final body is review-first: a status line and per-issue table, then Needs Human Attention, then per-issue Decisions & Deviations, Risk Areas and Acceptance Criteria to Evidence aggregated VERBATIM from each merged PR's own body and quoted so that a heading inside a reproduced body cannot restructure the milestone document, then per-issue PR links and gate results, then the mechanical Changes summary last. It does not summarize, rank or judge what it aggregates — it is not a reviewer. The one modification it does make is to STRIP linking-keyword references out of the reproduced text, leaving a marker pointing at Per-Issue PRs and Gate Results: those lines are inert on a PR targeting a non-default base but this PR targets the default branch, so reproducing them would let aggregated content close issues the run did not decide to close — including the out-of-batch #133 that was added to a body after the merge. It removes rather than escapes, because whether backticks or a blockquote stop the platform acting on a keyword was not established. Because all seven landed, it emits `Closes #110` through `Closes #116` plus `Closes #109` for the parent, and explains that this is the one PR in the design whose closing keywords work at all, since the per-issue PRs target a non-default base where GitHub ignores them. It flips to ready only when all four conditions hold: the batch is terminal (the orchestrator says so), the branch's content is green at the head a human would merge, no escalation is outstanding, and the body is ALREADY final — it does not flip and then finish writing. It never merges, approves or reviews the milestone PR itself. When it builds the PR title from the parent issue's title it sanitizes that content first — single line, no quotes, backticks, `$` or backslashes — because the title is the one value in this lifecycle that reaches a command line and there is no title-from-file option, unlike the body, which is written to a file and passed as one.",
+      "files": [],
+      "expectations": [
+        "Does not create the milestone PR while the integration branch is not ahead of the default branch, and cites the platform's refusal of a PR with no commits between the refs",
+        "Creates the draft immediately after the first merge passes verification, and refuses to bootstrap an empty commit to create it earlier",
+        "Finds an existing milestone PR by head and base rather than by title, and never opens a second one",
+        "Updates the body after every verified merge, confined to its managed block so human edits to the body survive",
+        "Aggregates each merged PR's Decisions & Deviations, Risk Areas and AC-to-Evidence verbatim, attributed per issue and quoted so reproduced headings cannot restructure the body",
+        "Strips linking-keyword references out of the aggregated text — including the `Fixes #133` added to a body after the merge — so that only the run's own closing list takes effect, and removes rather than escapes them",
+        "Emits closing keywords for all seven merged issues and for the parent, and explains that the milestone PR is the only PR here whose closing keywords take effect",
+        "Flips only after terminal batch state, green branch content, no outstanding escalation, and a body that is already final — never flipping first and finishing the body after",
+        "Never merges, approves or reviews the milestone PR itself",
+        "Sanitizes the parent issue title before putting it on a command line, and passes the body as a file rather than echoing it through a shell"
+      ]
+    },
+    {
+      "id": 25,
+      "name": "partial-milestone-deferred-disclosure",
+      "prompt": "Same batch on aoshimash/skills: parent #109, integration branch `integration/issue-109`, seven vetted sub-issues #110-#116. Five of them have been merged and verified. The PR for #114 is deferred permanently — the repository owner left a conversation comment on it and it carries the human-review label. The PR for #115 is deferred on an unresolved merge conflict against the integration branch. Both of those PRs are still open with `integration/issue-109` as their base. The repository has `delete_branch_on_merge: true`. The batch orchestrator reports the batch as terminal. What do you do with the milestone PR?",
+      "expected_output": "The skill FLIPS the milestone PR to ready for review. Deferred and blocked issues do not hold the flip: a milestone that got five of seven issues in is worth reviewing, and holding the batch's only human checkpoint hostage to one stuck issue would defeat the point of having a checkpoint. What the deferrals bind instead is disclosure, and the flip is permitted only once all of it is in the body. Both deferrals are listed under Needs Human Attention with the failed condition by identifier (E5 for #114's human comment, the sync conflict for #115), the concrete evidence, the required human action stated AS AN ACTION rather than as a diagnosis, and whether the exclusion is permanent (E5, via the label) or re-evaluated on the next run (the conflict). The milestone is marked PARTIAL in both the status line and the PR title, so a reviewer cannot read it as complete. Closing keywords are emitted only for the five merged-and-verified issues; the parent #109 is referenced WITHOUT a closing keyword, because merging a partial milestone must not close the issue that tracks all of it. It also discloses the consequence for the two still-open PRs: once the milestone merges and the integration branch is deleted, GitHub does not close PRs based on it — it retargets them onto the default branch, which takes human-queued work out of the integration branch's containment and makes their previously inert closing keywords live. With `delete_branch_on_merge: true` that happens at merge time whether or not the gate approves, which is exactly why it is disclosed BEFORE the flip: the flip is the last point this skill controls. It states the affected PRs and the action (close or retarget them deliberately before merging the milestone). It does not resolve #115's conflict, close either PR, retarget anything, or answer the human comment on #114 — that one goes to respond-to-pr-review.",
+      "files": [],
+      "expectations": [
+        "Flips the milestone PR to ready even though two issues are deferred, and states that deferrals do not hold the flip",
+        "Lists both deferrals with failed condition, evidence, the required action stated as an action, and whether the exclusion is permanent or re-evaluated",
+        "Marks the milestone partial in both the status line and the PR title",
+        "Emits closing keywords for the five merged issues only, and references the parent without a closing keyword",
+        "Discloses that deleting the integration branch retargets the still-open PRs onto the default branch rather than closing them, and that automatic deletion makes this happen at merge time regardless",
+        "Does not resolve the conflict, close or retarget either PR, or answer the human comment"
+      ]
+    },
+    {
+      "id": 26,
+      "name": "non-terminal-milestone-stays-draft",
+      "prompt": "Standalone run (no batch orchestrator) of the merge gate on aoshimash/skills, parent issue #109, integration branch `integration/issue-109`. State of the branch: PR #118 (issue #110, head branch `feat/110-merge-issue-prs-skill`, merge commit `b995f0d`) and PR #119 (issue #114, head branch `feat/114-merge-loop`, merge commit `f5615fc`) are merged into it. Sub-issues #111, #112, #113, #115 and #116 have no pull request at all. There are no open PRs based on the integration branch, so there is nothing to triage or merge this run. The milestone PR's own checks are green. Do you flip the milestone PR to ready for review?",
+      "expected_output": "No. The skill maintains the milestone PR — the branch is ahead of `main`, so it creates the draft if one does not exist and refreshes its dashboard either way — but it does NOT flip it. The condition that fails is terminal batch state: five vetted issues (#111, #112, #113, #115, #116) have no PR at all. The skill states the bound honestly rather than reasoning around it: this gate reads pull requests and issues from the platform, and it cannot observe a running implementer, so \"no PR yet\" and \"no PR ever\" are indistinguishable to it. Running standalone, with no orchestrator to assert that the batch is finished, it refuses to call the milestone terminal, and only the invoker can override that. It explicitly declines to substitute weaker evidence for terminality — green CI on the milestone PR, an empty deferral list, and \"there is nothing left to merge right now\" are none of them the same thing as the batch being finished, and treating them as such is exactly how the flip degrades into \"flip whenever CI is green\". The status line records which issues it is waiting on, so a human can supply the judgment the gate cannot. The PR stays a draft with the reason recorded in the body and in the run report.",
+      "files": [],
+      "expectations": [
+        "Keeps or creates the milestone PR and updates its dashboard, but does not flip it to ready",
+        "Names terminal batch state as the failed condition and identifies the five issues with no PR",
+        "States that the gate cannot observe a running implementer, so 'no PR yet' and 'no PR ever' are indistinguishable to it standalone",
+        "Refuses to treat green CI, an empty deferral list, or 'nothing left to merge' as terminality",
+        "Records which issues it is waiting on so a human can supply the judgment"
+      ]
+    },
+    {
+      "id": 27,
+      "name": "zero-merge-milestone-no-pr",
+      "prompt": "A run of the merge gate on aoshimash/skills against a freshly created `integration/issue-109`. The repository's three workflows trigger on `pull_request`, `issue_comment`, `issues`, `pull_request_review` and `pull_request_review_comment` — none of them on `push`. `gh api repos/aoshimash/skills/compare/main...integration/issue-109` reports `ahead_by: 0`. Four PRs based on the integration branch pass every eligibility condition. Produce the run's outcome, including whatever you do about the milestone PR.",
+      "expected_output": "P1 fails — no completed `push`-triggered run on the branch and no workflow definition that fires on a commit landing there — so the run is in human-merge mode for its whole duration and merges nothing. Consequently the integration branch stays at `ahead_by: 0`, and the skill creates NO milestone PR, stating the platform's own rule as the reason: with the branch not ahead of the default branch there are no commits between them, and a pull request between such refs is refused. It explicitly refuses to create a commit — empty or otherwise — to make a milestone PR possible, because there would be nothing to review and a PR that exists only to exist invites a merge of nothing. The milestone is delivered as the Phase 4 report instead: no milestone PR and why, the failed precondition with its evidence and the concrete fix (a workflow triggered by commits landing on the integration branch), and the four eligible PRs reported as ready for a HUMAN to merge — never as merged, and never partially merged because they look safe. It does not report the milestone as complete or the batch as delivered, and it says what the next run picks up: the moment anything merges and verifies, the draft is created then. It also distinguishes this from a run that merges nothing but finds the branch already ahead from an earlier run — that is not a zero-merge milestone, and its milestone PR is created or updated as usual.",
+      "files": [],
+      "expectations": [
+        "Creates no milestone PR and gives the platform's refusal of a PR between refs with no commits between them as the reason",
+        "Refuses to create an empty or synthetic commit to make a milestone PR possible",
+        "Delivers the milestone as the run report instead, naming the failed precondition, its evidence and the concrete fix",
+        "Reports the four eligible PRs as ready for a human to merge, never as merged and never partially merged",
+        "Does not report the milestone as complete or the batch as delivered, and states what the next run picks up",
+        "Distinguishes a zero-merge milestone from a run that merges nothing on a branch that is already ahead"
+      ]
+    },
+    {
+      "id": 28,
+      "name": "milestone-cleanup-integration-branch",
+      "prompt": "A later scheduled run of the merge gate on aoshimash/skills for parent issue #109. The milestone PR from `integration/issue-109` into `main` was merged by a human two days ago. One per-issue PR, deferred earlier on a human comment, is still open with `integration/issue-109` as its base. The repository has automatic head-branch deletion enabled, but the branch still exists — a repository rule prevented the automatic delete. What does this run do about the integration branch?",
+      "expected_output": "It re-derives the cleanup state from platform state and git rather than from anything persisted between runs. It confirms that a milestone PR for this branch is MERGED — not merely closed — and that its merge commit is reachable from `main`, confirmed from git rather than from the PR's reported state alone. Then it stops: it does NOT delete the branch, because one PR is still based on it. The reason is specific rather than cautious: deleting would not fail, it would silently RETARGET that PR onto the default branch (GitHub updates open pull requests that specify a deleted head branch as their base, changing their base to the merged PR's base), which moves human-queued work out of the integration branch's containment and makes closing keywords that were inert on a non-default base take effect. It reports the PR, the consequence, and the required human action (close or retarget it deliberately), and only deletes once nothing is based on the branch. It also notes that automatic deletion must never be assumed in either direction — branch protection rules and repository rules can prevent it — so the ref is read rather than inferred, which is exactly what happened here. When it does delete, it deletes only the REMOTE integration branch the run resolved in Phase 0, never local branches or worktrees, which implement-issue created and owns. A branch that is already absent with a merged milestone PR is treated as a completed milestone to report, not a failure — cleanup is idempotent. And it refuses to delete at all when the milestone PR was closed UNMERGED (the branch would hold the only copy of everything merged into it) or when the branch is ahead of `main` again after the merge.",
+      "files": [],
+      "expectations": [
+        "Confirms the milestone PR is MERGED and its merge commit is reachable from the default branch, from git rather than the PR's reported state alone",
+        "Does not delete the branch while a PR is still based on it, and explains that deletion retargets such PRs onto the default branch rather than closing them",
+        "Notes that automatic head-branch deletion cannot be assumed either way because branch protection and repository rules can prevent it, so the ref is read",
+        "Deletes only the remote integration branch, never local branches or worktrees",
+        "Treats an already-absent branch with a merged milestone PR as a completed milestone, idempotently",
+        "Refuses to delete when the milestone PR was closed unmerged, or when the branch is ahead of the default branch again"
       ]
     }
   ]
