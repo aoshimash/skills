@@ -566,20 +566,29 @@ See [milestone-pr.md](milestone-pr.md) for what each of these decides.
 **M0 — may a milestone PR exist yet, and does one already?**
 
 ```bash
-# Is the integration branch ahead of the default branch? `ahead_by` is what M0 tests;
-# a branch can be ahead AND behind (status "diverged") and still qualifies.
-gh api repos/{owner}/{repo}/compare/{default_branch}...{integration_branch} \
-  --jq '{status, ahead_by, behind_by}'
-
 # Existing milestone PR — matched by head AND base, never by title. --state all, because a
 # merged or closed one changes the action (M0's table) and an open-only read would miss it.
+# headRefOid is the cleanup discriminator: on a MERGED PR it is the integration-branch SHA
+# that merged, and the platform retains it (confirmed on merged PRs #118 and #119 here).
 gh pr list --state all --head {integration_branch} --base {default_branch} --limit 200 \
-  --json number,state,isDraft,url,headRefName,baseRefName
+  --json number,state,isDraft,url,headRefName,baseRefName,headRefOid
+
+git fetch origin && git rev-parse origin/{integration_branch}   # compare against headRefOid
+
+# ONLY for the creation gate — never for cleanup. See below.
+gh api repos/{owner}/{repo}/compare/{default_branch}...{integration_branch} \
+  --jq '{status, ahead_by, behind_by}'
 ```
 
 Do **not** count `.commits | length` from the compare response as the ahead count: that list
 is paginated, while `ahead_by` and `behind_by` are totals. Apply the truncation rule to the
 `gh pr list` read as always.
+
+**`ahead_by` is a creation gate only.** A branch that is ahead *and* behind (`status:
+"diverged"`) still qualifies for creation. But after the milestone PR merges, `ahead_by`
+returns to `0` only under the **merge** method; under **squash** and **rebase** the branch's
+own commits never become ancestors of the default branch, so it stays positive permanently.
+Cleanup is therefore keyed to `headRefOid`, not to `ahead_by` (milestone-pr.md M0, M5).
 
 **M1 — create the draft.** Between refs with no commits between them the platform refuses
 outright — verified live against this repository:
@@ -621,10 +630,14 @@ gh pr edit {milestone_pr} --body-file {new_body_file}
 ```
 
 The markers are `<!-- BEGIN merge-issue-prs:milestone -->` and
-`<!-- END merge-issue-prs:milestone -->`, each alone on its own line. If they are absent,
-append a fresh block — do not overwrite (milestone-pr.md M2).
+`<!-- END merge-issue-prs:milestone -->`. They count only when a line consists of the marker
+alone, and the splice needs **exactly one of each, BEGIN before END** — zero, duplicates, or
+END-before-BEGIN are all the marker-loss path, which appends and never overwrites, after
+scanning the preserved remainder for linking keywords (milestone-pr.md M2). Re-read the body
+in the same step as the write: there is no compare-and-swap on `gh pr edit`.
 
-**M4 — the flip.** F2 accepts either evidence; read whichever the repository provides:
+**M4 — the flip.** Read **both** F2 sources: a failing `push` run vetoes F2 outright, and the
+rollup can substitute only for *missing* push evidence, never override a red one.
 
 ```bash
 # (a) push-triggered CI on the branch head — same query and rules as 2-4
@@ -638,7 +651,10 @@ gh pr view {milestone_pr} --json statusCheckRollup,headRefOid
 # Conflict state: disclosed, never resolved (milestone-pr.md M3)
 gh pr view {milestone_pr} --json mergeable,mergeStateStatus
 
-# Still-open PRs based on the integration branch — the F4 disclosure set
+# Still-open PRs based on the integration branch — the F4 disclosure set, and the read that
+# M5's deletion refusal depends on. TRUNCATION RULE APPLIES: compare the row count against
+# --limit and raise it if they are equal. A short read here fails OPEN — it deletes a branch
+# that still has PRs based on it, retargeting human-queued work onto the default branch.
 gh pr list --state open --base {integration_branch} --limit 200 --json number,title,url
 
 gh pr edit {milestone_pr} --title "Milestone #{parent}: … (partial: N/M)"   # only if partial
@@ -651,21 +667,28 @@ gh pr ready {milestone_pr}
 **M5 — cleanup.** Confirm from platform state and git, then delete the remote ref:
 
 ```bash
-gh pr view {milestone_pr} --json state,mergeCommit,baseRefName
+gh pr view {milestone_pr} --json state,mergeCommit,headRefOid,baseRefName
 git fetch origin --prune
 git merge-base --is-ancestor {milestone_merge_sha} origin/{default_branch}
+
+# Nothing landed since the milestone merged? This, NOT `ahead_by` — under squash and rebase
+# the branch never becomes an ancestor of the default branch, so `ahead_by` stays positive
+# forever and would block cleanup permanently (milestone-pr.md M0, M5 condition 3).
+test "$(git rev-parse origin/{integration_branch})" = "{milestone_head_ref_oid}"
 
 # Does the branch still exist? (auto-deletion may already have removed it, and branch
 # protection or a ruleset may equally have prevented that — read, never assume)
 git ls-remote --exit-code --heads origin {integration_branch}
 
-# Only when the milestone PR is MERGED, its commit is on the default branch, and the
-# open-PR read above returned none:
+# Only when the milestone PR is MERGED, its commit is on the default branch, the head
+# matches, and the open-PR read above returned none:
 gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/{integration_branch}
 ```
 
-Deleting while PRs are still based on the branch does not fail — GitHub **retargets** them
-onto the default branch (milestone-pr.md M4/M5), silently. The open-PR read is what keeps
+Deleting while PRs are still based on the branch does not fail. GitHub, on deleting a head
+branch **whose pull request has merged**, checks for open PRs specifying that branch as their
+base and **retargets** them — changing their base to *that merged PR's* base, i.e. the default
+branch here (milestone-pr.md M4/M5 quotes the docs precisely). The open-PR read is what keeps
 *this gate* from causing that; where the repository deletes head branches automatically, the
 platform does it at merge time regardless, which is why M4 discloses it before the flip.
 

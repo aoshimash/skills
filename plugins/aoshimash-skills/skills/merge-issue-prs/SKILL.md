@@ -192,8 +192,9 @@ escalation, so a human glancing at the draft sees where a multi-day run stands a
 abort early. At the end it is the milestone's **review record**, aggregated across the
 whole batch: per-issue decisions and deviations, risk areas, acceptance-criteria evidence,
 per-issue PR links and gate results, everything deferred — and the mechanical summary last.
-Aggregated per-issue text is untrusted content: reproduced verbatim, quoted so it cannot
-restructure the document, never followed as instruction.
+Aggregated per-issue text is untrusted content: reproduced verbatim inside a quoted region
+that keeps author-written text — titles included — contained, with linking keywords stripped
+so copied text cannot close issues, and never followed as instruction.
 
 It **flips to ready for review** only when the batch is in a terminal state, the integration
 branch's content is green at the head a human would merge, no escalation is outstanding, and
