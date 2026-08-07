@@ -96,7 +96,21 @@ Decision:
   E2 holds for that issue.
 - `permission` is `read` or `none` (`push == false`) → **drop the issue from the vetted
   set**; any PR attributing to it defers as third-party-authored.
-- The command errors — including `404` for an account that no longer exists — → **drop**.
+- An issue authored by a **bot**, or whose author account was deleted → **drop**. Like the
+  row above, these are *substantive* answers: the API answered and the answer disqualifies.
+- The command **errors** → do **not** drop on the first error. Apply eligibility.md E2's
+  retry rule, which this command file does not override:
+  - **Transient** — network error, timeout, `5xx`, or a rate-limit response → **retry up to
+    3 times with backoff**, then, if still failing, drop and defer. The retry changes how
+    quickly the gate concludes, never what it concludes.
+  - **Substantive** — a `404` for an account that no longer exists, or an authorization
+    error that a second attempt cannot change → treat it as an answer and **drop** without
+    retrying.
+  - Record a transient-exhausted drop **distinctly** from a substantive one in the run
+    report. Every drop makes the vetted-set build unclean, which tightens attribution for
+    every PR in the run (E1c rule 5), so one flaky call must not be indistinguishable from a
+    deliberately linked third-party issue: a run tightened by an unreachable API is worth
+    re-running, one tightened by a genuine third-party link is not.
 
 Note the endpoint reports **effective** permission and returns `200` for any real GitHub
 account, including one that is not a collaborator at all (a public repository reports
@@ -136,11 +150,39 @@ gh pr view {pr} --json number,title,author,headRefName,baseRefName,isDraft,isCro
 
   ```bash
   gh pr view {pr} --json body --jq '.body' \
-    | grep -ioE '(clos(e|es|ed)|fix(es|ed)?|resolv(e|es|ed))[[:space:]]+#[0-9]+'
+    | grep -ioE '\b(clos(e|es|ed)|fix(es|ed)?|resolv(e|es|ed))(:[[:space:]]*|[[:space:]]+)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?#[0-9]+'
   ```
 
   A pipeline body cites unrelated issue and PR numbers as prose throughout its Decisions
   and Changes sections; counting those would defer every genuine pipeline PR.
+
+  **The pattern must cover every documented form, and a short one fails *open* here.**
+  This is the same form list milestone-pr.md aggregation rule 5 requires of the strip, and
+  for a sharper reason: an unmatched reference makes the body look as though it carries
+  **no** reference at all, which drops the PR through to E1c resolution **rule 4** — branch
+  resolves, body silent → attributed on the branch signal — and it becomes ELIGIBLE. A PR on
+  `feat/117-add-cache` whose body reads `Closes: #133` for an **unvetted** #133 must defer
+  under rule 1; a pattern that misses the colon form attributes it to #117 instead. That is
+  the `Closes #X` (unvetted) + `Fixes #Y` (vetted) slip-through eligibility.md E1c warns
+  about, reintroduced by the detection command rather than by the policy.
+
+  So the pattern carries all four documented degrees of freedom: the **nine** keywords
+  (`close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`, `resolves`, `resolved`),
+  **case-insensitively** (`-i`), an **optional colon**, and **both** the `#N` and the
+  cross-repository `OWNER/REPOSITORY#N` targets
+  ([GitHub Docs, "Linking a pull request to an issue"](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue)).
+  The leading `\b` is what keeps `unclosed #5` and `prefixes #6` from matching.
+
+  Verified by running the command above against each form — `Closes #110`, `CLOSES #10`,
+  `Closes: #133`, `CLOSES: #10`, `Fixes octo-org/octo-repo#100`, `Resolved #55`, and
+  `Resolves #10, resolves #123, resolves octo-org/octo-repo#100` all match, while
+  `see #133 for context`, `Refs #99`, `Parent: #109`, `unclosed #5` and `prefixes #6` do
+  not (BSD grep 2.6.0-FreeBSD and ugrep 7.5.0). Re-run it, as written, after any edit: a
+  regression here is silent, and its direction is toward merging.
+
+  **This command detects; it does not strip.** The milestone PR's linking-keyword strip is
+  a different operation with a different output — see "Strip linking-keyword references"
+  under the milestone PR below. Do not reuse this one for it.
 - `headRefName` → the **E1c** branch issue number: `<type>/<issue-number>-<slug>`, or a
   host-provided name embedding `issue-<number>`. Absence is not a deferral on its own.
 - `isDraft` → E3's platform signal; `true` defers.
@@ -328,8 +370,13 @@ gh pr view {pr} --json mergeable,mergeStateStatus,headRefOid,baseRefName
 `mergeable` is `MERGEABLE` / `CONFLICTING` / `UNKNOWN`; `mergeStateStatus` is `CLEAN` /
 `DIRTY` / `BEHIND` / `BLOCKED` / `UNSTABLE` / `HAS_HOOKS` / `UNKNOWN` (both enums
 confirmed by introspecting the live GraphQL schema). `UNKNOWN` means GitHub has not
-finished computing mergeability — re-read within the bounded window; it is **not** a
-synonym for clean.
+finished computing mergeability — re-read within the bounded window, **5 minutes per PR by
+default, overridable as `mergeability_window`** (see the config block at the end of this
+file); it is **not** a synonym for clean.
+
+`mergeStateStatus` answers "would this merge", not "is this current". Once anything has
+merged in this run, a `CLEAN` reading taken before that merge is stale by construction — see
+workflow.md 2-2, which is what decides whether the second and later candidates are synced.
 
 ```bash
 # Behind but clean → update from the base. The default creates a merge commit;
@@ -653,6 +700,51 @@ END-before-BEGIN are all the marker-loss path, which appends and never overwrite
 scanning the preserved remainder for linking keywords (milestone-pr.md M2). Re-read the body
 in the same step as the write: there is no compare-and-swap on `gh pr edit`.
 
+**Strip linking-keyword references out of every reproduced fragment** before it enters the
+body — aggregated sections and the fenced excerpt of an injection attempt alike, since the
+strip has no exempt region (milestone-pr.md aggregation rule 5). Removal, not escaping:
+
+```bash
+# Replaces the KEYWORD TOKEN only; the separator, the target and the rest of the line stand.
+# Same form list as the E1c detection pattern: nine keywords, case-insensitive (the `I`
+# flag), optional colon, and both `#N` and the cross-repository `OWNER/REPOSITORY#N`.
+sed -E 's/(^|[^A-Za-z0-9_])(clos(e|es|ed)|fix(es|ed)?|resolv(e|es|ed))(:[[:space:]]*|[[:space:]]+)(([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)?#[0-9]+)/\1[closing keyword stripped]\6\7/gI' \
+  {reproduced_fragment_file} > {stripped_fragment_file}
+```
+
+**Do not reuse the E1c detection grep for this.** It is the nearest-looking tool in this
+file and it is the wrong one twice over: it *reports* matches rather than rewriting them, and
+its output is the matched substring, so piping a body through it would replace the body with
+a list of its closing lines. The two commands share a form list on purpose — a divergence
+between them is how a form gets covered in one place and missed in the other.
+
+Verified by running the command above against each documented form: `Closes #110`,
+`CLOSES #10`, `Closes: #133`, `CLOSES: #10`, `Fixes octo-org/octo-repo#100`, `Resolved #55`
+and `Resolves #10, resolves #123, resolves octo-org/octo-repo#100` are all stripped, and
+`this fixes #133's root cause` becomes `this [closing keyword stripped] #133's root cause`,
+while `see #133 for context`, `Refs #99`, `Parent: #109`, `unclosed #5`, `prefixes #6` and
+`#120 and #121 should be closed or retargeted first` are left byte for byte (BSD sed
+2.6.0-FreeBSD; the `I` modifier on `s///` is what makes it case-insensitive).
+
+**Both commands take untrusted content through a file, never through the command line.** The
+fragment is written to a file and named as an argument, exactly as the body is passed to
+`gh pr edit --body-file` — reproduced PR content is never interpolated into a shell command,
+where its quotes and backticks would be syntax.
+
+**Two stated bounds, shared by the detection pattern and the strip.** Neither is a documented
+form, so neither is closed here, but an undocumented form that turns out to be live is a
+fail-open in both directions and is worth knowing about rather than discovering:
+
+- **Line-bounded.** Both work a line at a time, so a keyword and its reference split across a
+  line break are not matched.
+- **Adjacency-bounded.** Anything between the keyword and the reference other than a colon and
+  whitespace defeats the match — `**Closes** #133` is not stripped (confirmed by running the
+  command). Whether GitHub acts on that form was not verified, which is the same open question
+  as whether backticks or a blockquote suppress a keyword (milestone-pr.md aggregation rule
+  5). Widening the pattern to tolerate arbitrary markdown between the two would over-match
+  ordinary prose badly, so the bound is recorded rather than removed. If someone establishes
+  that GitHub does act on an interrupted form, both patterns need revisiting together.
+
 **M4 — the flip.** Read **both** F2 sources: a failing `push` run vetoes F2 outright, and the
 rollup can substitute only for *missing* push evidence, never override a red one.
 
@@ -674,12 +766,19 @@ gh pr view {milestone_pr} --json mergeable,mergeStateStatus
 # that still has PRs based on it, retargeting human-queued work onto the default branch.
 gh pr list --state open --base {integration_branch} --limit 200 --json number,title,url
 
-gh pr edit {milestone_pr} --title "Milestone #{parent}: … (partial: N/M)"   # only if partial
-gh pr ready {milestone_pr}
+# Partial marker: applied whenever the milestone IS partial — NOT only when the flip
+# proceeds. The title is part of the dashboard, so it is corrected on the same schedule as
+# the body (M3), including on a run that withholds the flip. Reserve the marker's characters
+# out of the 70-character budget FIRST and truncate the parent's title into what is left
+# (milestone-pr.md M1); the marker is never the part that gets cut.
+gh pr edit {milestone_pr} --title "Milestone #{parent}: {truncated title} (partial: N/M)"
+
+gh pr ready {milestone_pr}   # only once F1-F4 all hold
 ```
 
 `gh pr ready` is the only flip command; this gate never runs `gh pr merge` or
-`gh pr review` against the milestone PR.
+`gh pr review` against the milestone PR. The `gh pr edit --title` call above is a separate
+action from the flip and is **not** conditional on it.
 
 **M5 — cleanup.** Confirm from platform state and git, then delete the remote ref:
 
@@ -718,6 +817,7 @@ platform does it at merge time regardless, which is why M4 discloses it before t
 
 ## Merge Gate
 - ci_wait_window: 15m                        # E4 bounded wait, per PR
+- mergeability_window: 5m                    # 2-2 wait for UNKNOWN mergeability, per PR
 - verification_window: 30m                   # post-merge verification, per merge
 - human_review_label: merge-gate:human-review
 - reverted_label: merge-gate:reverted        # reverted after a verification FAILURE
@@ -730,6 +830,10 @@ rule:
 | Key | Read by |
 |---|---|
 | `ci_wait_window` | eligibility.md E4's bounded window |
+| `mergeability_window` | workflow.md 2-2's wait for `UNKNOWN` mergeability |
 | `verification_window` | workflow.md 2-4's post-merge wait |
 | `human_review_label` | eligibility.md E5's permanent exclusion |
 | `reverted_label` / `unverified_label` | workflow.md 2-1 and R-4 |
+
+All three windows are enforced the same way — poll on an interval against a **wall-clock
+deadline** the agent owns, never a blocking watch command.

@@ -94,6 +94,11 @@ first; ask `ahead_by` only where the table does.**
 | Present, **ahead** of the default branch | none | **Create the draft** (M1). |
 | Present, **not ahead** | none | No PR can exist yet. [Zero-merge milestone](#the-zero-merge-milestone). |
 
+Each state matches exactly one row; the two `merged` rows are kept apart by the head
+comparison. **Both of them additionally close the branch to new merges** — a consequence that
+is not an action of this phase, because it has to take effect two phases earlier. See "A
+merged milestone closes the branch to new merges" below.
+
 **`ahead_by` answers "may one exist yet", never "has this milestone finished".** It is a
 correct creation gate and a wrong cleanup gate, because only one of the three merge methods
 makes the integration branch an ancestor of the default branch:
@@ -115,6 +120,22 @@ deleted**. Read here: merged PRs #118 and #119 report `headRefOid` `ca2ec59` and
 distinct from their `mergeCommit`s, while `git ls-remote` finds neither of their head branches
 on the remote (this repository deletes head branches automatically).
 
+**A merged milestone closes the branch to new merges, and that has to be checked in Phase 0 —
+not here.** Phases 1 and 2 run *before* this table is consulted, so a gate that learns about
+the merged milestone only at Phase 3 has already merged. The state it would have created is
+unrecoverable in both directions at once: the new merge moves the branch head off the
+milestone PR's `headRefOid`, so [M5](#m5-cleanup-after-the-human-merges) condition 3 is false
+**permanently** and the branch can never be cleaned up, while the table's "commits landed
+after the milestone merged" row forbids opening a second milestone PR to carry the work — and
+the work itself has landed somewhere the human checkpoint already passed. One merge strands
+the branch.
+
+So the milestone PR's state is read **before candidate enumeration**, and where it is
+`MERGED` the run takes **no new candidates on that branch**: every open PR based on it is
+deferred with the milestone's completion as the reason and retarget-or-close as the human
+action ([eligibility.md](eligibility.md), "Candidates"). This is a branch-level fact, which is
+why no per-PR eligibility condition catches it — each of the five reads the PR.
+
 **More than one PR from the integration branch to the default branch — in any combination of
 states — is an unexpected state of its own, checked before the table.** Report it and update
 none of them, rather than guessing which is the milestone. The table is exhaustive over *one*
@@ -127,8 +148,34 @@ at once.
 - **Base** the repository's default branch, **head** the integration branch, **draft**.
   Draft is the "machines still working" signal, exactly as in implement-issue's own PRs; it
   is removed only in M4.
-- **Title**, under 70 characters, no Conventional Commit prefix (repository convention):
+- **Title**, at most 70 characters, no Conventional Commit prefix (repository convention):
   `Milestone #<parent>: <parent issue title>`, truncated to fit.
+
+  **The 70 characters are allocated, not consumed left to right**, because two other rules
+  put text in this title and one of them must never be the part that gets cut. F4 rule 2
+  requires a partial milestone to say **partial** in its title, and a truncation that ate the
+  marker would leave a reviewer reading a partial milestone as a complete one — the exact
+  misreading rule 2 exists to prevent. So reserve in this order, then spend what is left:
+
+  | Segment | Budget | Truncatable? |
+  |---|---|---|
+  | `Milestone #<parent>: ` | fixed by the parent's number | **No** — it is the identifier |
+  | ` (partial: N/M)` | fixed by the counts | **No** — F4 rule 2 |
+  | the parent issue's title | **whatever remains** | **Yes** — this is the only truncatable segment |
+
+  Truncate the title segment to the remainder, marking the cut with a trailing `…`. If the
+  remainder leaves no room for a meaningful fragment, drop the parent's title entirely and
+  use the identifier-only form below rather than shipping two words and an ellipsis — a
+  title that carries no information is worse than one that admits it.
+
+  Worked against this repository's own parent, #109, whose title
+  `Enable long-term autonomous operation of the issue pipeline` makes the untruncated form 75
+  characters — over the cap on its own, before any marker:
+
+  - complete → `Milestone #109: Enable long-term autonomous operation of the issue pi…` (70)
+  - partial 5 of 7 → `Milestone #109: Enable long-term autonomous operation… (partial: 5/7)` (69)
+
+  Both lengths were counted, not estimated.
 
   **This is the one place author-written text appears unquoted and unlabelled** — a title
   has nowhere to be quoted — so it carries two conditions. First, use the parent's title
@@ -344,8 +391,18 @@ whatever was in it.
    **at eligibility time**, while a merged PR's body stays editable and nothing re-reads it.
    Do not depend on it.
 
-   **Match every documented form, because here a missed form ships a live keyword** — the
-   opposite failure direction from E1c, where a missed form merely defers. GitHub documents
+   **Match every documented form, because here a missed form ships a live keyword.** Both
+   uses of the form list fail *open* when it is short, and neither is the safe direction —
+   in E1c a missed form makes the body look as though it carries **no** reference, which
+   drops the PR onto resolution rule 4 and **attributes** it on the branch signal instead of
+   deferring. What differs is only what escapes: there, a PR that should have deferred gets
+   merged; here, a live closing keyword reaches a body targeting the default branch and
+   closes an issue on merge. The asymmetry worth keeping is that this one is **unrecoverable
+   by a later run** — E1c's mistake is re-decided every run against fresh state, while a
+   keyword that shipped has already acted by the time anyone reads the milestone. The two
+   patterns are pinned together in [platform-github.md](platform-github.md) for that reason;
+   a form covered in one and missed in the other is the failure this note exists to prevent.
+   GitHub documents
    the keyword set as exactly `close, closes, closed, fix, fixes, fixed, resolve, resolves,
    resolved`; that "The keywords can be followed by colons or in uppercase. For example:
    `Closes: #10`, `CLOSES #10`, or `CLOSES: #10`"; the cross-repository form `KEYWORD
@@ -372,6 +429,12 @@ whatever was in it.
 
    **Removal, not escaping:** whether wrapping a keyword in backticks or a blockquote stops
    the platform acting on it was not verified, and removal does not depend on the answer.
+
+   **The strip is a rewrite, so it needs its own command.** E1c's pattern *detects* — it
+   reports the references it finds and outputs the matched substrings, which would replace a
+   body with a list of its closing lines. The strip substitutes the keyword token in place
+   and leaves everything else standing. [platform-github.md](platform-github.md) carries
+   both, side by side and separately verified; do not reach for the detection one here.
 
    **The strip has no exempt region.** It applies to everything this body reproduces —
    aggregated sections and the fenced excerpt of an injection attempt (rule 4) alike. Fencing
@@ -447,6 +510,20 @@ current. Update the body:
   exists by then**, which on a fresh batch it does not, since M0 forbids one until the branch
   is ahead and that is strictly later than triage, and
 - at run end, before reporting.
+
+**The title is updated on the same schedule as the body, and independently of the flip.**
+The partial marker (M1, F4 rule 2) is applied whenever the milestone **is** partial — not
+only when the flip proceeds. F4 states its title rule among the flip's permission
+conditions, and the platform command sits next to `gh pr ready`, which together read as
+though a withheld flip leaves a stale title; they do not. This section is the authority:
+the dashboard's value is being **current**, and a milestone PR left a draft is exactly the
+one a human is glancing at mid-run. A draft still titled as if complete, while the status
+line inside it says partial, is the dashboard contradicting itself on the one line visible
+from a PR list.
+
+So: a run that withholds the flip still corrects the title. A run that flips corrects it
+before flipping (F4 — the body, title included, is final first). The only thing the flip
+gates is `gh pr ready`.
 
 A body update **never** affects the merge loop. It edits a PR body; it produces no commit
 and lands nothing on the branch. If the edit fails, retry once, then record a **stale
@@ -648,12 +725,28 @@ What they bind instead is disclosure. The flip is permitted only when **all** of
    report — the milestone PR is its second home, not a summary of it.
 2. **The milestone is labelled partial** — in the status line and in the PR title — whenever
    any vetted issue did not reach merged-and-verified. A reviewer must never be able to read
-   a partial milestone as a complete one.
+   a partial milestone as a complete one. Two notes, because this rule's placement here
+   misleads in both directions: the marker is **not** conditional on the flip — a run that
+   withholds it still corrects the title (M3) — and the marker is **not** truncatable, so its
+   characters come out of the 70-character budget before the parent's title is cut (M1).
 3. **The closing references cover only what landed**, and the parent issue is not closed
    (M2).
 4. **Any PR still open against the integration branch is disclosed with its consequence.**
-   This is the one that is easy to miss and cannot be fixed afterwards. GitHub, on deleting a
-   head branch whose PR merged, *retargets* rather than closes: "GitHub checks for any open
+   This is the one that is easy to miss and cannot be fixed afterwards.
+
+   **Read that list completely; a short read here fails open.** It is a paginated list read,
+   so apply the truncation rule ([platform-github.md](platform-github.md)): a returned row
+   count equal to the requested limit means the read may have been cut short, and the fix is
+   to raise the limit and re-read, never to conclude from what came back. A PR missing from
+   this list is a PR whose retarget is never disclosed and whose presence never blocks the
+   deletion in [M5](#m5-cleanup-after-the-human-merges) condition 4 — so the branch is
+   deleted, GitHub retargets that PR onto the default branch, and human-queued work leaves
+   the integration branch's containment with its previously inert closing keywords now live.
+   Truncation is an **unknown**, and an unknown here resolves to *do not delete and disclose
+   what you have*, never to *nothing was there*.
+
+   GitHub, on deleting a head branch whose PR merged, *retargets* rather than closes:
+   "GitHub checks for any open
    pull requests in the same repository that specify the deleted branch as their base branch.
    GitHub automatically updates any such pull requests, changing their base branch to the
    merged pull request's base branch"
@@ -689,6 +782,15 @@ Delete the integration branch only when **all** of these hold:
 4. **No open PR still targets the integration branch.** If any do, do not delete: report them
    with the retarget consequence quoted in F4's rule 4 and the required human action. This
    gate does not move human-queued work onto the default branch as a side effect of tidying.
+
+   **This condition is only as good as the read behind it, and the read is paginated.** A
+   truncated open-PR list looks exactly like an empty one, and here that difference is a
+   branch deletion: apply the truncation rule ([platform-github.md](platform-github.md)),
+   treat a row count equal to the requested limit as possibly short, raise the limit and
+   re-read. **A read that cannot be established as complete does not satisfy this
+   condition** — it fails it, and the branch stays. Deletion is the irreversible half of this
+   procedure and the retarget it triggers is silent, so this is the one condition where
+   "nothing came back" must never be accepted at face value.
 5. No escalation on this branch is unresolved.
 
 Then delete the **remote** branch, and only the integration branch the run resolved in Phase
@@ -710,22 +812,41 @@ gone, with a merged milestone PR, is a completed milestone to report, not a fail
 
 ## The zero-merge milestone
 
-A milestone can end with nothing merged: every candidate deferred, or the run in human-merge
-mode from a failed precondition, or the first merge reverted and the line stopped before any
-other. The integration branch is then not ahead of the default branch, no PR between them can
-be created (M0), and **there is no milestone PR** — the run's Phase 4 report is the milestone's
-only artifact.
+**The condition is that the integration branch is not ahead of the default branch —
+equivalently, that nothing ever landed on it.** It is *not* "nothing merged and verified in
+this run", and keying it to that reading contradicts M0 on the most safety-relevant path.
+
+Two ways to reach it, and only these two: every candidate was deferred, or the run was in
+human-merge mode from a failed precondition. Either way nothing was ever pushed to the branch,
+`ahead_by` is `0`, the platform refuses a PR between refs with no commits between them (M0),
+and **there is no milestone PR** — the run's Phase 4 report is the milestone's only artifact.
+
+**A merge that was reverted is not a zero-merge milestone**, and this is the case the wrong
+reading gets backwards. A revert does not unwind history: the merge commit and the revert
+commit are **both** on the branch, leaving it **two commits ahead** of the default branch. So
+`ahead_by > 0`, M0's "Present, **ahead** … none → **Create the draft**" row fires, and the
+milestone PR is created — carrying the revert, the escalation or exclusion it produced, and
+the not-attempted set behind the stopped line. That is precisely the run a human most needs a
+dashboard for. A rule that called it zero-merge would suppress the PR on the one run whose
+outcome nobody has seen, and would contradict M0's table besides. The same holds for a merge
+that landed and was never verified, and for any other route that put a commit on the branch.
+
+The test is the branch, never the run's merge tally: **ask `ahead_by`**, and let M0's table
+decide.
 
 - Do **not** create a commit — empty or otherwise — to make a PR possible. There is nothing to
   review, and a PR that exists only to exist invites a merge of nothing.
-- Say so explicitly in the report: no milestone PR was created, and why (nothing has merged
-  onto the integration branch), with the deferral list and the failed precondition if there
-  was one.
+- Say so explicitly in the report: no milestone PR was created, and why (**nothing has ever
+  landed on the integration branch**), with the deferral list and the failed precondition if
+  there was one.
 - Do not report the milestone as complete, and do not report the batch as delivered.
-- The next run re-evaluates: the moment anything merges and verifies, M0 creates the draft.
+- The next run re-evaluates: the moment anything **lands on the branch** — in the normal path,
+  the first merge that passes verification — M0's table creates the draft.
 
 A run that merges nothing but finds the branch **already ahead** from an earlier run is not a
 zero-merge milestone. The milestone PR exists or is created, and its body is updated as usual.
+Neither is a run whose only merge was reverted, per the paragraph above: it is ahead, so it
+gets a PR.
 
 ## Known limits
 

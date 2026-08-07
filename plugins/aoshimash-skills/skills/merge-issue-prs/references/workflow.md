@@ -198,8 +198,10 @@ Read the PR's mergeability against the integration branch before touching it.
   complete, resubmit the request."
   ([GitHub REST docs, "Pull requests"](https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28)).
   An unknown value therefore means *not yet computed*, **not** *conflict-free*. Re-read
-  within a bounded window; still unknown when it closes → **defer** the PR. Unknown is not
-  clean.
+  within a bounded window — **5 minutes per PR** by default, overridable as
+  `mergeability_window` in the repository's agent instructions, and enforced the same way as
+  the other two windows: polling against a wall-clock deadline the agent owns, never a
+  blocking watch. Still unknown when it closes → **defer** the PR. Unknown is not clean.
 - **Conflicting** → **defer that PR, unmerged, and continue the loop.** Conflict
   resolution is a judgment call that can change behaviour, and GitHub's own guidance is
   that only "simple line conflicts can often be resolved on GitHub", while "more complex
@@ -213,7 +215,20 @@ Read the PR's mergeability against the integration branch before touching it.
   compare a commit list containing that merge commit against landed commits that do not,
   disagree systematically, and escalate on *every* revert in a rebase repository. Under the
   merge and squash methods the default update is fine.
-- **Clean and current** → nothing to sync.
+- **Clean and current** → nothing to sync. **"Current" means the PR's merge base is the
+  integration branch's present head — not that `mergeStateStatus` says `CLEAN`.** The two
+  are different questions, and the enum answers the wrong one: `CLEAN` says *this would
+  merge*, not *this was built against what it will merge into*.
+
+**Once anything has merged in this run, every remaining candidate is behind — sync it,
+whatever the enum says.** The loop is strictly serial, so each merge advances the integration
+branch head and every candidate read before it becomes stale by construction. A candidate
+still reading `CLEAN` from before that merge is exactly the case the sync exists for: its
+green CI was computed against a tree that no longer exists. Re-read mergeability against the
+**post-merge** head rather than trusting a pre-merge reading, and treat a candidate whose
+merge base is not the current head as **behind**, `CLEAN` or not. This is not an edge case —
+after the first merge of a run it is *every* candidate, so getting it wrong skips the sync on
+all but one PR of every batch.
 
 **Why sync at all, when the platform will merge a behind-but-clean PR without it.**
 Merging unsynced means the PR's green CI was computed on a tree that no longer exists —
@@ -330,7 +345,7 @@ anyway".
 | Platform refuses the merge (head moved twice, required check, protection) | 2-3 | **defer** | continues |
 | **Verification timeout** — no run, no completion, or nothing that concluded `success`, within the window | 2-4 | **auto-revert** | **stops** |
 | **Verification failure** — a run concluded non-success, or a repo-defined check failed | 2-4 | **auto-revert** | **stops** |
-| **Revert failure** — the revert cannot be created, pushed, or verified, or (under rebase) the landed commits cannot be enumerated with certainty | revert | **escalate to a human** | **stops immediately** |
+| **Revert failure** — the revert cannot be created, pushed, or verified, or (under rebase) the landed commits cannot be enumerated with certainty | revert | **record the exclusion (label, then comment), then escalate to a human** | **stops immediately** |
 
 ## Auto-revert
 
@@ -362,7 +377,10 @@ is a new commit on top.
 
 **R-2 — Push and confirm it landed.** Push the revert to the integration branch and confirm
 from platform state that the branch head is now the newest revert commit. A rejected push —
-non-fast-forward, protection, permissions — is a **revert failure**.
+non-fast-forward, protection, permissions — is a **revert failure**, which goes to
+Escalation. Note that R-4 has therefore not run yet: Escalation carries out its labelling
+and comment first, precisely because a failed revert is the case where nothing else records
+the exclusion.
 
 **R-3 — Verify the recovery.** Re-run 2-4's verification against the branch head after the
 revert. A revert that has not been verified is just another unverified change. Recovery
@@ -423,10 +441,45 @@ Escalating on an uncertain enumeration rather than reverting what is certain is 
 a partial revert is the one failure mode that can pass R-3 and be reported as a successful
 recovery.
 
+**Record the exclusion before stopping.** "Stop immediately" governs *recovery*, not
+*record-keeping*, and the distinction is load-bearing. R-4 is the last step of the revert, so
+**any** escalation — R-1, R-2 or R-3 — reaches the human with R-4 never having run. A failed
+revert therefore leaves the branch in the worst state this gate can produce: a bad merge still
+on it, and **no** revert commit and **no** label to show for it. Both of 2-1's reverted-issue
+signals are absent, so the next scheduled run finds the issue unexcluded and a new PR for it
+merges straight back into the branch that is already broken. Stop-the-line does not help — it
+binds only the run it happened in, and this run is ending.
+
+So before returning to the human, in this order and best-effort:
+
+1. **Apply the revert label** by cause (`merge-gate:reverted` / `merge-gate:unverified`,
+   R-4's table) to the merged PR, and **verify the write**. This is the durable half — it is
+   what 2-1 reads on the next run — and it is a label write on a PR, unaffected by whatever
+   blocked the revert push.
+2. **Post R-4's comment** if it can be posted. A rejected push does not imply a rejected
+   comment; attempt it, and do not let its failure delay the escalation.
+3. **If neither lands**, say so in the escalation itself, at the top of the report: name the
+   PR and the issue by number and state in as many words that **nothing durable excludes this
+   issue** and a later run will re-admit it unless a human acts. An unrecorded exclusion is
+   the escalation's most urgent content, not a footnote to it.
+
+**Say what the label means here, because on this path it does not mean what its name says.**
+The revert labels were named for the case where the revert succeeded, and on the escalation
+path it did not: the label is recording the **exclusion**, not a completed recovery. So the
+comment and the escalation both state plainly that the merge is **still on the branch** and
+was **not** reverted. A human who reads `merge-gate:reverted` and assumes the branch is clean
+would be misled by the one record this step exists to leave, which would be worse than
+leaving none.
+
+None of this is a recovery attempt and none of it touches the branch: labels and comments are
+platform metadata, they cannot make the branch state worse, and they are the only reason a
+later run knows this happened. The prohibitions below are unchanged — there is still no
+second revert, no force-push, no reset.
+
 Escalate with the **full state** — the PR that was merged, its merge commit, what failed,
-what was attempted, and the integration branch's current head — surfaced through the run's
-user-choice capability where a user is present and, either way, at the top of the run
-report marked as requiring human action.
+what was attempted, the integration branch's current head, and whether the exclusion record
+landed — surfaced through the run's user-choice capability where a user is present and,
+either way, at the top of the run report marked as requiring human action.
 
 Then stop. Specifically:
 

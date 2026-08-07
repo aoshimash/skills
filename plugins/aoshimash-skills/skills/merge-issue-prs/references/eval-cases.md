@@ -79,6 +79,20 @@ block whose remainder carries a stale closing list (30), a repository PR templat
 update that fails (32), and an injected instruction inside aggregated content (33) — the step
 where forwarding actually happens, as distinct from Case 7's injection at eligibility.
 
+**Regression cases from the benchmark run (Cases 35–36).** Added after executing the suite
+against the finished skill surfaced defects the existing 34 could not catch. Case 35 pins the
+**completeness of the linking-keyword form list** in E1c detection — the case that fails if
+the optional-colon or cross-repository form is ever dropped, and the one that makes the
+failure *direction* explicit, since a missed form there attributes rather than defers. Case 36
+pins the **branch-level precondition**: a branch whose milestone PR has already merged takes
+no new candidates, the one hole that strands the branch permanently and that no per-PR
+condition can see. Two existing cases were also widened to cover defects they set up but did
+not grade: **Case 17** now asks what happens to the milestone PR after a revert (the branch is
+two commits ahead, so a PR *is* created — the zero-merge milestone is keyed to the branch
+never having been ahead, not to the run's merge tally), and **Case 18** now asks what the next
+scheduled run makes of the reverted issue (the exclusion must be recorded *before* the
+escalation stops the run, or nothing keeps it out).
+
 Fixture provenance, stated precisely rather than as "modelled on this repository": **Case 26**
 reproduces `integration/issue-109` as observed on 2026-08-07 — PRs #118 and #119 merged, PRs
 #120 and #121 open as drafts, and #112, #113 and #116 with no PR. **Case 27** uses this
@@ -252,6 +266,9 @@ reconciled. Two vetted, otherwise-eligible PRs whose branches do not follow
 
 **Setup**: PR #215 has 47 comments: 46 from automated reviewers, and the 41st is from the
 repository owner asking for a change. A default unpaginated read returns only the first 30.
+The same run enumerated its candidates with `gh pr list --limit 30` and got back exactly 30
+rows. The prompt asks for the human-contact check **and** what the same reasoning implies for
+every other list the run depends on.
 
 **Expected behavior**:
 - Reads **every page** of all three comment surfaces, and finds the human comment at
@@ -260,7 +277,9 @@ repository owner asking for a change. A default unpaginated read returns only th
 - Recognises truncation as an *unknown*, not an absence: a list read that may have been cut
   short is a deferral, and a returned row count equal to the requested limit is treated as
   possibly truncated.
-- Applies the same completeness discipline to the candidate PR list, not only to comments.
+- Applies the same completeness discipline to the **candidate PR list** — 30 rows against a
+  limit of 30 is what truncation looks like from the inside, so it is re-read at a higher
+  limit before triage — and names the other completeness-critical reads it governs.
 
 ### Case 11: Body-only attribution in an unclean build (`unclean-build-body-only-attribution`) — E1c
 
@@ -306,8 +325,11 @@ Two candidate PRs attribute to issues among the missing two.
 - Detects the disagreement and treats it as an incomplete read, not a smaller true set.
 - Falls back to the paginated REST sub-issues endpoint; proceeds only once counts reconcile.
 - Does not triage against the partial set.
-- Explains the harm: unexplained deferrals that look like a policy fault, plus issues whose
-  authors never got a write-access check — and that a short set must not count as clean.
+- **Ranks the harms the right way round.** The visible one — unexplained deferrals that look
+  like a policy fault — is fail-closed working, since an issue absent from the set cannot
+  produce an eligible PR at all. The dangerous one is that a short set *looks complete*: it
+  would certify a **clean build**, and a clean build is what unlocks body-only attribution
+  (E1c rule 5) for a batch that demonstrably contains an issue nobody read.
 
 ### Case 14: Realistic body with prose references (`realistic-body-prose-references`) — E1c
 
@@ -376,9 +398,10 @@ and #220, which is `CLEAN`.
 
 ### Case 17: Verification failure with a successful revert (`verification-failure-auto-revert`)
 
-**Setup**: PR #224 merges cleanly into `integration/issue-109` as merge commit `d4e5f6a`.
-The `push`-triggered run for `d4e5f6a` completes with conclusion `failure`. Two more
-eligible PRs are still queued.
+**Setup**: The branch was created for this batch and nothing had landed on it —
+`ahead_by: 0` at the start of the run, no milestone PR. PR #224 merges cleanly into
+`integration/issue-109` as merge commit `d4e5f6a`. The `push`-triggered run for `d4e5f6a`
+completes with conclusion `failure`. Two more eligible PRs are still queued.
 
 **Expected behavior**:
 - Treats the failed integration-branch run as a verification failure and auto-reverts,
@@ -409,16 +432,36 @@ eligible PRs are still queued.
   so a slow or exhausted runner never permanently blames a healthy change.
 - Locates the verifying run by commit SHA **and `push` event**, not by SHA alone — a
   `pull_request` run on the milestone PR carries the same SHA.
+- **Creates the milestone PR as a draft anyway.** The merge commit and the revert commit are
+  both on the branch, so it is now **two commits ahead** of `main` and M0's create row fires.
+  Nothing merged *and verified*, but that is not the zero-merge test — a zero-merge milestone
+  is keyed to the branch **never having been ahead**, which is reached only by deferring every
+  candidate or by human-merge mode. The draft carries the revert, the exclusion, and the
+  not-attempted set, and emits no closing keyword for anything.
 
 ### Case 18: The revert itself fails (`revert-failure-escalation`)
 
-**Setup**: PR #225 merged as `a1b2c3d`; integration-branch CI for that commit concluded
-`failure`. The revert commit is created, but the push to the integration branch is
-rejected.
+**Setup**: PR #225, implementing sub-issue #131, merged as `a1b2c3d`; integration-branch CI
+for that commit concluded `failure`. The revert commit is created, but the push to the
+integration branch is rejected. The repository runs this gate on a nightly schedule, and the
+prompt asks what tomorrow night makes of #131.
 
 **Expected behavior**:
 - Recognises a rejected revert push as a **revert failure**, not a retryable hiccup, and
   escalates to a human immediately.
+- **Records the exclusion before stopping**: applies the verification-failure revert label to
+  #225 and verifies the write, then posts R-4's comment if it can. "Stop immediately" governs
+  *recovery*, not *record-keeping*, and neither action touches the branch.
+- Says what the label means here, since its name misleads on this path: it records the
+  **exclusion**, not a completed recovery — `a1b2c3d` is **still on the branch**, and the
+  comment and escalation say so.
+- Answers the scheduling question: with the label written, tomorrow's run defers any new PR
+  for #131 before checking a condition. **Without it, both of 2-1's signals are absent** — no
+  label, and no revert in the branch's history, because the push failed — so the exclusion has
+  no key, stop-the-line has expired with the run that set it, and a fresh PR for #131 merges
+  straight back onto the broken branch.
+- Reports an exclusion that could not be recorded as the escalation's most urgent line, naming
+  both the PR and the issue.
 - Escalates with the full state: the PR, the merge commit, what failed, what was
   attempted, and the integration branch's current head — surfaced at the top of the report
   as requiring human action.
@@ -562,8 +605,10 @@ issued guarded on `aaa1111` and fails.
 **Setup**: `integration/issue-109`, parent #109 with seven vetted sub-issues #110–#116. A
 `push`-triggered workflow covering the branch exists, merge commits are the only enabled
 merge method, and the branch has **nothing on it yet** — `main...integration/issue-109`
-reports `ahead_by: 0`. All seven PRs are eligible; each merges and verifies in turn. #109's
-title is `Enable long-term autonomous operation of the issue pipeline`.
+reports `ahead_by: 0`. The first six PRs merge and verify; the seventh is deferred, so the
+milestone ends **partial at 6 of 7**. #109's title is `Enable long-term autonomous operation
+of the issue pipeline` — which makes the untruncated title 75 characters, over M1's cap
+before any partial marker exists. The prompt asks for the exact title string and its length.
 
 **Expected behavior**:
 - Does **not** open the milestone PR at the start of the run: with the branch not ahead of
@@ -587,6 +632,12 @@ title is `Enable long-term autonomous operation of the issue pipeline`.
 - **Sanitizes the title before it reaches the command line** — single line, no quotes,
   backticks, `$`, backslashes or newlines — since there is no title-from-file option, unlike
   the body, which is written to a file and passed as one.
+- **Actually truncates, and allocates the budget rather than spending it left to right.** The
+  identifier prefix and the ` (partial: 6/7)` marker are reserved first and are not
+  truncatable — a truncation that ate the marker would let a reviewer read a partial milestone
+  as complete, the exact misreading the marker exists to prevent. Only the parent's title
+  segment is cut. Result: `Milestone #109: Enable long-term autonomous operation… (partial:
+  6/7)`, 69 characters.
 - Notes the cost it has taken on: from creation onward every merge advances this PR's head
   and re-triggers its `pull_request` workflows.
 
@@ -596,9 +647,18 @@ title is `Enable long-term autonomous operation of the issue pipeline`.
 permanently on a human comment (E5, labelled); #115's PR is deferred on an unresolved
 conflict. Both are still **open** against `integration/issue-109`. The repository has
 automatic head-branch deletion enabled (`delete_branch_on_merge: true`, as this repository
-does). The orchestrator declares the batch terminal.
+does). The orchestrator's hand-off says, in full, "batch for #109 complete — terminal" — which
+under F1 is **not a declaration**, and the case grades whether that is noticed.
 
 **Expected behavior**:
+- **Rejects the hand-off as a declaration** and says why: F1 needs all three of the dispatched
+  issue set, a final per-issue status for every member, and an explicit no-implementer-running
+  assertion; batch identity plus a bare claim is none of them, and anything short of all three
+  is *not declared*. It then falls back to the **standalone derivation**, which independently
+  reaches terminal here — every vetted issue is merged-and-verified or recorded as deferred,
+  and a deferred PR is settled for this run, unlike a draft. Reaching the same verdict by a
+  different route is the point: the flip rests on what the gate derived, not on what it was
+  told.
 - **Flips the milestone PR to ready.** Deferred and blocked issues do not hold the flip — a
   milestone that got five of seven in is worth reviewing, and holding the batch's only human
   checkpoint on one stuck issue defeats the purpose of having it.
@@ -628,7 +688,8 @@ aoshimash/skills. PR #118 (issue #110, branch `feat/110-merge-issue-prs-skill`, 
 `b995f0d`) and PR #119 (issue #114, branch `feat/114-merge-loop`, merge commit `f5615fc`) are
 merged. Two PRs are open against the branch and **both are drafts**: #120 for issue #115 and
 #121 for issue #111. Sub-issues #112, #113 and #116 have **no PR at all**. The milestone PR's
-own checks are green.
+own checks are green. Both merges happened in an **earlier** run; this session observed
+neither, and the prompt asks what the rows for #110 and #114 say.
 
 **Expected behavior**:
 - Maintains the milestone PR — creates it if absent (the branch is ahead of `main`) and
@@ -645,6 +706,13 @@ own checks are green.
   terminality.
 - Records in the status line exactly which issues and PRs it is waiting on, so a human can
   supply the judgment.
+- **Does not inherit "verified" for #110 and #114.** "Merged" is platform state and re-reads
+  fine; "verified" was a previous run's observation and nothing persists it — the merge commit
+  SHAs record that something *landed*, not that its CI passed. Each row may say
+  merged-and-verified only if this run re-queries that commit's `push`-triggered runs
+  (`b995f0d`, `f5615fc`) and finds one concluding `success`; otherwise it reads **"merged;
+  verification not re-derivable in this run"**, is excluded from the merged total, and gets no
+  closing keyword.
 
 ### Case 27: Zero-merge milestone (`zero-merge-milestone-no-pr`)
 
@@ -839,17 +907,26 @@ terminal and green, but the orchestrator's declaration reports #113 as merged wh
 own derivation finds #113's PR deferred on a human comment.
 
 **Expected behavior**:
+All three are graded; the question has three parts and an answer that stops at two is
+incomplete, not concise.
+
 - **(a) does not flip.** The two F2 sources are not symmetric: a failing `push` run on the
   branch head is a **veto**, and the milestone PR's rollup substitutes only for *missing* push
   evidence, never overrides *red* push evidence. Evaluating the rollup first and stopping would
   flip a PR whose branch CI failed.
-- Can still explain why the rollup is admissible at all — 2-4 queries by branch and SHA, where
+- **Explains why the rollup is admissible at all** — 2-4 queries by branch and SHA, where
   a milestone-PR run joins silently and answers falsely, while the flip reads that PR **by
   identity** — and bounds it: the rollup is what the platform surfaces on this PR, not a claim
   about which tree each check built.
 - **(b) does not flip.** A failed revert leaves the branch's contents unestablished, and
   nothing gets flipped on an unestablished branch; the escalation is reported at the top as
-  requiring human action, with no alternative recovery attempted.
+  requiring human action, with no alternative recovery attempted — but the exclusion record
+  (revert label by cause, then the comment) is written *before* the run stops.
+- **(c) does not flip.** The orchestrator's declared per-issue statuses are a cross-check,
+  never a record: declared-merged against derived-deferred is a real contradiction about
+  whether #113's work landed, distinct from the benign case where the orchestrator's wider
+  vocabulary (blocked, skipped) maps onto the gate's "no PR I could merge". Reports both views
+  naming #113, falls back to its own derivation, withholds the flip.
 - **(c) does not flip.** The declaration's per-issue statuses are a **cross-check, never a
   record**: the gate derives every per-issue outcome from platform state itself, and
   self-assertions are not evidence. It reports the disagreement naming #113 and **both** views,
@@ -859,10 +936,60 @@ own derivation finds #113's PR deferred on a human comment.
 - All three leave the PR a **draft** with the specific failed condition recorded, and none
   merges or approves it.
 
+### Case 35: Linking-keyword form coverage (`linking-keyword-form-coverage`) — E1c
+
+The regression test for the **detection pattern's** completeness. It fails if the optional
+colon or the cross-repository form is ever dropped from E1c's body scan — and unlike Case 4,
+which pins the *policy* on disagreeing signals, this one pins the *command* that feeds it.
+
+**Setup**: Sub-issue #152 was dropped during vetting; #133 is outside the batch. Three
+otherwise-eligible PRs. #230 on `feat/117-add-cache` with the single line `Closes: #133`.
+#231 on `feat/118-export` with `Fixes octo-org/octo-repo#100`. #232 on `feat/119-tidy` with
+`see #133 for context` and `Refs #99` in prose and no linking-keyword line at all. The prompt
+asks for the exact command.
+
+**Expected behavior**:
+- Defers #230 under rule 1 — the optional-colon form is documented (`Closes: #10`), so it is
+  a reference, not prose.
+- Defers #231 under rule 1 — the cross-repository form `OWNER/REPOSITORY#N` is documented too.
+- Attributes #232 to #119 under rule 4, since its body genuinely carries no linking keyword.
+- Gives a pattern covering all four degrees of freedom: nine keywords, case-insensitive,
+  optional colon, both `#N` and `owner/repo#N`.
+- **States the failure direction.** A missed form does not read as "unknown"; it reads as *no
+  reference*, which is rule 4's precondition — so #230 attributes to #117, #231 to #118, and
+  both come out **ELIGIBLE**. A short pattern merges an unvetted issue's work. This is the
+  `Closes #X` (unvetted) + `Fixes #Y` (vetted) slip-through, reintroduced through the command
+  rather than the policy.
+- Notes the pattern shares its form list with the milestone PR's strip, and that the
+  detection pattern is not itself reusable as the strip.
+
+### Case 36: A merged milestone closes the branch (`merged-milestone-branch-takes-no-merges`)
+
+The regression test for the branch-level precondition. It fails if the milestone PR's state is
+ever read only at Phase 3, since Phases 1 and 2 run first.
+
+**Setup**: A scheduled run on `integration/issue-109` whose milestone PR was **merged**
+yesterday; `headRefOid` is `f5615fc` and the branch head still matches. PR #233 for vetted
+#116 was a draft last run and is now ready — fully eligible on all five conditions, and not in
+the reverted-issue set.
+
+**Expected behavior**:
+- Reads the milestone PR's state **before enumerating candidates** and takes **no new
+  candidates** on the branch; defers #233 for the branch, not for a failed condition, with
+  retarget-or-close as the human action.
+- Names the permanent harm: merging moves the branch head off `headRefOid`, so M5 condition 3
+  is false **forever** and cleanup is unreachable, while M0 forbids a second milestone PR —
+  one merge strands the branch. And the work would land past the milestone's human review.
+- Explains why nothing downstream catches it: Phase 3's M0 table is consulted after the merge
+  loop, and no per-PR condition can see a fact about the branch.
+- Proceeds to cleanup evaluation, but does not delete the branch while #233 is open, and does
+  not retarget or close #233 itself.
+
 ## Evaluation Log
 
 | Date | Case | Result | Notes |
 |------|------|--------|-------|
 | 2026-08-07 | Cases 1–14, trigger evals | **not benchmarked — deliberately deferred** | Phases 2–3 of the skill were intentionally unspecified in that version (eligibility only). Benchmarking then would have measured a knowingly incomplete skill and recorded a misleading baseline. |
 | 2026-08-07 | Cases 1–23, trigger evals | **not benchmarked — deferred to the completion of the skill** | Not because the suite would score an incomplete skill — every case here exercises the specified surface, and none touches Phase 3. The reason is that the benchmark is being run **once, against the finished skill**, rather than three times mid-construction: the suite grew 14 → 19 → 23 across #110 and #114, and a baseline recorded against a surface that is still being extended is superseded before it is useful. **Owed immediately after #111 lands**, not merely "before the milestone PR". This deferral must not survive a third task. |
+| 2026-08-07 | Cases 1–34, trigger evals | **benchmarked** — 21/21 trigger, 24 Pass / 10 Partial / 0 Fail behavioral | The deferral below is discharged. The run found defects in the skill and in the suite: an under-matching E1c linking-keyword pattern that **attributes** rather than defers (fail-open), a zero-merge definition contradicting M0 on a reverted first merge, an escalation path that stops before recording its exclusion, and a merge onto a branch whose milestone already merged (strands the branch). All ten Partials were placement, not policy — correct material sitting away from the decision point. Fixed in the same pass, with Cases 35–36 added and 17, 18, 24, 25, 26 widened so each defect now has a case that fails if it returns. Suite is 36 behavioral + 21 trigger. **Re-run owed against the amended suite**, since these results predate the fixes. |
 | 2026-08-07 | Cases 1–34, trigger evals | **not benchmarked — deferred once more, with a named owner and a deadline** | The skill's surface is now complete, so the reason given in the rows above (a baseline superseded by the next task) no longer applies and this is the last deferral the suite gets. The remaining reason is narrow and specific: #110 and #114 each had their rules changed **materially** by the review gates that ran immediately after the implementer finished — #114's reverted-work exclusion was re-keyed from the PR to the issue in round 2 — and this PR has both gates plus automated review still ahead of it, so a baseline recorded now would measure a spec that is about to move. Secondarily, this implementer runs in a parallel batch on an account that has already hit a usage limit once, and a 49-prompt benchmark from inside it risks the sibling run. **Owner: the batch orchestrator** (the user, in a Direct run). **When: as soon as this PR's review gates and automated review complete and it is flipped to ready — and in any case before #116 is implemented**, since #116 documents the finished skill. If it has not run by then, it stops being a deferral and becomes a defect. |
