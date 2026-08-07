@@ -21,6 +21,7 @@ Skills follow the [skill-creator](https://github.com/anthropics/skills) best pra
 - `SKILL.md` is the required entry point. Frontmatter requires `name` and `description`; `compatibility` is allowed to declare a genuine environment requirement — an intended product, required CLIs/system packages, or network access (e.g. `Requires git, docker, jq, and access to the internet`). Add it only when truly needed: per the [Agent Skills spec](https://agentskills.io/specification), most skills do not need it.
 - Use imperative/infinitive form in SKILL.md body.
 - Keep SKILL.md under 500 lines. Split detailed content into `references/` files.
+- **A reference file is split, not grown.** `SKILL.md` has a 500-line cap; reference files do not, and three of them now exist because a change hit the same judgment independently. When new policy would push a `references/*.md` past ~800 lines — or when the change adding it also edits most of that file — put it in its own reference and point at it from each step it governs. State the placement and its trade in the evaluation log.
 - Each skill should have eval test cases in `references/eval-cases.md`. Run them after changes and record results in the evaluation log.
 
 ### Writing instructions that hold up
