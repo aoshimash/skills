@@ -71,7 +71,7 @@ If spec compliance fails:
 1. Fix the issues found (in Batch mode: send the review output to the implementer, which fixes and pushes; in Single mode: the main agent fixes and pushes directly).
 2. Re-run spec compliance review.
 3. Max 2 fix rounds. If still failing:
-   - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS` and include the review output in the batch summary.
+   - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS` and include the review output in the batch summary. **In batch integration mode, an issue that has dependents does not stop here** — a draft PR never merges, so its dependents cascade to `SKIPPED`; see [batch.md](batch.md) B2-3, which turns that case into an explicit choice before the status is recorded.
    - **Single mode**: record the remaining findings in the PR body (Risk Areas and Gate Results), leave the PR/MR a **draft**, and surface the findings in the recap's review-focus areas. Do not ask the user mid-run — the draft state plus the recorded findings put the decision where it belongs, at PR review.
 
 ## Stage 2: Code Quality Review
@@ -127,7 +127,7 @@ If code quality review finds Critical or Important issues:
 1. Fix Critical and Important issues (Minor issues are optional). In Batch mode, send the review output to the implementer; in Single mode, the main agent fixes directly.
 2. Re-run code quality review.
 3. Max 2 fix rounds. If Critical issues remain:
-   - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS`.
+   - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS`. **In batch integration mode, an issue with dependents goes through [batch.md](batch.md) B2-3 first** — the cascade its unfinished PR would cause is decided explicitly rather than absorbed silently.
    - **Single mode**: record the remaining Critical findings in the PR body (Risk Areas and Gate Results), leave the PR/MR a **draft**, and surface them in the recap's review-focus areas.
 
 ## Stage 2.5: Pattern Propagation (Batch Mode Only)
