@@ -80,16 +80,19 @@ step runs in the orchestrator's own context. See C4.
 re-derivable by C3's position read. A fact in neither column is a defect.** That is the
 checkable form of the rule; the ledger below is what it evaluates to today.
 
-| Fact the batch relies on | Where it lives | Written when |
+| Fact the batch relies on | Where it lives | Written or derived when |
 |---|---|---|
-| The merge mode | the integration branch's existence | B1-4 |
-| Which issues have been dispatched | the per-issue branch, then the PR | at the implementer's first push |
-| Each gate stage's verdict **and round count** | the PR body's `Gate Results` | as the stage settles (B2-3 step 4) |
-| The findings a fix round must address | the PR body's `Risk Areas` | by the reviewer, before it returns (C1) |
-| What an automated reviewer raised, and the answer | the PR thread, plus `Gate Results` / `Risk Areas` | [automated-review.md](automated-review.md) E, G |
-| That a PR merged and verified | the integration branch's history, plus B2-4's per-merge issue comment | at the merge |
-| Why a PR was deferred or reverted | the merge gate's own labels and comments | by the gate |
-| The batch's own decisions worth promoting | each PR body's `Decisions & Deviations` | by the implementer (workflow.md 3-1) |
+| The merge mode | **durable** — the integration branch's existence | B1-4 |
+| Which issues have been dispatched | **durable** — the per-issue branch, then the PR | at the implementer's first push |
+| Each gate stage's verdict **and round count** | **durable** — the PR body's `Gate Results` | as the stage settles (B2-3 step 4) |
+| The findings a fix round must address | **durable** — the PR body's `Risk Areas` | by the reviewer, before it returns (C1) |
+| What an automated reviewer raised, and the answer | **durable** — the PR thread, plus `Gate Results` / `Risk Areas` | [automated-review.md](automated-review.md) E, G |
+| That a PR merged and verified | **durable** — the integration branch's history, plus B2-4's per-merge issue comment | at the merge |
+| Why a PR was deferred or reverted | **durable** — the merge gate's own labels and comments | by the gate |
+| The batch's own decisions worth promoting | **durable** — each PR body's `Decisions & Deviations` | by the implementer (workflow.md 3-1) |
+| The batch's issue set | **re-derivable** — read back from the batch source | C3's light read (batch-reentry.md R1) |
+| The dependency graph, including B1-2's collision edges | **re-derivable** — rebuilt from `blockedBy` links, body declarations, and the codebase | C3's full read (batch-reentry.md R4) |
+| Which issues are settled, and how | **re-derivable** — from the PRs and the branch history | C3's light read (batch-reentry.md R5) |
 
 **Durable before droppable is an ordering rule, not only a location rule.** The write happens
 before the orchestrator moves past the step that produced it — before the next issue is
