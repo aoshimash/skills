@@ -39,10 +39,10 @@ where to point the next step.
 | Implementer (B2-2, [workflow.md](workflow.md) 3-8) | the PR body it created; for a `BLOCKED` stop before any push, nothing — the worktree is kept (B2-7) | status token, PR/MR URL, failure or decision detail | **1 status token + 1 URL + at most 10 further lines** |
 | Stage 1 spec compliance ([review-gates.md](review-gates.md)) | its full output into the PR body — the `Gate Results` line with its round count, and one `Risk Areas` entry per unmet criterion | verdict, unmet-criterion count, one line per finding | **verdict line + at most 15 finding lines** |
 | Stage 2 code quality (same) | same, per remaining Critical/Important finding | verdict, per-severity counts, one line per Critical/Important finding (`file:line — defect — type`) | **verdict line + at most 15 finding lines** |
-| Stage 2.5 pattern propagation (same) | nothing until a fix is applied | the matching PRs | **one line per in-flight PR scanned** |
+| Stage 2.5 propagation scan (same) | nothing until a fix is applied | the matching PRs | **one line per in-flight PR scanned** |
+| Stage 2.5 fix pass (same) | the fix commit on that PR's branch | whether it applied | **one line per PR** — number, applied or not, commit or reason |
 | Automated review response ([automated-review.md](automated-review.md) G) | the `Gate Results` line, one `Risk Areas` entry per remaining finding, and every reply on the PR thread | those two recorded lines | **the `Gate Results` line + the remaining count** |
 | Merge gate (B2-4) | its own labels, comments, reverts and milestone PR | its report, whose format belongs to the merge-issue-prs skill and is **not** changed here | what the orchestrator **retains**: one verdict per issue and one human-queue entry per issue |
-| Stage 2.5 fix pass (same) | the fix commit on that PR's branch | whether it applied | **one line per PR** — number, applied or not, commit or reason |
 | Harvest collection (B3-1) | nothing — promotion is separate and gated | the deduplicated candidate list | **one line per candidate + its provenance issues** |
 
 Where a step produces more findings than its bound carries, the return states the **count**
