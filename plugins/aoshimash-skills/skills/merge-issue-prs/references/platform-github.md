@@ -448,7 +448,11 @@ git -C {scratch_dir} revert --no-edit {merge_sha}
 # up to the merge commit. `mergeCommit` under rebase is the branch's new TIP, so
 # reverting from it alone leaves the rest of the change on the branch.
 git -C {scratch_dir} log --no-merges --format=%H {pre_merge_base}..{merge_sha}
-gh pr view {pr} --json commits --jq '[.commits[] | select(.parents|length < 2)] | length'
+# REST, not `gh pr view --json commits`: that projection has no `parents` field, so a
+# `select(.parents|length < 2)` over it silently matches every commit (jq: `null|length`
+# is 0). REST exposes `parents`, and `--paginate` reads the list in full.
+gh api --paginate -X GET repos/{owner}/{repo}/pulls/{pr}/commits -f per_page=100 \
+  --jq '[.[] | select(.parents|length < 2)] | length'
 git -C {scratch_dir} revert --no-edit {sha_newest} {sha_next} …  # newest first
 ```
 
@@ -460,6 +464,12 @@ something outside the loop did (a human pushing directly between the base read a
 merge), the count reconciliation is what catches it: the range would hold more commits than
 the PR has, which escalates rather than reverting a stranger's work.
 
+That window is covered under **every** merge method, not only rebase — the mechanism just
+differs. Under merge and squash no range is enumerated at all: a commit pushed directly in
+that window becomes part of the first-parent history, and `revert -m 1` (merge) or a plain
+`revert` (squash) removes only the PR's own contribution, leaving it untouched. Only the
+rebase path needs the count reconciliation, because only it derives a commit list.
+
 ```bash
 git -C {scratch_dir} push origin HEAD:refs/heads/{integration_branch}
 git worktree remove {scratch_dir}
@@ -470,11 +480,12 @@ created **on** the integration branch, parent 1 is the integration branch itself
 
 Under rebase, **reconcile the enumerated count against the PR's own non-merge commit count
 before reverting anything.** Both sides exclude merge commits: 2-2 must sync with `--rebase`
-in a rebase-method repository so no merge commit reaches the PR branch, and `--no-merges` /
-the `parents` filter above enforce it either way. `--json commits` returns a paginated
-connection, so a PR large enough to be truncated yields a count that is **not established**
-— treat that as uncertain and escalate rather than reconciling against a short list. If the
-counts disagree, or the range cannot be established, escalate as a
+in a rebase-method repository so no merge commit reaches the PR branch, and `--no-merges`
+(left side) and the `parents` filter on the REST commit list (right side) drop any that
+still appear. Use the REST route above rather than `--json commits` for the right side: the
+GraphQL projection carries no `parents` field, so the same filter written against it matches
+every commit and enforces nothing, and REST with `--paginate` also removes the need to
+detect truncation. If the counts disagree, or the range cannot be established, escalate as a
 revert failure (workflow.md R-1) — a partial revert can still pass R-3's recovery
 verification, which would make the run report a recovery that did not happen.
 
