@@ -123,6 +123,10 @@ origin — is recorded under "Known limits" at the end of this file.
 A PR is ELIGIBLE only when **all five** hold. Each is checked independently; a PR that
 fails more than one records every failed condition.
 
+The five are **per-PR**. One **branch-level** exclusion, **B0**, is checked before them and
+is documented below alongside them because it produces the same outcome — a deferral — for a
+PR that fails none of the five.
+
 | # | Condition | Established by |
 |---|---|---|
 | **E1** | The PR was created by this pipeline, and implements exactly one vetted issue | Non-fork head branch, pipeline body structure, and attribution into the vetted issue set |
@@ -134,6 +138,34 @@ fails more than one records every failed condition.
 Candidates are the **open PRs whose base is the run's integration branch**. A PR
 targeting the default branch is outside the autonomous path by construction and is not
 even a candidate — do not retarget it to make it one.
+
+### B0 — the branch is still open to merges
+
+**One branch-level exclusion comes before the candidate list exists**, and it is checked
+first because it invalidates every candidate at once rather than one of them.
+
+Read the milestone PR's state ([milestone-pr.md](milestone-pr.md) M0, "A terminal milestone
+closes the branch to new merges") *before* enumerating candidates. **The branch accepts new
+merges only while a milestone PR can still carry them to human review** — that is, while one
+is **open**, or while **none exists yet**. Any **terminal** state closes the branch:
+
+| Milestone PR | B0 | Human action recorded with the deferral |
+|---|---|---|
+| Open, or none yet | **holds** — enumerate candidates as usual | — |
+| **Merged** (either head state) | **fails** — no new candidates | Retarget the PR, or close it |
+| **Closed, unmerged** | **fails** — no new candidates | A human decides the branch's fate first — the milestone was ended deliberately |
+
+When B0 fails, every open PR based on the branch is **deferred**, recorded against **B0** and
+not against any of E1–E5, because it failed none of them.
+
+This is not tidiness, and it is not one row of a table. A merge onto a branch whose milestone
+is terminal lands work that never reaches a human checkpoint at all — not work a human might
+overlook, but work for which no reviewable PR can be created — and it destroys the branch's only
+route to cleanup — through `headRefOid` where the milestone merged, or through M5 condition
+1's requirement of a `MERGED` milestone PR where it was closed unmerged. Both routes end in a
+branch that can neither be reviewed nor deleted. One merge strands it. The gate must not be
+able to create that state itself, and **no condition in the five below looks at it**, because
+they all read the *PR* and this one is about the *branch*.
 
 ### E1 — Created by this pipeline, implementing one vetted issue
 
@@ -179,17 +211,30 @@ Resolution rules, applied in order, over the attribution-bearing references only
    includes issues dropped during the Phase 0 build and issues outside the batch entirely.
    A PR that claims to close an unvetted issue is not re-interpreted; it is deferred.
 2. Attribution-bearing references resolve to **zero**, or to **more than one distinct**
-   vetted issue → defer.
+   vetted issue → defer. **This rule is also what catches a branch/body disagreement**, and
+   there is deliberately no separate rule for one: the attribution-bearing set *contains*
+   the branch issue number, so a branch reading `feat/117-add-cache` against a body reading
+   `Closes #133` is not a special case — it is two distinct vetted issues, caught here.
+   **Record it as a disagreement**, naming each signal and what it resolved to, not merely
+   as "two references": that is the record the exclusion table below asks for, and it is the
+   one a human needs to confirm provenance.
 3. Branch and body **both** resolve and **agree** on one vetted issue → attributed.
 4. Branch resolves and the body carries no reference → attributed on the branch signal.
+   This rule is why the body scan must match **every documented linking-keyword form**: an
+   unmatched reference is indistinguishable from an absent one, so a short pattern lands a
+   disagreeing PR here and **attributes** it instead of deferring under rule 1 or 2. The
+   failure direction of a missed form is toward merging, which is why
+   [platform-github.md](platform-github.md) pins the pattern and its verification rather
+   than leaving it to be re-derived.
 5. **Body-only attribution** (the branch carries no issue number) → attributed **only if
    the Phase 0 vetted-set build was clean**; otherwise **defer**. See below.
-6. Signals **disagree** → defer.
 
 **The clean-build condition (rule 5).** A build is *clean* when every issue the platform
 placed in the batch survived vetting: nothing dropped for lacking write access, no
 permission read that errored, no bot or deleted author, and the set's count reconciled
-against the platform's own total.
+against the platform's own total. A clean build licenses an **inference, not a proof** — it
+narrows which issue could have supplied the instructions; it never establishes which one
+did (Known limits #1).
 
 What a clean build establishes is **bounded**, and stating it precisely matters: every
 issue *the platform placed in this batch* had a write-access author, so body-only
@@ -204,7 +249,11 @@ instructions as a batch member, body content becomes an attacker-influenceable s
 body-only attribution is refused: such a PR needs the branch signal, or it defers.
 
 Record which rule carried each attribution in the run report, and flag every attribution
-that rested on a single signal.
+that rested on a single signal. Where the deferring rule was **rule 2**, the record says
+which of its two shapes applied: references resolving to **zero**, or signals **disagreeing**
+— and in the second case it names each signal and the issue it resolved to. "Deferred under
+rule 2" alone does not tell a human whether the PR referenced nothing or referenced two
+different issues, and those need different human actions.
 
 **A missing branch convention must not defer by itself.** implement-issue explicitly
 permits a run to keep a branch the host environment already prepared ("use it as-is",
@@ -242,7 +291,15 @@ machine authorship.
 ### E2 — Issue authored by a user with write access
 
 Established when the vetted issue set was built, not per PR. Restated here because it is
-the condition that carries the adversarial weight:
+the condition that carries the adversarial weight.
+
+**Read "Why this ordering matters" above before applying this condition.** E2's strength is
+not in the permission read — that part is mechanical — it is in *which issue the read is
+asked about*. Asked about a PR-supplied issue number, the same API call passes while
+validating the wrong thing: an attacker points it at a maintainer's issue and supplies the
+code from their own. The ordering is the control; this section is only its final step. An
+agent that reaches E2 without that argument in hand will treat a clean `write` as the answer
+and miss that the question was steered.
 
 - Permission is read from the platform's **collaborator-permission API**. Write access
   means the API reports it. Never infer access from the login, from the author's
@@ -342,6 +399,17 @@ excludes the PR from autonomous merging.
   comments easily exceeds one page, and an unpaginated read that misses a human comment
   fails *open* — the one failure direction this policy does not tolerate. See
   [platform-github.md](platform-github.md).
+
+  **The discipline is not specific to comments; apply it to every list read the policy
+  depends on.** A missed human comment and a **missed PR** fail open the same way, because a
+  truncated list is indistinguishable from a short one: the candidate PR enumeration, the
+  sub-issue set, the merged-PR read that builds the reverted-issue set, the open-PR read
+  that guards branch deletion. Treat a possibly-truncated read as an **unknown**, which is a
+  deferral — and treat a returned row count **equal to the requested limit** as
+  possibly-truncated, since that is what truncation looks like from the inside. Core
+  Principle 1 states this generally; it is restated here because E5 is the surface where an
+  agent is most likely to be checking one condition in isolation and never reach the general
+  rule.
 - An approving human review is still an exclusion. A human who engaged with the PR is
   reviewing it, and the human review path is theirs to finish.
 
@@ -391,7 +459,8 @@ Do not "simplify" this to a label-only check.
 **The human queue is not a separate store.** It is exactly: the set of PRs carrying that
 label, plus the deferred list in each run's report and in the milestone PR body. It is
 therefore fully re-derivable from the tracker, with no state file — as required. Query it
-by label; nothing else needs to exist.
+by label; nothing else needs to exist. Reporting it is an obligation of every run, not a
+design note for the reader — see "What a deferral records" below.
 
 ## Exclusion classes and outcomes
 
@@ -400,6 +469,7 @@ and differs only in what the deferral records and where the PR goes next.
 
 | Exclusion class | Failed condition | Outcome | Recorded | Routing | Re-evaluated next run? |
 |---|---|---|---|---|---|
+| **Branch closed to merges** — the milestone PR is merged, or closed unmerged | **B0** | DEFERRED | The milestone PR and its state; that the PR failed none of E1–E5 | Human queue: retarget or close the PR; where the milestone was closed unmerged, a human decides the branch's fate first | Only if a human reopens the route — otherwise every run on that branch defers identically |
 | Human-commented / reviewed PR | E5 | DEFERRED | Who commented, when, on which surface; label applied | respond-to-pr-review (human queue) | **No — permanent, via the label** |
 | Third-party-authored issue | E2 | DEFERRED | The issue, its author, the permission the API reported | Human queue: a write-access maintainer decides | No, unless the author's access changes |
 | Ambiguous pipeline-PR detection | E1 | DEFERRED | Fork status; which body sections matched; which attribution signals resolved and how they disagreed; whether an unvetted issue was referenced; whether body-only attribution was refused for an unclean build | Human queue: a human confirms provenance | Yes, if the signals converge — or if a later build is clean |
@@ -414,13 +484,28 @@ fixing CI does not make a human-commented PR eligible.
 Each deferred PR carries, in the run report and in the milestone PR's deferred list:
 
 1. The PR number and title.
-2. Every failed condition, by identifier, with the concrete evidence that failed it.
+2. Every failed condition, **by identifier**, with the concrete evidence that failed it. The
+   identifiers are E1–E5 for the per-PR conditions and **B0** for the branch-level exclusion
+   above. A deferral that failed **none** of E1–E5 says so explicitly rather than leaving the
+   field blank — "B0: the milestone PR for this branch is merged; this PR passes E1–E5" is
+   the record, and it is what tells a human the PR itself is fine and the *branch* is not.
+   The loop's own reverted-issue exclusion ([workflow.md](workflow.md) 2-1) is recorded the
+   same way, named rather than numbered, and likewise notes that no eligibility condition
+   failed.
 3. The required human action, stated as an action ("answer the review comments on #123",
    "confirm #124 was opened by the pipeline"), not as a diagnosis.
 4. Whether the exclusion is permanent (E5) or re-evaluated on the next run.
 
 No deferral is silent, and no deferred PR is closed, retargeted, edited, or nudged toward
 eligibility. Making a PR eligible is a human's decision.
+
+**And the run states where the queue lives.** Alongside the list itself, every run's report
+says what the human queue *is*: the set of PRs carrying the E5 label (queryable by label)
+plus the revert labels, together with this run's deferred list — and that there is **no state
+file**, so the queue is re-derived from the tracker and git on every run and nothing is lost
+between them. A reader who has only the deferred list cannot tell whether they are seeing the
+whole queue or one run's slice of it, and a human handed a list with no store behind it
+reasonably assumes something is tracking the rest. Nothing is.
 
 ## Re-evaluation
 
