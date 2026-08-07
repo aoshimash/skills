@@ -66,7 +66,11 @@ parent issues, milestones, labels, or explicit lists.
    one worktree per issue, fail fast without blocking independent issues (see
    [references/batch.md](references/batch.md)). In integration mode the DAG
    advances on **merges** rather than on ready flips, so a dependent's worktree
-   contains its dependency's code.
+   contains its dependency's code. The orchestrator carries a context budget of
+   its own ([references/context-budget.md](references/context-budget.md)): each
+   dispatched step's contribution is bounded, everything the batch relies on is
+   durable or re-derivable, and a long run ends on a boundary rather than losing
+   its place.
 
 ## Environment Adaptation
 
@@ -80,6 +84,7 @@ below use capability terms; map them to your environment as follows.
 | **Model selection** — run a separate agent instance on a chosen model | Per-instance model override (e.g. Claude Code's Task tool `model` parameter, or an agent definition's `model` frontmatter) | Run every instance on the session's default model — the implementer classification is skipped entirely rather than approximated, and the reviewer-stronger-than-implementer recommendation is unavailable |
 | **Security review** — security-focused review of the pending diff | Dedicated command (e.g. Claude Code's `/security-review`) | Review the diff yourself against the checklist in [references/workflow.md](references/workflow.md) step 2-6 |
 | **User-level configuration** — a durable instruction store belonging to the user, outside any repository | User-level instruction file (e.g. `~/.claude/CLAUDE.md` on Claude Code) | No such store: cross-repository preferences cannot be promoted — offer repository scope or skip (see [references/harvesting.md](references/harvesting.md) C) |
+| **Context position readout** — how much of the agent's own context or token budget remains | An environment that reports that figure to the agent — carry it in the batch's position line | Report the countable proxies only (issues settled, groups done, review rounds spent) and say the figure is not reported, rather than estimating one (see [references/context-budget.md](references/context-budget.md) C5) |
 | **Skill invocation** — run another installed skill's procedure from this one | Skill dispatch by name (e.g. Claude Code's Skill tool) | Read that skill's `SKILL.md` and the reference files it points to from the installed skill directory, and follow them inline |
 | **Background execution** — run long commands without blocking | Background shell (e.g. Claude Code's background Bash) | Run commands sequentially |
 | **Scheduled invocation** — run this skill again later without a user present | Recurring or cron-scheduled agent runs (e.g. Claude Code's scheduled tasks) | Re-invoke manually once per session; a resumed batch re-derives its state from the tracker and git (see [references/batch-reentry.md](references/batch-reentry.md)) |
@@ -114,6 +119,15 @@ is advanced without ever being widened: an issue linked into the parent after th
 is outside the record, and the milestone PR is still a human's to review and merge. That,
 the record's trust rule, and the rest of what re-derivation cannot recover are in
 batch-reentry.md's Known limits.
+
+*Context position readout* is Batch-only, and it is the one capability whose fallback changes
+what the run can decide rather than how it does something. With a readout, a long batch can
+end itself on a group boundary before it runs short; without one, the position line still
+reports the run's depth and the stop is the user's call. Either way the batch is built so that
+stopping — or being compacted — loses no *delivered* work: what it can cost is a re-run of an
+issue that left no artifact, plus the plan approval, which a compaction sends back through
+batch-reentry.md R8 §1's two paths like any resume
+([references/context-budget.md](references/context-budget.md)).
 
 *Model selection* is used in **both** modes, for different things. Reviewers use it
 everywhere: each one runs at least at the tier of the dispatch that produced the code it is
@@ -220,6 +234,16 @@ approval — never as a separate gate, and never in Single mode:
   issue. Available where that skill is installed and the repository is on
   GitHub.
 
+**The orchestrator carries a context budget**, because it is the one component that sees the
+whole batch. Each dispatched step writes its full output to the artifact it belongs in and
+returns a bounded summary, every fact the batch depends on is durable or re-derivable, and a
+light position read at each group boundary takes precedence over what the run believes it
+remembers. So a compaction mid-batch **recovers its position** with no human in the loop, and
+running short stops being a loss: where the environment reports remaining context, a batch too
+large for one of them ends on a boundary it chose, and where it does not, hitting the limit
+costs a re-derivation rather than the batch (see
+[references/context-budget.md](references/context-budget.md)).
+
 An integration-mode batch is **resumable across sessions**: before the dependency graph,
 a fresh session re-derives where an earlier one stopped — from the tracker and git only,
 since nothing else persists — and then starts the batch, resumes it, or stops (see
@@ -297,6 +321,7 @@ than starting new work.
 - [references/workflow.md](references/workflow.md) — Canonical autonomous pipeline (Direct context for Single mode, Orchestrated context for Batch implementers)
 - [references/batch.md](references/batch.md) — Batch mode dependency graph, dispatch, and failure handling
 - [references/batch-reentry.md](references/batch-reentry.md) — Resuming an integration-mode batch in a fresh session: the artifacts state is re-derived from, concurrent-session detection, and the idempotency rules
+- [references/context-budget.md](references/context-budget.md) — Keeping the batch orchestrator's own context bounded: what each dispatched step may return, what must be durable before it can leave, the position read that survives a compaction, the sequential fallback, and the deliberate stop
 - [references/model-selection.md](references/model-selection.md) — Batch dispatch's content-based implementer tiers: the classification rubric, the default mapping, the classes never dispatched cheaply, and the repository override
 - [references/review-gates.md](references/review-gates.md) — Two-stage review procedure (Stage 1 spec compliance, Stage 2 code quality, Stage 2.5 pattern propagation)
 - [references/automated-review.md](references/automated-review.md) — Responding to repository-configured automated (bot/AI) reviewers before the draft → ready flip

@@ -576,6 +576,48 @@ batch artifact.
 `for-each-ref` over freshly fetched remote-tracking refs. Filter its output down to the
 branches matching this batch's per-issue naming, over the issue set R1 established.
 
+## Re-derive a Batch's Position Without an Integration Branch
+
+Used by [context-budget.md](context-budget.md) C3's light position read in **standard mode**,
+where every PR is based on the default branch and the read above has no integration branch to
+key on. The batch's issue numbers are the key instead, matched against head branch names:
+
+```bash
+gh pr list --state all --limit 200 \
+  --json number,title,state,isDraft,baseRefName,headRefName,createdAt,body \
+  --jq '[.[] | select(.headRefName | test("(^|/)(issue-)?(101|102|103)-"))]'
+```
+
+Substitute this batch's issue numbers for `101|102|103`. The alternation is anchored to the
+start of the name or to a path separator, and requires the trailing `-` of
+`<type>/<issue-number>-<slug>`, so `feat/1109-…` does not match `109`. The optional `issue-`
+admits host-provided branch names that embed the number that way (`claude/issue-129-…`) —
+[batch-reentry.md](batch-reentry.md) R5 is explicit that requiring the convention's exact
+shape would exclude genuine pipeline PRs. Run against this repository on 2026-08-07 over the
+`109|110|…|116` set, it returned the seven `feat/<issue>-<slug>` PRs of the #109 batch and
+nothing else. The same `test(…)` expression with `129` in the set matched
+`claude/issue-129-b7039a` while rejecting `feat/1109-unrelated` and `chore/29-other`.
+
+The `--jq` filter is client-side, so the same truncation rule as the reads above applies and
+must be checked against the **fetched** count, never the matched one:
+
+```bash
+gh pr list --state all --limit 200 --json number --jq 'length'   # must be < 200
+```
+
+Run here on 2026-08-07 it returned **75**. A short read fails **open** — a hidden PR is one
+the batch would dispatch a second implementer for — so raise the limit until the fetched
+count is strictly below it.
+
+**Only issue numbers go into that alternation** — integers from the tracker, never a title, a
+slug, or a branch name — so no text anyone else authored reaches the regex or the shell. This
+is the same rule [batch.md](batch.md) B1-4 applies to the integration branch's slug, and it is
+what lets this read be built by string substitution at all.
+
+Attribution follows [batch-reentry.md](batch-reentry.md) R5: where the head branch carries no
+issue number, fall through to the body's linking-keyword references, and resolve any
+ambiguity to *do not dispatch*.
+
 ## Monitor CI
 
 ```bash

@@ -382,7 +382,13 @@ batch (batch.md B3-1).
   many rounds, what remains — or that none were configured).
 
 **Orchestrated — one status line** to the orchestrator, plus the PR/MR URL or
-failure details:
+failure details. **The return is bounded at one status token, one URL, and at
+most 10 further lines** ([context-budget.md](context-budget.md) C1) — the
+orchestrator accumulates one of these per issue for the whole batch, while
+everything longer already has a durable home: the PR body for a run that pushed,
+the kept worktree for a `BLOCKED` stop that did not. Name where it is instead of
+reproducing it; a `NEEDS_CONTEXT` return lists one line per missing decision. The
+statuses:
 
 - `DONE` — draft PR created, CI passing; gates not yet run (orchestrator runs them)
 - `DONE_WITH_CONCERNS` — draft PR created with concerns recorded (unfixable CI
