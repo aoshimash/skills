@@ -162,17 +162,33 @@ batch's integration branch, and creates that branch once at batch start:
 ```bash
 # once, after the execution plan is approved in integration mode
 git fetch origin
-git branch --no-track integration/issue-<parent-number> origin/<default-branch>
-git push -u origin integration/issue-<parent-number>
+if git show-ref --verify --quiet refs/remotes/origin/integration/issue-<parent-number>; then
+  : # already exists — reuse as-is; create nothing, push nothing
+else
+  git branch --no-track integration/issue-<parent-number> origin/<default-branch>
+  git push -u origin integration/issue-<parent-number>
+fi
 
 # per issue, immediately before dispatching its implementer
 git fetch origin
 git worktree add .worktrees/<branch-name> -b <branch-name> origin/integration/issue-<parent-number>
 ```
 
-`--no-track` keeps the new branch from inheriting the default branch as its upstream; the
-`push -u` then sets the upstream to its own remote branch. Reuse the branch if it already
-exists — never reset, force-push, or delete it while a batch is running.
+The existence probe is not optional: `git branch` on a name that already exists fails with
+`fatal: a branch named '<name>' already exists` and exit 128, and pushing a freshly cut
+branch over a remote branch that has advanced is rejected non-fast-forward — so the create
+path cannot double as the reuse path. `--no-track` keeps the new branch from inheriting the
+default branch as its upstream; the `push -u` then sets the upstream to its own remote
+branch. Never reset, force-push, or delete the branch while a batch is running.
+
+To report what a reused branch already carries (batch.md B1-4), compare it against the
+default branch — `ahead_by` and `behind_by` are reported independently, so a branch can be
+both:
+
+```bash
+gh api repos/{owner}/{repo}/compare/<default-branch>...integration/issue-<parent-number> \
+  --jq '{ahead: .ahead_by, behind: .behind_by, status: .status}'
+```
 
 ## Push Branch
 
@@ -319,23 +335,53 @@ regardless: it is the attribution signal the merge gate reads, and the closing r
 the milestone PR carries. Do not retarget a per-issue PR at the default branch to make it
 fire, and do not treat an open issue after a merged PR as a fault.
 
-## Confirm a PR Merged into the Integration Branch
+## Confirm a PR Merged into the Integration Branch — and Was Not Reverted
 
 Used by [batch.md](batch.md) B2-4 to confirm a merge from platform state rather than from
-the merge gate's report alone:
+the merge gate's report alone. **Two reads, both required.**
+
+**1. The merge.**
 
 ```bash
-gh pr view <number> --json number,state,baseRefName,mergeCommit \
-  --jq '{number, state, base: .baseRefName, merge: .mergeCommit.oid}'
+gh pr view <number> --json number,state,baseRefName,mergeCommit,labels \
+  --jq '{number, state, base: .baseRefName, merge: .mergeCommit.oid,
+         labels: [.labels[].name]}'
 ```
 
-A merge counts as confirmed when `state` is `MERGED` **and** `base` is the batch's
-integration branch. `mergeCommit` is `null` while the PR is open, so treat a null merge
-commit as "not merged", never as "merged without a commit".
+`state` must be `MERGED` and `base` must be the batch's integration branch. `mergeCommit`
+is `null` while the PR is open, so treat a null merge commit as "not merged", never as
+"merged without a commit".
 
-## List the Batch's PRs on the Integration Branch
+**2. The revert check — this is what makes the first read mean anything.** An auto-revert
+adds a *new commit on top* of the branch; it does not reopen the PR or change its base. A
+PR whose merge was reverted therefore still reports `MERGED` against the integration
+branch, and a check that stops at read 1 would report reverted work as merged and let a
+dependent branch from a base that no longer contains it. A merge counts only when
+**neither** revert signal is present:
 
-Used by [batch.md](batch.md) B3 to assemble the human queue:
+```bash
+# a. a revert label on the PR (read from the `labels` field above; the merge gate's
+#    defaults, both overridable in the repository's agent instructions)
+#      merge-gate:reverted    — verification failed
+#      merge-gate:unverified  — nothing verified it
+
+# b. a revert of this merge commit in the branch's history — fetch first, or a stale
+#    remote-tracking ref makes this half silently miss
+git fetch origin
+git log origin/integration/issue-<parent-number> --grep="This reverts commit <mergeCommit>" --oneline
+```
+
+Either signal present → **not merged** for the batch's purposes. Both are needed because
+they fail differently: a label can be stripped by anyone with triage access, and the
+history signal survives only while the branch keeps the revert commit. This is the same
+pair the merge gate uses to build its own reverted-issue set — reuse it rather than
+inventing a third rule.
+
+## List the PRs on the Integration Branch
+
+Used by [batch.md](batch.md) B3 to check that the merge gate's report **covers** every PR
+on the branch, before the human queue is published. This checks coverage only — the reason
+for each verdict comes from the report, never from re-deriving it here:
 
 ```bash
 gh pr list --base integration/issue-<parent-number> --state all --limit 100 \
@@ -344,7 +390,7 @@ gh pr list --base integration/issue-<parent-number> --state all --limit 100 \
 
 `--limit` is a **cap**, not a page size (it defaults to 30). Compare the number of rows
 returned against the limit you passed: equal means the list may have been truncated, so
-re-read with a higher limit before concluding anything from it. A batch report built on a
+re-read with a higher limit before concluding anything from it. A coverage check built on a
 truncated list fails open — it under-reports the human queue.
 
 ## Monitor CI

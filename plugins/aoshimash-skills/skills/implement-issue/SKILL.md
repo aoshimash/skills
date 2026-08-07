@@ -80,7 +80,16 @@ below use capability terms; map them to your environment as follows.
 | **Model selection** — run a separate agent instance on a chosen model | Per-instance model override (e.g. Claude Code's Task tool `model` parameter, or an agent definition's `model` frontmatter) | Run every instance on the session's default model — only the reviewer-stronger-than-implementer recommendation (see [references/review-gates.md](references/review-gates.md)) is unavailable |
 | **Security review** — security-focused review of the pending diff | Dedicated command (e.g. Claude Code's `/security-review`) | Review the diff yourself against the checklist in [references/workflow.md](references/workflow.md) step 2-6 |
 | **User-level configuration** — a durable instruction store belonging to the user, outside any repository | User-level instruction file (e.g. `~/.claude/CLAUDE.md` on Claude Code) | No such store: cross-repository preferences cannot be promoted — offer repository scope or skip (see [references/harvesting.md](references/harvesting.md) C) |
-| **Skill invocation** — run another installed skill's procedure from this one | Skill dispatch by name (e.g. Claude Code's Skill tool) | Read that skill's `SKILL.md` and the reference files it points to from the installed skill directory, and follow them inline — used only by Batch mode's integration mode, which invokes the merge-issue-prs skill (see [references/batch.md](references/batch.md) B2-4) |
+| **Skill invocation** — run another installed skill's procedure from this one | Skill dispatch by name (e.g. Claude Code's Skill tool) | Read that skill's `SKILL.md` and the reference files it points to from the installed skill directory, and follow them inline |
+| **Background execution** — run long commands without blocking | Background shell (e.g. Claude Code's background Bash) | Run commands sequentially |
+
+The last two are used only by Batch mode's **integration mode**, which invokes the
+merge-issue-prs skill ([references/batch.md](references/batch.md) B2-4). That skill performs
+bounded waits — for a PR's checks to settle, and for post-merge verification on the
+integration branch — and those waits happen inside whatever runs it, which is this run
+wherever the invocation is inline rather than a separate process. Both waits are bounded by
+a wall-clock deadline the agent owns, not by a blocking watch command; background execution
+frees the agent during them, it does not supply the bound.
 
 ## Phase 0: Setup and Mode Selection
 
@@ -171,10 +180,11 @@ approval — never as a separate gate, and never in Single mode:
 - **Integration** — the batch creates one integration branch, bases every
   worktree and PR on it, and hands each ready PR to the **merge-issue-prs**
   skill, which owns the whole merge lifecycle. A dependency counts as satisfied
-  only once its PR is *merged into that branch*, so dependents finally build on
-  their dependencies' code, and the human reviews one integration→main
-  milestone PR instead of one PR per issue. Available where that skill is
-  installed and the repository is on GitHub.
+  only once its PR *merged into that branch and was not reverted*, so dependents
+  finally build on their dependencies' code, and human review happens once, on
+  the integration→main milestone PR that skill raises, instead of once per
+  issue. Available where that skill is installed and the repository is on
+  GitHub.
 
 **Summary:**
 
@@ -186,8 +196,10 @@ approval — never as a separate gate, and never in Single mode:
    plan; get approval via a user choice (see Environment Adaptation) with
    options Approve (standard) / Approve (integration mode, when available) /
    Reorder / Abort (Reorder collects dependency-graph edits and re-presents the
-   plan — see batch.md B1-3). In integration mode, create the integration
-   branch before the first group (batch.md B1-4).
+   plan — see batch.md B1-3). The plan shows the ordering edges integration mode
+   would add for same-file collisions inside a group (batch.md B1-2), so the
+   whole schedule is settled in that one approval; the integration branch is
+   created right after it (batch.md B1-4).
 2. **Execution loop** — for each group, implement its issues, each in its own
    git worktree, executing [references/workflow.md](references/workflow.md) in
    the **Orchestrated** context (see that file's Invocation Contexts). Where
@@ -209,12 +221,15 @@ approval — never as a separate gate, and never in Single mode:
    independent issues. In integration mode a dependency that was deferred,
    reverted, or never merged cascades the same way — merged-into-integration is
    the only satisfied state.
-3. **Summary and harvest** — present a status table (issue, title, status, PR)
-   covering DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED / SKIPPED, plus
-   MERGED / DEFERRED / REVERTED in integration mode, where the deferred and
-   reverted PRs are the human queue and merged issues stay open until the
-   milestone PR merges; explain any blockers, and optionally post a summary
-   comment on the parent issue. Then harvest generalizable decisions
+3. **Summary and harvest** — in integration mode, first invoke the merge gate
+   once more declaring the batch terminal (batch.md B3), since only the
+   orchestrator knows implementers have stopped. Then present a status table
+   (issue, title, status, PR) covering DONE / DONE_WITH_CONCERNS /
+   NEEDS_CONTEXT / BLOCKED / SKIPPED, plus MERGED / DEFERRED / NOT_ATTEMPTED /
+   REVERTED in integration mode, where the deferred and reverted PRs are the
+   human queue and merged issues stay open until the milestone PR merges;
+   explain any blockers, and optionally post a summary comment on the parent
+   issue. Then harvest generalizable decisions
    ([references/harvesting.md](references/harvesting.md)) **once for the whole
    batch** — a batch of ten issues still costs at most one confirmation.
 
