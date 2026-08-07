@@ -181,9 +181,9 @@ path cannot double as the reuse path. `--no-track` keeps the new branch from inh
 default branch as its upstream; the `push -u` then sets the upstream to its own remote
 branch. Never reset, force-push, or delete the branch while a batch is running.
 
-To report what a reused branch already carries (batch.md B1-4), compare it against the
-default branch — `ahead_by` and `behind_by` are reported independently, so a branch can be
-both:
+To report what a reused branch already carries (batch.md B1-3, as a plan input — B1-4 acts
+on what the plan established rather than discovering it), compare it against the default
+branch — `ahead_by` and `behind_by` are reported independently, so a branch can be both:
 
 ```bash
 gh api repos/{owner}/{repo}/compare/<default-branch>...integration/issue-<parent-number> \

@@ -697,10 +697,13 @@ the dispatched issue set, a final status for every member of it, and the
 assertion that no implementer is still running — since a partial one is treated
 as no declaration and would leave the milestone PR in draft; `BLOCKED`,
 `NEEDS_CONTEXT`, and `SKIPPED` members appear as themselves rather than being
-softened to make the set look complete. Its statuses are re-derived after the
-gate's report is applied, so the declaration and the summary agree: both show
-#504 as `MERGED`, not the stale `NOT_ATTEMPTED`. Any dependent already `SKIPPED`
-behind #504 stays skipped, and the summary says re-running picks it up.
+softened to make the set look complete. The declaration is a snapshot at send
+time, so it carries #504 as `NOT_ATTEMPTED` while the summary — written after the
+report comes back — shows it `MERGED`; that difference is expected rather than a
+disagreement, and nothing rests on it, because the declaration carries no
+authority over merge state and the gate re-derives every outcome from the
+platform. Any dependent already `SKIPPED` behind #504 stays skipped, and the
+summary says re-running picks it up.
 
 **Criteria to test**: 38, 39, 37
 
@@ -1470,8 +1473,9 @@ Design decisions recorded here because they shape the eval expectations:
   merge method, verification, revert, or milestone-PR content, all of which the gate
   re-derives and may decide against the declaration's own statuses. The obligation the
   widening does add is honesty about status: `BLOCKED`, `NEEDS_CONTEXT`, and `SKIPPED`
-  members go in as themselves, and the declaration is re-derived after the closing report is
-  applied so it cannot disagree with the summary printed beside it.
+  members go in as themselves. The declaration is a snapshot at send time — an issue the
+  closing invocation itself merges reads `NOT_ATTEMPTED` there and `MERGED` in the summary
+  written afterwards — and the summary supersedes it.
 - **Mode selection is options, not a gate.** It rides on the plan approval that already
   exists, so an integration-mode batch costs the same one interaction a standard batch
   does. Standard is the plain-language default; integration is recommended only when the
@@ -1587,7 +1591,7 @@ can actually merge, which this one cannot until it has a `push`-triggered workfl
 | 51 | Pass | B2-4 "What is passed" item 2 requires the explicit issue list where there is no parent; B1-4 sanitizes the slug |
 | 52 | Pass | B3's closing invocation is defined as a full B2-4, so statuses, the two-part merge confirmation, and the issue comment all apply before the summary is written; B2-6's no-un-cascade rule and B3 item 6 cover the stranded dependent |
 | 53 | Pass | B2-4's confirmation is two reads, and B2-5 keys satisfaction on both; platform-github.md carries the label and `git log --grep` commands |
-| 54 | Pass | B1-4's existence probe plus the two reuse consequences it requires the plan to state |
+| 54 | Pass | B1-3's existence probe, taken as a plan input, plus the two reuse consequences it requires the plan to state |
 | 16–21 | Pass | Standard-mode batch semantics unchanged: every integration-mode instruction is marked as such, and the DAG, gates, dispatch, and cascade are otherwise the same text. B1-2 step 4 is explicitly integration-mode-only |
 | 22 | Pass | The Orchestrated context still asks nothing new: the added dispatch content (base branch, file scope, keyword caveat) is input to the implementer, not a question |
 | 33 | Pass | B3-1 still harvests once; the added sentence only says which integration-mode statuses reached ready for review |

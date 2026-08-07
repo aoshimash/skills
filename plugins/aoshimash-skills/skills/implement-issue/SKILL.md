@@ -199,7 +199,7 @@ approval — never as a separate gate, and never in Single mode:
    plan — see batch.md B1-3). The plan shows the ordering edges integration mode
    would add for same-file collisions inside a group (batch.md B1-2), so the
    whole schedule is settled in that one approval; the integration branch is
-   created right after it (batch.md B1-4).
+   created or reused right after it (batch.md B1-4).
 2. **Execution loop** — for each group, implement its issues, each in its own
    git worktree, executing [references/workflow.md](references/workflow.md) in
    the **Orchestrated** context (see that file's Invocation Contexts). Where
