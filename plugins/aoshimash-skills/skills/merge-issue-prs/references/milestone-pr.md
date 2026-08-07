@@ -14,6 +14,7 @@ per-issue PRs.
 
 - [What this lifecycle owns, and what it never does](#what-this-lifecycle-owns-and-what-it-never-does)
 - [M0: whether a milestone PR may exist yet](#m0-whether-a-milestone-pr-may-exist-yet)
+  - [A terminal milestone closes the branch to new merges](#a-terminal-milestone-closes-the-branch-to-new-merges)
 - [M1: create the draft](#m1-create-the-draft)
 - [M2: the body](#m2-the-body)
   - [Section order](#section-order)
@@ -95,9 +96,11 @@ first; ask `ahead_by` only where the table does.**
 | Present, **not ahead** | none | No PR can exist yet. [Zero-merge milestone](#the-zero-merge-milestone). |
 
 Each state matches exactly one row; the two `merged` rows are kept apart by the head
-comparison. **Both of them additionally close the branch to new merges** — a consequence that
-is not an action of this phase, because it has to take effect two phases earlier. See "A
-merged milestone closes the branch to new merges" below.
+comparison. Some rows additionally **close the branch to new merges** — a consequence that is
+not an action of this phase, because it has to take effect two phases earlier. See "A terminal
+milestone closes the branch to new merges" below, which states the rule over the *milestone
+PR's state* rather than over rows, so that it cannot be read as covering only the rows that
+happened to be enumerated when it was written.
 
 **`ahead_by` answers "may one exist yet", never "has this milestone finished".** It is a
 correct creation gate and a wrong cleanup gate, because only one of the three merge methods
@@ -120,21 +123,44 @@ deleted**. Read here: merged PRs #118 and #119 report `headRefOid` `ca2ec59` and
 distinct from their `mergeCommit`s, while `git ls-remote` finds neither of their head branches
 on the remote (this repository deletes head branches automatically).
 
-**A merged milestone closes the branch to new merges, and that has to be checked in Phase 0 —
-not here.** Phases 1 and 2 run *before* this table is consulted, so a gate that learns about
-the merged milestone only at Phase 3 has already merged. The state it would have created is
-unrecoverable in both directions at once: the new merge moves the branch head off the
-milestone PR's `headRefOid`, so [M5](#m5-cleanup-after-the-human-merges) condition 3 is false
-**permanently** and the branch can never be cleaned up, while the table's "commits landed
-after the milestone merged" row forbids opening a second milestone PR to carry the work — and
-the work itself has landed somewhere the human checkpoint already passed. One merge strands
-the branch.
+### A terminal milestone closes the branch to new merges
 
-So the milestone PR's state is read **before candidate enumeration**, and where it is
-`MERGED` the run takes **no new candidates on that branch**: every open PR based on it is
-deferred with the milestone's completion as the reason and retarget-or-close as the human
-action ([eligibility.md](eligibility.md), "Candidates"). This is a branch-level fact, which is
-why no per-PR eligibility condition catches it — each of the five reads the PR.
+**State the rule over the milestone PR's state, not over the table's rows**, because the rows
+enumerate *this phase's actions* while the closure is about whether merging is still safe at
+all — and a rule written as "the merged rows" silently leaves out the row that fails the same
+way.
+
+> **The branch accepts new merges only while a milestone PR can still carry them to human
+> review.** That is true in exactly two states: **one open** milestone PR, or **none yet**
+> (M0 creates one as soon as the branch is ahead). Every other state is **terminal for the
+> branch**, and a run that finds one takes **no new candidates on it**.
+
+Terminal states, and how each one strands the branch:
+
+| Milestone PR state | Why merging is unsafe | What is unreachable afterwards |
+|---|---|---|
+| **Merged**, head equals `headRefOid` | The checkpoint has already passed; new work would reach the default branch's future unreviewed | A merge moves the head off `headRefOid`, so [M5](#m5-cleanup-after-the-human-merges) condition 3 is false **permanently** — cleanup never fires — while the "commits landed after the milestone merged" row forbids a second milestone PR |
+| **Merged**, head differs | Same, and the branch is already in the unexpected state that row reports | Same |
+| **Closed, unmerged** | A human ended this milestone deliberately. Nothing will carry new work to review | This row forbids reopening, replacing, or creating another, so **no milestone PR can ever exist** for the branch; M5 condition 1 requires a **`MERGED`** one, so cleanup is unreachable too, and M5 separately refuses to delete a branch whose milestone was closed unmerged |
+
+The closed-unmerged row is the one that looks unlike the others and behaves identically. It
+reaches the same dead end by a different route: the merged rows lose cleanup through the head
+comparison, this one loses it because the milestone PR the cleanup conditions are written
+against will never exist. In every case the merged work ends up on a branch with no route to a
+human and no route to deletion. One merge strands it.
+
+**Where this is checked: immediately before candidate enumeration**, as the first step of
+Phase 1 ([SKILL.md](../SKILL.md)), not in Phase 3. Phases 1 and 2 both run *before* this table
+is consulted, so a gate that learns the milestone's state at Phase 3 has already merged. It
+reads the same `gh pr list --state all --head … --base …` this section specifies; the read is
+in Phase 3's toolbox, the *decision* is two phases earlier.
+
+Every open PR on a closed branch is deferred, recorded as the branch-level exclusion **B0**
+([eligibility.md](eligibility.md), "Candidates"), with the human action stated per state:
+retarget or close, for a merged milestone; for a closed-unmerged one, a human decides the
+branch's fate first, since the milestone was ended on purpose and this gate must not
+second-guess that. This is a **branch-level** fact, which is why no per-PR eligibility
+condition catches it — each of the five reads the PR.
 
 **More than one PR from the integration branch to the default branch — in any combination of
 states — is an unexpected state of its own, checked before the table.** Report it and update
@@ -685,7 +711,7 @@ route does not exist; the flip then rests on the second or does not happen. F1 w
 settle it first in that mode anyway — eligible PRs the run was not allowed to merge are not a
 terminal state.
 
-**F3 — no outstanding escalation.** Two kinds block the flip:
+**F3 — no outstanding escalation.** Three kinds block the flip:
 
 - A failed revert, or a branch head that is not what the loop left (workflow.md R-1…R-3):
   the branch's contents are not established, and nothing gets flipped on an unestablished

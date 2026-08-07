@@ -226,9 +226,11 @@ branch head and every candidate read before it becomes stale by construction. A 
 still reading `CLEAN` from before that merge is exactly the case the sync exists for: its
 green CI was computed against a tree that no longer exists. Re-read mergeability against the
 **post-merge** head rather than trusting a pre-merge reading, and treat a candidate whose
-merge base is not the current head as **behind**, `CLEAN` or not. This is not an edge case —
-after the first merge of a run it is *every* candidate, so getting it wrong skips the sync on
-all but one PR of every batch.
+merge base is not the current head as **behind**, `CLEAN` or not. This is not an edge case:
+after the first merge of a run it is every candidate that was read before that merge, which is
+normally all of them — so getting it wrong skips the sync on all but one PR of a batch. (A PR
+opened against the *post-merge* head is genuinely current; the merge-base test says so, which
+is why the test is the rule and this sentence is only its scale.)
 
 **Why sync at all, when the platform will merge a behind-but-clean PR without it.**
 Merging unsynced means the PR's green CI was computed on a tree that no longer exists —
@@ -426,8 +428,11 @@ reverted issue**, not the same change reintroduced under a different one.
 **R-5 — Stop the line.** Even after a clean recovery, process no further PR this run. One
 verification failure means the pre-merge gates missed something, and the rest of the queue
 deserves human eyes before the automation continues. Update the milestone PR with the
-revert and the not-attempted set before reporting ([milestone-pr.md](milestone-pr.md) M3);
-an outstanding escalation also blocks its ready flip (M4, F3).
+revert and the not-attempted set before reporting ([milestone-pr.md](milestone-pr.md) M3). A
+**failed revert** — not every escalation — also blocks its ready flip (M4, F3): F3 blocks on
+what leaves the branch's contents unestablished, while an *unrecorded exclusion* (a label
+write that could not be verified) is disclosed under Needs Human Attention and does not
+withhold the flip.
 
 ## Escalation: when the revert itself fails
 
@@ -508,11 +513,12 @@ re-running once the failure is understood.
 
 ## The human queue at run end
 
-Deferred PRs accumulate through the run and are reported at the end. The queue has five
+Deferred PRs accumulate through the run and are reported at the end. The queue has six
 kinds of member, and the report distinguishes them:
 
 | Kind | Source | Permanent? |
 |---|---|---|
+| **Branch closed to merges (B0)** | eligibility.md B0 — the milestone PR is merged, or closed unmerged | Yes for this branch: no later run reopens it. A human retargets the PR, or decides the branch's fate |
 | Eligibility deferrals | eligibility.md's exclusion classes | E5 only; the rest are re-evaluated |
 | Loop deferrals — conflict, red CI, unknown mergeability, refused merge | 2-2 / 2-1 / 2-3 | No — re-evaluated next run |
 | **Reverted — verification failed** | auto-revert R-4 | Yes, until a human fixes the change and clears the label |
@@ -523,9 +529,15 @@ The two revert rows stay separate in the report as well as in the labels. "Rever
 without a cause reads as "this change was bad", which is true of one row and an unfair
 accusation in the other.
 
-Each entry carries the PR number and title, the reason with concrete evidence, the
-required human action stated **as an action** ("resolve the conflict in #123 against
-`integration/issue-109`", not "conflicted"), and whether it is permanent or re-evaluated.
+**The B0 row is the only one whose reason is not about the PR**, and the report says so
+rather than letting a reader infer a fault in work that has none: a B0 entry states that the
+PR passes every eligibility condition and that the *branch* is closed. Filing it silently
+among the eligibility deferrals would tell an author to go fix a PR that needs no fixing.
+
+Each entry carries the PR number and title, the reason with concrete evidence and its
+identifier where it has one (E1–E5, B0), the required human action stated **as an action**
+("resolve the conflict in #123 against `integration/issue-109`", not "conflicted"), and
+whether it is permanent or re-evaluated.
 
 The queue is not a separate store: it is the labelled PRs plus each run's report, fully
 re-derivable from the tracker and git. Nothing is persisted between runs.

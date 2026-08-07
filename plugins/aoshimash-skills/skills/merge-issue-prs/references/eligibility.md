@@ -123,6 +123,10 @@ origin — is recorded under "Known limits" at the end of this file.
 A PR is ELIGIBLE only when **all five** hold. Each is checked independently; a PR that
 fails more than one records every failed condition.
 
+The five are **per-PR**. One **branch-level** exclusion, **B0**, is checked before them and
+is documented below alongside them because it produces the same outcome — a deferral — for a
+PR that fails none of the five.
+
 | # | Condition | Established by |
 |---|---|---|
 | **E1** | The PR was created by this pipeline, and implements exactly one vetted issue | Non-fork head branch, pipeline body structure, and attribution into the vetted issue set |
@@ -135,19 +139,32 @@ Candidates are the **open PRs whose base is the run's integration branch**. A PR
 targeting the default branch is outside the autonomous path by construction and is not
 even a candidate — do not retarget it to make it one.
 
-**One branch-level precondition comes before the candidate list exists: the milestone must
-still be open.** Read the milestone PR's state ([milestone-pr.md](milestone-pr.md) M0)
-*before* enumerating candidates, and where it is **`MERGED`**, this run takes **no new
-candidates on that branch** — every open PR based on it is reported as deferred, with the
-milestone's completion as the reason and retarget-or-close as the human action.
+### B0 — the branch is still open to merges
 
-This is not tidiness. The milestone has already merged into the default branch, so a merge
-now lands work the human checkpoint never saw, and it moves the branch head off the milestone
-PR's `headRefOid` — which makes M5 condition 3 false **permanently**, so the branch can never
-be cleaned up, while M0 forbids opening a second milestone PR to carry the new work. One
-merge strands the branch. The gate must not be able to create that state itself, and no
-condition in the five below looks at it, because they all read the *PR* and this one is about
-the *branch*.
+**One branch-level exclusion comes before the candidate list exists**, and it is checked
+first because it invalidates every candidate at once rather than one of them.
+
+Read the milestone PR's state ([milestone-pr.md](milestone-pr.md) M0, "A terminal milestone
+closes the branch to new merges") *before* enumerating candidates. **The branch accepts new
+merges only while a milestone PR can still carry them to human review** — that is, while one
+is **open**, or while **none exists yet**. Any **terminal** state closes the branch:
+
+| Milestone PR | B0 | Human action recorded with the deferral |
+|---|---|---|
+| Open, or none yet | **holds** — enumerate candidates as usual | — |
+| **Merged** (either head state) | **fails** — no new candidates | Retarget the PR, or close it |
+| **Closed, unmerged** | **fails** — no new candidates | A human decides the branch's fate first — the milestone was ended deliberately |
+
+When B0 fails, every open PR based on the branch is **deferred**, recorded against **B0** and
+not against any of E1–E5, because it failed none of them.
+
+This is not tidiness, and it is not one row of a table. A merge onto a branch whose milestone
+is terminal lands work no human checkpoint will ever see, and it destroys the branch's only
+route to cleanup — through `headRefOid` where the milestone merged, or through M5 condition
+1's requirement of a `MERGED` milestone PR where it was closed unmerged. Both routes end in a
+branch that can neither be reviewed nor deleted. One merge strands it. The gate must not be
+able to create that state itself, and **no condition in the five below looks at it**, because
+they all read the *PR* and this one is about the *branch*.
 
 ### E1 — Created by this pipeline, implementing one vetted issue
 
@@ -451,6 +468,7 @@ and differs only in what the deferral records and where the PR goes next.
 
 | Exclusion class | Failed condition | Outcome | Recorded | Routing | Re-evaluated next run? |
 |---|---|---|---|---|---|
+| **Branch closed to merges** — the milestone PR is merged, or closed unmerged | **B0** | DEFERRED | The milestone PR and its state; that the PR failed none of E1–E5 | Human queue: retarget or close the PR; where the milestone was closed unmerged, a human decides the branch's fate first | Only if a human reopens the route — otherwise every run on that branch defers identically |
 | Human-commented / reviewed PR | E5 | DEFERRED | Who commented, when, on which surface; label applied | respond-to-pr-review (human queue) | **No — permanent, via the label** |
 | Third-party-authored issue | E2 | DEFERRED | The issue, its author, the permission the API reported | Human queue: a write-access maintainer decides | No, unless the author's access changes |
 | Ambiguous pipeline-PR detection | E1 | DEFERRED | Fork status; which body sections matched; which attribution signals resolved and how they disagreed; whether an unvetted issue was referenced; whether body-only attribution was refused for an unclean build | Human queue: a human confirms provenance | Yes, if the signals converge — or if a later build is clean |
@@ -465,7 +483,14 @@ fixing CI does not make a human-commented PR eligible.
 Each deferred PR carries, in the run report and in the milestone PR's deferred list:
 
 1. The PR number and title.
-2. Every failed condition, by identifier, with the concrete evidence that failed it.
+2. Every failed condition, **by identifier**, with the concrete evidence that failed it. The
+   identifiers are E1–E5 for the per-PR conditions and **B0** for the branch-level exclusion
+   above. A deferral that failed **none** of E1–E5 says so explicitly rather than leaving the
+   field blank — "B0: the milestone PR for this branch is merged; this PR passes E1–E5" is
+   the record, and it is what tells a human the PR itself is fine and the *branch* is not.
+   The loop's own reverted-issue exclusion ([workflow.md](workflow.md) 2-1) is recorded the
+   same way, named rather than numbered, and likewise notes that no eligibility condition
+   failed.
 3. The required human action, stated as an action ("answer the review comments on #123",
    "confirm #124 was opened by the pipeline"), not as a diagnosis.
 4. Whether the exclusion is permanent (E5) or re-evaluated on the next run.

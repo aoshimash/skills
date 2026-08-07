@@ -142,20 +142,30 @@ below use capability terms; map them to your environment as follows.
 
 ### Phase 1: Eligibility triage
 
-**First, check that the milestone is still open.** Read the milestone PR's state
-([references/milestone-pr.md](references/milestone-pr.md) M0) *before* enumerating anything,
-and where it is **MERGED**, take **no new candidates on that branch**: report every open PR
-based on it as deferred, with the milestone's completion as the reason. Merging onto a branch
-whose milestone has already merged lands work past the human checkpoint and moves the branch
-head off the milestone PR's `headRefOid`, which makes cleanup impossible **permanently** (M5
-condition 3) while M0 forbids a second milestone PR — one merge strands the branch. Phases 1
-and 2 run before Phase 3, so nothing downstream can catch this; it has to be checked here.
+**Step 1 — B0: can this branch take merges at all?** Read the milestone PR's state
+([references/milestone-pr.md](references/milestone-pr.md) M0) *before* enumerating anything.
+The branch accepts new merges only while a milestone PR can still carry them to human review:
+one is **open**, or **none exists yet**. Both **terminal** states — **merged**, and **closed
+unmerged** — close the branch. The run then takes **no new candidates on it** and reports
+every open PR based on it as deferred against **B0**, a branch-level exclusion those PRs fail
+while passing E1–E5.
 
-Then enumerate the open PRs whose base is the run's integration branch and decide each one
-**ELIGIBLE** or **DEFERRED** under [references/eligibility.md](references/eligibility.md).
-There is no third outcome. Report the eligible set and the deferral set — each deferral
-with its failed condition, evidence, and required human action — before merging
-anything. Eligibility is re-derived on every run and never cached.
+Both terminal states strand the branch, by different routes. After a **merged** milestone, a
+new merge moves the head off the milestone PR's `headRefOid`, so cleanup becomes impossible
+**permanently** (M5 condition 3) while M0 forbids a second milestone PR. After a
+**closed-unmerged** one, M0 forbids reopening or replacing it, so no milestone PR can ever
+exist for that branch, and M5 condition 1 requires a merged one — the work gets no route to
+review and the branch none to deletion. One merge strands it either way.
+
+This is checked **here, as Phase 1's first step**, and nowhere else: Phases 1 and 2 both run
+before Phase 3, so nothing downstream can catch it.
+
+**Step 2 — triage.** Enumerate the open PRs whose base is the run's integration branch and
+decide each one **ELIGIBLE** or **DEFERRED** under
+[references/eligibility.md](references/eligibility.md). There is no third outcome. Report the
+eligible set and the deferral set — each deferral with its failed condition by identifier,
+evidence, and required human action — before merging anything. Eligibility is re-derived on
+every run and never cached.
 
 ### Phase 2: Serial merge loop
 
