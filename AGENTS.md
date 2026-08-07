@@ -23,6 +23,15 @@ Skills follow the [skill-creator](https://github.com/anthropics/skills) best pra
 - Keep SKILL.md under 500 lines. Split detailed content into `references/` files.
 - Each skill should have eval test cases in `references/eval-cases.md`. Run them after changes and record results in the evaluation log.
 
+### Writing instructions that hold up
+
+A skill is executed, not read. These four rules exist because each was learned from a defect that shipped past a review round.
+
+- **Do not write a claim the mechanism does not deliver.** Any sentence asserting that something guarantees, confines, enforces, or catches — and any sentence calling something verified — must be checkable against the instruction or command beside it. Two forms recur: an evidence citation ("verified live") for something not actually observed in this session, and a capability claim ("X enforces Y") where X does not. Where the mechanism is partial, name the part it covers and record the rest as a known limit; never round up.
+- **Run every command as written before recording it as verified.** Extract it from the file and run *that*, not a retyped copy. A verification that exercises a differently-typed command proves nothing about the one that ships.
+- **A list read a policy depends on must be complete.** Pass `--paginate` with `per_page=100` on paginated API reads. Where a command takes a `--limit`, compare the number of rows actually **fetched** against that limit — a client-side-filtered count checks nothing — and raise the limit until the fetched count is strictly below it. A read that may be short is an unknown, and an unknown resolves the way that policy's failures resolve.
+- **Model eval fixtures on real artifacts from this repository.** A fixture that hands the agent the classification under test — a pre-labelled input, an idealized body, a state the platform cannot produce — grades recall of the case rather than the behaviour. At least one fixture per behavioural rule should come from a real PR, issue, or branch.
+
 ## Issue Skill Design Axis
 
 The issue-lifecycle skills (`create-issue`, `implement-issue`, `merge-issue-prs`) share one non-negotiable design axis. Changes to any of them must preserve it:
