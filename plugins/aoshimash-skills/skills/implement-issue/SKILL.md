@@ -82,14 +82,35 @@ below use capability terms; map them to your environment as follows.
 | **User-level configuration** — a durable instruction store belonging to the user, outside any repository | User-level instruction file (e.g. `~/.claude/CLAUDE.md` on Claude Code) | No such store: cross-repository preferences cannot be promoted — offer repository scope or skip (see [references/harvesting.md](references/harvesting.md) C) |
 | **Skill invocation** — run another installed skill's procedure from this one | Skill dispatch by name (e.g. Claude Code's Skill tool) | Read that skill's `SKILL.md` and the reference files it points to from the installed skill directory, and follow them inline |
 | **Background execution** — run long commands without blocking | Background shell (e.g. Claude Code's background Bash) | Run commands sequentially |
+| **Scheduled invocation** — run this skill again later without a user present | Recurring or cron-scheduled agent runs (e.g. Claude Code's scheduled tasks) | Re-invoke manually once per session; a resumed batch re-derives its state from the tracker and git (see [references/batch-reentry.md](references/batch-reentry.md)) |
 
-The last two are used only by Batch mode's **integration mode**, which invokes the
-merge-issue-prs skill ([references/batch.md](references/batch.md) B2-4). That skill performs
+The last three are used only by Batch mode's **integration mode**. *Skill invocation* and
+*background execution* serve its call into the merge-issue-prs skill
+([references/batch.md](references/batch.md) B2-4). That skill performs
 bounded waits — for a PR's checks to settle, and for post-merge verification on the
 integration branch — and those waits happen inside whatever runs it, which is this run
 wherever the invocation is inline rather than a separate process. Both waits are bounded by
 a wall-clock deadline the agent owns, not by a blocking watch command; background execution
 frees the agent during them, it does not supply the bound.
+
+*Scheduled invocation* is the **repeated-invocation operating pattern**: one invocation
+advances the batch as far as that session gets, and the next one re-derives where it
+stopped and carries on from there — within the scope limit below (batch.md B0,
+[references/batch-reentry.md](references/batch-reentry.md)). The pattern is the same
+whether the repeat is scheduled or typed by hand — same batch source, one invocation per
+session, until the milestone PR is ready — because nothing is persisted between sessions
+either way: no state file, no session memory, only the tracker and git. Scheduling removes
+the person from the loop; it is not what makes resumption work.
+
+The two differ in **scope**, not mechanism. Which issues a batch implements is settled at
+the execution-plan approval and recorded nowhere durable, so an invocation with no user
+reachable advances the work an approved plan already produced — review gates on the drafts,
+the merge gate, the reports — and **dispatches no new implementer**, naming instead whatever
+is waiting on an approval. Since that bound is artifact evidence rather than plan
+membership, an unattended run drains the group the last session dispatched and then stalls
+on the next one, even though the user approved it; a batch is advanced without ever being
+widened, and finishing one still takes a session with a user in it. That, and the rest of
+what re-derivation cannot recover, is in batch-reentry.md's Known limits.
 
 ## Phase 0: Setup and Mode Selection
 
@@ -186,6 +207,15 @@ approval — never as a separate gate, and never in Single mode:
   issue. Available where that skill is installed and the repository is on
   GitHub.
 
+An integration-mode batch is **resumable across sessions**: before the dependency graph,
+a fresh session re-derives where an earlier one stopped — from the tracker and git only,
+since nothing else persists — and then starts the batch, resumes it, or stops (see
+[references/batch-reentry.md](references/batch-reentry.md), invoked from batch.md B0).
+Existing PRs, branches, and worktrees are never recreated; a body-recorded gate verdict
+never substitutes for re-running the gate; a batch another session appears to be working
+on is not dispatched at all; and dispatching an implementer needs an approved plan every
+session, so an unattended resume advances existing PRs rather than starting new work.
+
 **Summary:**
 
 1. **Dependency graph** — collect dependencies from the platform's own
@@ -239,6 +269,7 @@ approval — never as a separate gate, and never in Single mode:
 
 - [references/workflow.md](references/workflow.md) — Canonical autonomous pipeline (Direct context for Single mode, Orchestrated context for Batch implementers)
 - [references/batch.md](references/batch.md) — Batch mode dependency graph, dispatch, and failure handling
+- [references/batch-reentry.md](references/batch-reentry.md) — Resuming an integration-mode batch in a fresh session: the artifacts state is re-derived from, concurrent-session detection, and the idempotency rules
 - [references/review-gates.md](references/review-gates.md) — Two-stage review procedure (Stage 1 spec compliance, Stage 2 code quality, Stage 2.5 pattern propagation)
 - [references/automated-review.md](references/automated-review.md) — Responding to repository-configured automated (bot/AI) reviewers before the draft → ready flip
 - [references/harvesting.md](references/harvesting.md) — Post-PR promotion of generalizable decisions into repository agent instructions or user-level configuration
