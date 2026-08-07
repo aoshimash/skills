@@ -2660,6 +2660,6 @@ more as headroom than spent re-approaching the cap.
   session: `description` — "Max 1024 characters. Non-empty."
 - `ls -d plugins/aoshimash-skills/skills/*/evals` — 5 directories, none of them
   `implement-issue`'s.
-- Resolving every non-HTTP markdown link across all 52 `.md` files under
+- Resolving every non-HTTP markdown link across all **49** `.md` files under
   `plugins/aoshimash-skills/skills/` plus `README.md`, `AGENTS.md`, `CLAUDE.md` —
-  0 broken.
+  52 files in total, 0 broken.
