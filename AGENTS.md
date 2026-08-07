@@ -94,3 +94,8 @@ Neutral vocabulary — use the capability term in skill instructions; reserve pr
 ## Git Conventions
 
 - Use [Conventional Commits](https://www.conventionalcommits.org/) (e.g., `feat:`, `fix:`, `docs:`, `chore:`)
+- Never edit the plugin version by hand. `.github/workflows/bump-version.yml` bumps `metadata.version` and `plugins[0].version` in `.claude-plugin/marketplace.json` on every merge to `main` whose PR touched `plugins/`, classifying the bump level from the diff.
+
+## Automated Reviewers
+
+- `claude-review` — GitHub Actions workflow `.github/workflows/claude-code-review.yml`, running `/code-review:code-review` on `opened` / `synchronize` / `ready_for_review` / `reopened`; posts on drafts: yes
