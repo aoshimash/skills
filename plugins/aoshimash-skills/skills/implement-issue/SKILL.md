@@ -77,12 +77,21 @@ below use capability terms; map them to your environment as follows.
 |---|---|---|
 | **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`, which can carry several questions in one round) | Numbered options as plain text; wait for the user's reply |
 | **Separate agent instance** — run a task in a fresh context that has not seen this conversation | Subagent dispatch (e.g. Claude Code's Task tool) | Run sequentially in the current context; for verification, mark the result `SELF-REVIEWED` in the artifact it lands in (e.g. the PR body) |
-| **Model selection** — run a separate agent instance on a chosen model | Per-instance model override (e.g. Claude Code's Task tool `model` parameter, or an agent definition's `model` frontmatter) | Run every instance on the session's default model — only the reviewer-stronger-than-implementer recommendation (see [references/review-gates.md](references/review-gates.md)) is unavailable |
+| **Model selection** — run a separate agent instance on a chosen model | Per-instance model override (e.g. Claude Code's Task tool `model` parameter, or an agent definition's `model` frontmatter) | Run every instance on the session's default model — the implementer classification is skipped entirely rather than approximated, and the reviewer-stronger-than-implementer recommendation is unavailable |
 | **Security review** — security-focused review of the pending diff | Dedicated command (e.g. Claude Code's `/security-review`) | Review the diff yourself against the checklist in [references/workflow.md](references/workflow.md) step 2-6 |
 | **User-level configuration** — a durable instruction store belonging to the user, outside any repository | User-level instruction file (e.g. `~/.claude/CLAUDE.md` on Claude Code) | No such store: cross-repository preferences cannot be promoted — offer repository scope or skip (see [references/harvesting.md](references/harvesting.md) C) |
 | **Skill invocation** — run another installed skill's procedure from this one | Skill dispatch by name (e.g. Claude Code's Skill tool) | Read that skill's `SKILL.md` and the reference files it points to from the installed skill directory, and follow them inline |
 | **Background execution** — run long commands without blocking | Background shell (e.g. Claude Code's background Bash) | Run commands sequentially |
 | **Scheduled invocation** — run this skill again later without a user present | Recurring or cron-scheduled agent runs (e.g. Claude Code's scheduled tasks) | Re-invoke manually once per session; a resumed batch re-derives its state from the tracker and git (see [references/batch-reentry.md](references/batch-reentry.md)) |
+
+*Model selection* is used at two points, both in Batch mode. The orchestrator dispatches each
+issue's implementer on a capability tier matched to that issue's **content** — mechanical
+work runs cheaply, judgment-heavy work does not, uncertainty and the hard-exclusion classes
+resolve upward ([references/model-selection.md](references/model-selection.md)) — and each
+reviewer then runs at least at that tier
+([references/review-gates.md](references/review-gates.md)), so a cheaper implementer is
+reviewed relatively more strongly rather than less. Single mode chooses no tier: its
+implementer is the session itself.
 
 The last three are used only by Batch mode's **integration mode**. *Skill invocation* and
 *background execution* serve its call into the merge-issue-prs skill
@@ -234,8 +243,11 @@ session, so an unattended resume advances existing PRs rather than starting new 
    git worktree, executing [references/workflow.md](references/workflow.md) in
    the **Orchestrated** context (see that file's Invocation Contexts). Where
    the environment supports separate agent instances, dispatch one implementer
-   per issue in parallel; otherwise implement sequentially in dependency order
-   — the DAG, review gates, and failure cascade are identical either way.
+   per issue in parallel — where model selection also exists, each on the
+   capability tier its issue's content calls for
+   ([references/model-selection.md](references/model-selection.md)); otherwise
+   implement sequentially in dependency order — the DAG, review gates, and
+   failure cascade are identical either way.
    After each draft PR is created, the orchestrator runs the two-stage review
    gates ([references/review-gates.md](references/review-gates.md)), including
    **Stage 2.5 pattern propagation** across other in-flight PRs when a
@@ -270,6 +282,7 @@ session, so an unattended resume advances existing PRs rather than starting new 
 - [references/workflow.md](references/workflow.md) — Canonical autonomous pipeline (Direct context for Single mode, Orchestrated context for Batch implementers)
 - [references/batch.md](references/batch.md) — Batch mode dependency graph, dispatch, and failure handling
 - [references/batch-reentry.md](references/batch-reentry.md) — Resuming an integration-mode batch in a fresh session: the artifacts state is re-derived from, concurrent-session detection, and the idempotency rules
+- [references/model-selection.md](references/model-selection.md) — Batch dispatch's content-based implementer tiers: the classification rubric, the default mapping, the classes never dispatched cheaply, and the repository override
 - [references/review-gates.md](references/review-gates.md) — Two-stage review procedure (Stage 1 spec compliance, Stage 2 code quality, Stage 2.5 pattern propagation)
 - [references/automated-review.md](references/automated-review.md) — Responding to repository-configured automated (bot/AI) reviewers before the draft → ready flip
 - [references/harvesting.md](references/harvesting.md) — Post-PR promotion of generalizable decisions into repository agent instructions or user-level configuration
