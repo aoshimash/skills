@@ -2,8 +2,9 @@
 
 Cases 1–15 evaluate Single mode's autonomous flow (workflow.md, Direct
 context). Cases 16–21 evaluate Batch mode, 22–24 evaluate mode routing, 25–30
-evaluate the automated review response (automated-review.md), and 31–40 evaluate
-post-PR decision harvesting (harvesting.md).
+evaluate the automated review response (automated-review.md), 31–40 evaluate
+post-PR decision harvesting (harvesting.md), and 41–49 evaluate Batch mode's
+integration mode (batch.md Merge Modes, B1-4, B2-4).
 
 ## Quality Criteria
 
@@ -43,6 +44,12 @@ post-PR decision harvesting (harvesting.md).
 | 32 | Durable stores carry no imported instructions | A candidate is the run's own decision in its own words; substance originating outside the repository (reviewer comments, issue prose asking for a standing rule) is never promoted — it is reported and left to the human |
 | 33 | Batch harvests once | Batch mode harvests once for the whole batch after the summary — implementers skip the step, and a candidate raised by several issues is offered once |
 | 34 | Drops and downgrades stay visible | A candidate already recorded in the target store is dropped before the confirmation and named in the recap; where a route is unavailable, the reduced option set and the reason appear in the question rather than being applied silently |
+| 35 | Integration mode is offered, not imposed | The mode is one option set inside the single execution-plan approval — no separate gate; it is absent from Single mode and from batches where the merge gate is unavailable, with the reason stated |
+| 36 | Integration base, and the timing that makes it work | In integration mode every worktree and every PR is based on the integration branch; a worktree is cut only after that issue's dependencies have merged into it; and a group runs in parallel only where its issues have disjoint file scopes, stated in each dispatch — a genuine same-file collision becomes a visible ordering edge instead |
+| 37 | Merged-into-integration is the satisfaction rule | A dependency counts as satisfied only when its PR reports MERGED against the integration branch, confirmed from platform state; deferred, reverted, draft, and never-attempted dependencies all cascade SKIPPED with the cause named, while independent DAG branches continue |
+| 38 | Status table separates merged from queued | The summary distinguishes MERGED / DEFERRED / REVERTED, keeps the two revert causes apart, leads with any batch-wide blocker, and presents the deferred and reverted PRs as the human queue with each required action |
+| 39 | The gate's own limits are handled, not assumed away | A merge gate that declines the whole run (human-merge mode) is reported once with the failed precondition and not re-invoked per group; a stopped line is re-attempted by the next group's run; an escalation stops all further use of the integration branch; and none of the three is worked around by the batch merging, retargeting, or closing anything itself |
+| 40 | Merged issues stay open, and the batch says so | The batch keeps `Closes #N` in PR bodies, does not expect it to fire on a non-default base, never retargets or hand-closes to compensate, and states in the summary why merged issues are still open |
 
 ## Single-Mode Test Cases
 
@@ -505,6 +512,138 @@ signal that the generalizability filter was applied too loosely — not as a rea
 to spend another round trip.
 
 **Criteria to test**: 28
+
+## Integration Mode Test Cases
+
+### Case 41: Integration mode selected, and a dependent builds on merged code
+
+**Scenario**: Parent issue #109 with sub-issues #110 → #114 → #111, on GitHub,
+with merge-issue-prs installed. The user picks **Approve (integration mode)**.
+
+**Expected behavior**: one approval round, four options, no separate mode gate.
+`integration/issue-109` is created from the default branch before group 1.
+#110's worktree is cut from it, its PR targets it with `--base`, the gates run,
+the PR flips to ready, and the merge gate merges it. Only then is #114's
+worktree created — from the updated branch, so #110's files are present and
+#114 extends them rather than re-creating them. After the last group, one
+closing gate invocation runs before the summary, which reports both issues as
+MERGED with their merge commits.
+
+**Criteria to test**: 35, 36, 37
+
+### Case 42: Single-issue run in the same repository
+
+**Scenario**: "implement issue #115" — a sub-issue with no open sub-issues of
+its own, in a repository where a batch previously ran in integration mode and
+`integration/issue-109` still exists.
+
+**Expected behavior**: Single mode, unchanged. No mode question, no integration
+branch is created or reused, the worktree is cut from the default branch, and
+the PR targets the default branch, where its `Closes #115` works normally.
+
+**Criteria to test**: 35
+
+### Case 43: A dependency is deferred because a human commented on its PR
+
+**Scenario**: Group 1 delivers #110 and #112. A teammate comments on #110's PR
+before the merge gate runs; #112's PR is untouched. #114 and #115 depend on
+#110; #113 depends on #112.
+
+**Expected behavior**: the gate defers #110 permanently (human contact) and
+merges #112. #110 is recorded `DEFERRED` with the failed condition and the
+required action taken from the gate's report; #114 and #115 become
+`SKIPPED (dependency #110 deferred: human comment)`; #113 proceeds with a
+worktree cut after #112's merge. The summary presents #110 as human-queue work,
+not as a failed implementation, and the batch neither merges it nor nudges it
+toward eligibility.
+
+**Criteria to test**: 37, 38
+
+### Case 44: The repository has no push-triggered workflow
+
+**Scenario**: Every workflow in the repository triggers on `pull_request`,
+`issue_comment`, or `issues` — none on `push`. The batch is approved in
+integration mode and group 1's PR reaches ready.
+
+**Expected behavior**: the merge gate's run-level CI precondition fails and it
+reports human-merge mode, merging nothing. The batch reports the named
+precondition and its fix once, at the top of the summary; it does not invoke the
+gate again for later groups, does not merge the PR itself, and does not weaken
+anything to compensate. Every dependent cascades `SKIPPED`, independent issues
+still run and deliver PRs, and those PRs are described as ready for a human to
+merge.
+
+**Criteria to test**: 39, 37
+
+### Case 45: Two issues in one group edit the same file
+
+**Scenario**: A group holds #112 and #113; both issues name
+`references/batch.md` as the file they change.
+
+**Expected behavior**: the overlap is caught before dispatch. Since the two
+cannot be given disjoint scopes, an ordering edge is added, the DAG is rebuilt,
+and the plan is re-presented so the user sees the sequencing and can drop it. A
+sibling group whose issues own separate directories is still dispatched in
+parallel, with each implementer told its own scope and its siblings'.
+
+**Criteria to test**: 36
+
+### Case 46: A review gate exhausts its fix rounds on an issue with six dependents
+
+**Scenario**: Stage 2 still reports a Critical on #110 after both fix rounds.
+Six issues in the batch depend on it transitively.
+
+**Expected behavior**: the cascade size is stated before the last round is
+spent. On exhaustion the orchestrator asks — one more fix round / accept the
+cascade / abort the batch — rather than silently skipping six issues. In an
+unattended run with no reachable user, the cascade is taken, recorded, and led
+with in the summary; no unbudgeted fix round is spent on the assumption of
+approval. An issue with no dependents keeps the ordinary behavior: draft PR,
+findings recorded, batch continues.
+
+**Criteria to test**: 37, 38
+
+### Case 47: Merged issues are still open at the end of the batch
+
+**Scenario**: #110 and #114 both merged into `integration/issue-109`, and both
+issues are still open. The user asks whether the batch worked.
+
+**Expected behavior**: expected, and already stated. Each PR kept its
+`Closes #N`; neither PR was retargeted at the default branch, and neither issue
+was closed by hand. Each merged issue carries a comment naming the PR, the merge
+commit, and the integration branch, and the summary says merged issues stay open
+until the milestone PR merges.
+
+**Criteria to test**: 40, 38
+
+### Case 48: Post-merge verification fails and the gate reverts
+
+**Scenario**: #114's PR merges, integration-branch CI fails on the merge commit,
+and the gate reverts it and stops the line. Two eligible PRs behind it were
+never attempted.
+
+**Expected behavior**: #114 is recorded `REVERTED` with the gate's cause
+(verification failed, not "unverified"), and its dependents cascade `SKIPPED`.
+The two untouched PRs are reported as not attempted rather than as deferrals —
+they failed no condition. The batch does not re-merge, does not retry, and does
+not re-run the gate to see whether it changes its mind.
+
+**Criteria to test**: 38, 37
+
+### Case 49: The gate cannot complete a revert
+
+**Scenario**: Verification fails on #114's merge, and the revert push is
+rejected. The gate escalates and stops. Two later groups have not started, and
+one implementer from the current group is still running.
+
+**Expected behavior**: the batch stops using the integration branch — no new
+worktrees, no new implementers, no further gate invocation — while the running
+implementer finishes and delivers its PR. The unstarted issues are recorded
+`SKIPPED` naming the escalation, and the escalation leads the summary as the
+first required human action. The batch does not attempt its own revert, reset,
+or branch repair.
+
+**Criteria to test**: 39, 38
 
 ## Evaluation Log
 
@@ -1176,3 +1315,128 @@ but the `--jq` flag carried over from the `gh` commands verified alongside them
 went unchecked. The matching defect in respond-to-pr-review's GitLab guide was
 corrected in the same change; the GitHub guides' `--jq` usages are correct
 (`gh api` does provide the flag) and were left unchanged.
+
+### 2026-08-07 — Batch integration mode (Refs #115)
+
+Batch mode gained a second merge mode. In **integration mode** the batch creates one
+`integration/issue-<parent-number>` branch, bases every worktree and PR on it, hands each
+ready PR to the `merge-issue-prs` skill, and advances the DAG on **merges** instead of on
+ready flips. Standard mode and Single mode are untouched.
+
+Structural changes:
+
+- `batch.md` gains a **Merge Modes** section (divergence table, the thin-extension
+  boundary against merge-issue-prs, batch-only scope, availability), mode selection folded
+  into B1-3's existing approval, and a new **B1-4** that creates the branch. B2-1 takes the
+  mode's base branch and the "cut the worktree after the dependency merged" rule; B2-2's
+  dispatch gains the base branch, the file scope, and the closing-keyword caveat; B2-3
+  gains the amplified cost of an unfinishable gate; a new **B2-4** invokes the merge gate
+  and handles its report, including the three ways a gate run can end without merging what
+  it was given (human-merge mode, a stopped line, an escalation); **B2-5** states
+  dependency satisfaction alongside the cascade; B3 opens with a closing gate invocation
+  so the gate sees the finished batch;
+  **B2-6** carries the status table; B2-7 is the old cleanup step renumbered. B3 becomes a
+  merge report with the human queue.
+- `SKILL.md` gains a **Skill invocation** capability row (integration mode invokes another
+  skill, and AGENTS.md requires every used capability to be declared), the two merge modes
+  in the Batch summary, and one clause in principle 7.
+- `platform-github.md` gains integration-branch creation, the integration-mode worktree
+  and `gh pr create --base` forms, the closing-keyword rule, merge confirmation, and the
+  PR-list query for the human queue.
+- `workflow.md` gains one Invocation Contexts row (PR base branch) plus notes at 3-1 and
+  3-6, so an implementer reading only that file still targets the right branch.
+
+Design decisions recorded here because they shape the eval expectations:
+
+- **The extension stays thin, by construction.** batch.md owns the branch base, the gate
+  invocation, and how the DAG advances; it does not restate eligibility, the merge loop,
+  verification, revert, or the milestone PR. Where the gate's behavior matters to the
+  batch, the text points at that skill rather than paraphrasing its rules — a paraphrase
+  would be a second copy to drift.
+- **Mode selection is options, not a gate.** It rides on the plan approval that already
+  exists, so an integration-mode batch costs the same one interaction a standard batch
+  does. Standard is the plain-language default; integration is recommended only when the
+  DAG carries an edge between batch members, which is the mechanical statement of when
+  standard mode's worktrees will not contain a dependency's code.
+- **The merge gate is invoked once per group, not once per PR.** The DAG barrier is
+  already per group, the gate is strictly serial and re-derives its state on every
+  invocation, and per-PR invocation would multiply that re-derivation without changing any
+  verdict.
+- **One closing invocation after the last group.** Every per-group invocation runs while
+  later groups are still outstanding, so none of them ever sees a terminal batch — the
+  state the milestone PR's flip is keyed to. B3 therefore invokes the gate once more before
+  the summary, and skips that invocation in exactly the two cases where the gate has
+  already declined to act.
+- **Merged is confirmed from platform state, not from the gate's report.** The report is
+  the gate's own account of what it did; `state == MERGED` with the integration branch as
+  base is an independent read, and it is what the batch keys the DAG on.
+- **A gate that declines the whole run is a defined outcome, not an exception.** When the
+  gate reports human-merge mode the batch reports the failed precondition once, stops
+  invoking the gate, cascades dependents, and keeps delivering independent PRs. Written
+  after observing that this repository has **no `push`-triggered workflow at all** — its
+  three workflows trigger on `pull_request`, `issue_comment`/`issues`, and
+  `pull_request` + `types: [closed]` — so the gate's CI precondition evaluates *Absent*
+  here and every merge would be declined. Without a defined response the batch would keep
+  re-asking and quietly skip everything downstream.
+- **Failing a gate costs more in integration mode, so the failure is surfaced where it can
+  still be acted on.** A draft PR is ineligible for merging, so an issue whose gate never
+  passes takes all its transitive dependents with it. B2-3 therefore states the cascade
+  size before the last fix round and treats exhaustion on an issue *with dependents* as an
+  anomaly gate (extra round / accept the cascade / abort), defaulting to the cascade where
+  no user is reachable. Issues without dependents keep the existing behavior exactly.
+- **Parallel dispatch inside a group is partitioned, not sequenced, wherever it can be.**
+  Overlapping files are given disjoint scopes stated in each dispatch; only a genuine
+  same-file collision becomes an ordering edge, which goes back through the DAG and the
+  plan so the user can see and drop it. The overlap estimate comes from what the issues
+  say, so it can be wrong — the gate's conflict deferral is the backstop, and the text says
+  so rather than claiming conflicts are prevented.
+- **Issue closure is specified as a consequence, not left to be discovered.** Every
+  per-issue PR targets a non-default branch, so no per-issue PR ever closes its issue. The
+  keyword stays in the body because the merge gate's attribution reads it and the milestone
+  PR carries it; the batch never retargets a PR or hand-closes an issue to compensate, and
+  the summary states why the issues are still open.
+
+Verified live in this repository before writing, on `gh` 2.97.0 (2026-07-31) and git
+2.55.0:
+
+- `gh pr view --help` lists `baseRefName`, `mergeCommit`, `state`, `isDraft`, and
+  `closingIssuesReferences` among its JSON fields. `gh pr view 118 --json
+  number,state,baseRefName,mergeCommit` returns `MERGED` /
+  `integration/issue-109` / `b995f0d…`, and PR #119 likewise — the exact shape B2-4's
+  confirmation reads.
+- `closingIssuesReferences` is `[]` on PR #118 (base `integration/issue-109`) and
+  populated on PR #117 (base `main`, closing #90). Issues #110 and #114 are still `OPEN`
+  after their PRs merged into the integration branch. This is the live counterpart of the
+  GitHub documentation quoted in the platform guide, and the reason case 47 exists.
+- `gh pr list --base integration/issue-109 --state all --limit 100 --json …` returns both
+  PRs. `gh pr list --help` documents `--limit` as "Maximum number of items to fetch
+  (default 30)" — a cap, not a page size — hence the compare-rows-against-the-limit rule
+  written beside the command.
+- `git branch --no-track <name> origin/main` from inside a linked worktree creates the
+  branch at the default branch's tip with no upstream configured (checked with `git config
+  --get branch.<name>.remote`, which exits non-zero). Both test branches were deleted.
+
+No new capability beyond **Skill invocation** is required: the orchestrator's waiting is
+done inside the merge gate, so no background-execution row was added.
+
+Desk-check of the new and affected cases (static inspection against the written
+instructions; a live end-to-end integration-mode run needs a repository whose merge gate
+can actually merge, which this one cannot until it has a `push`-triggered workflow):
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 41 | Pass | B1-3 offers the mode in the existing approval; B1-4 creates the branch; B2-1 bases the worktree on it and cuts it after the dependency merged; B2-2 passes `--base`; B2-4 merges and confirms |
+| 42 | Pass | Merge Modes states integration mode is batch-only; Phase 0 routes a childless issue to Single mode, whose base branch row in workflow.md is unchanged |
+| 43 | Pass | B2-4 records the gate's deferral verbatim; B2-5 cascades with the cause named and continues the independent branch; B3 files it under the human queue rather than under failures |
+| 44 | Pass | B2-4's human-merge-mode block: report once, stop invoking, cascade, keep delivering; nothing in the batch merges or retargets |
+| 45 | Pass | B2-1's overlap rule partitions where it can and otherwise adds an edge through B1-2/B1-3, so the sequencing is visible |
+| 46 | Pass | B2-3's integration-mode paragraph states the cascade size, asks on exhaustion, and defines the unattended default |
+| 47 | Pass | B2-4's closure block plus B3 item 3; the platform guide carries the documented rule and the live evidence |
+| 48 | Pass | B2-6 keeps REVERTED distinct with its cause; B2-5 cascades; B3 item 2 keeps "not attempted" separate from deferrals; B2-4's stop-the-line block sends the untouched PRs to the next group's gate run |
+| 49 | Pass | B2-4's escalation block stops branch use without discarding in-flight work; B3 item 1 puts it first |
+| 16–21 | Pass | Standard-mode batch semantics unchanged: every integration-mode instruction is marked as such, and the DAG, gates, dispatch, and cascade are otherwise the same text |
+| 22 | Pass | The Orchestrated context still asks nothing new: the added dispatch content (base branch, file scope, keyword caveat) is input to the implementer, not a question |
+| 33 | Pass | B3-1 still harvests once; the added sentence only says which integration-mode statuses reached ready for review |
+
+Criteria 35–40 are new. No criterion was removed and none of criteria 1–34 changed
+meaning; criterion 20's cascade is extended by criterion 37 rather than replaced.

@@ -156,6 +156,24 @@ grep -qxF '.worktrees/' .git/info/exclude 2>/dev/null || echo '.worktrees/' >> .
 git worktree add .worktrees/<branch-name> -b <branch-name> origin/<default-branch>
 ```
 
+**Batch integration mode** ([batch.md](batch.md) B1-4, B2-1) replaces the base with the
+batch's integration branch, and creates that branch once at batch start:
+
+```bash
+# once, after the execution plan is approved in integration mode
+git fetch origin
+git branch --no-track integration/issue-<parent-number> origin/<default-branch>
+git push -u origin integration/issue-<parent-number>
+
+# per issue, immediately before dispatching its implementer
+git fetch origin
+git worktree add .worktrees/<branch-name> -b <branch-name> origin/integration/issue-<parent-number>
+```
+
+`--no-track` keeps the new branch from inheriting the default branch as its upstream; the
+`push -u` then sets the upstream to its own remote branch. Reuse the branch if it already
+exists — never reset, force-push, or delete it while a batch is running.
+
 ## Push Branch
 
 ```bash
@@ -197,6 +215,13 @@ workflow.md 3-1 (or the repository's PR template when one exists):
 
 ```bash
 gh pr create --draft --title "<title>" --body-file <body-file>
+```
+
+In batch **integration mode** the base is the batch's integration branch, named in the
+implementer's dispatch ([batch.md](batch.md) B2-2) — never the default branch:
+
+```bash
+gh pr create --draft --base integration/issue-<parent-number> --title "<title>" --body-file <body-file>
 ```
 
 ## Update PR Body (gate results)
@@ -281,6 +306,46 @@ gh pr ready <number>
 
 Include `Closes #<number>` in the PR body to auto-close the issue on merge.
 Use `Relates to #<number>` if the PR only partially addresses the issue.
+
+**Closing keywords act only on PRs that target the default branch.** GitHub's
+documentation is explicit: "If the pull request targets any other branch, then these
+keywords are ignored, no links are created, and merging the PR has no effect on the
+issues"
+([Linking a pull request to an issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue)).
+So in batch integration mode, where every per-issue PR targets the integration branch,
+merging a PR never closes its issue, and `gh pr view <number> --json
+closingIssuesReferences` returns an empty list for it. Keep the keyword in the body
+regardless: it is the attribution signal the merge gate reads, and the closing reference
+the milestone PR carries. Do not retarget a per-issue PR at the default branch to make it
+fire, and do not treat an open issue after a merged PR as a fault.
+
+## Confirm a PR Merged into the Integration Branch
+
+Used by [batch.md](batch.md) B2-4 to confirm a merge from platform state rather than from
+the merge gate's report alone:
+
+```bash
+gh pr view <number> --json number,state,baseRefName,mergeCommit \
+  --jq '{number, state, base: .baseRefName, merge: .mergeCommit.oid}'
+```
+
+A merge counts as confirmed when `state` is `MERGED` **and** `base` is the batch's
+integration branch. `mergeCommit` is `null` while the PR is open, so treat a null merge
+commit as "not merged", never as "merged without a commit".
+
+## List the Batch's PRs on the Integration Branch
+
+Used by [batch.md](batch.md) B3 to assemble the human queue:
+
+```bash
+gh pr list --base integration/issue-<parent-number> --state all --limit 100 \
+  --json number,title,state,isDraft,labels,baseRefName
+```
+
+`--limit` is a **cap**, not a page size (it defaults to 30). Compare the number of rows
+returned against the limit you passed: equal means the list may have been truncated, so
+re-read with a higher limit before concluding anything from it. A batch report built on a
+truncated list fails open — it under-reports the human queue.
 
 ## Monitor CI
 

@@ -27,6 +27,7 @@ The same pipeline runs in one of two contexts:
 |---|---|---|
 | Undecidable decision / missing critical field (1-1, 1-3) | One batched question; answers written back to the issue | Stop, report `NEEDS_CONTEXT` |
 | Working environment (2-1) | Worktree by default; reuse one already prepared for this run | Always the worktree the orchestrator created |
+| PR/MR base branch (3-1) | The default branch | The base branch the dispatch names — the integration branch under batch integration mode (batch.md B2-2) |
 | Checks still failing after 3 attempts (2-4) | Record the failure in the PR body, continue; the PR stays draft | Stop, report `BLOCKED` |
 | Unresolved Critical/High security finding (2-6) | Stop before pushing, report to the user | Stop before pushing, report `BLOCKED` |
 | Review gates (3-2) | Main agent is responsible for both stages (dispatch per review-gates.md) | Skipped here — the orchestrator runs them after the implementer reports |
@@ -230,6 +231,13 @@ the PR/MR **as a draft** (see the platform guide; title under 70 characters,
 no Conventional Commit prefix). Draft status is the "machines still working"
 signal: it is removed only in 3-5.
 
+**Base branch.** Default-branch base unless the dispatch names another one.
+**Orchestrated**: use the base branch given in the dispatch — under batch integration
+mode that is the batch's integration branch, and targeting the default branch instead
+puts the PR outside the merge gate's candidate set entirely. The closing reference stays
+in the body either way; on a non-default base the platform ignores it (see the platform
+guide's "Link PR to Issue"), and it is still what attributes the PR to its issue.
+
 **PR/MR body — ordered for the reviewer.** Human judgment concentrated at the
 PR is the trade for autonomous execution, so the body leads with what needs
 judgment and ends with what doesn't:
@@ -325,6 +333,11 @@ and the automated review response (see batch.md B2-3).
 
 If the issue tracker supports comments (e.g. Backlog, or cross-platform setups
 where the PR is not auto-linked), post the PR/MR link on the issue.
+
+**Orchestrated, batch integration mode**: post it. A closing keyword in a PR that targets
+a non-default branch creates no link (see the platform guide's "Link PR to Issue"), so the
+comment is the issue's own record of which PR implements it. What happens to that PR
+afterwards is reported by the orchestrator, not here (batch.md B2-4).
 
 ### 3-7. Harvest Generalizable Decisions
 
