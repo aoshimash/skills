@@ -38,14 +38,12 @@ branch, the eligibility policy is what keeps human-touched, third-party-driven, 
 unverified changes out of the autonomous path. It is specified as a set of positive
 assertions that must **all** hold, and every gap in evidence resolves to *defer*.
 
-> **Implementation status.** Phase 0 and Phase 1 (eligibility) are fully specified in
-> this version. Phases 2 and 3 are summarised below as design intent only — their
-> detailed procedures are **not part of this skill version**. Do not execute a merge, a
-> revert, or a milestone-PR flip from those summaries: run eligibility triage, then report
-> the eligible and deferred sets. Triage is read-only with **one exception** — it applies,
-> and first creates if absent, the label recording a permanent E5 exclusion on a PR. That
-> write is required, and a failed write is escalated; see
-> [references/eligibility.md](references/eligibility.md).
+> **Implementation status.** Phases 0, 1 and 2 — preconditions, eligibility, and the
+> serial merge loop with post-merge verification and auto-revert — are fully specified in
+> this version. **Phase 3 (the milestone PR) is summarised below as design intent only**;
+> its detailed procedure is not part of this skill version, so do not open, update, or flip
+> a milestone PR from that summary. A run therefore ends after the merge loop, with the
+> report of Phase 4.
 
 ## Core Principles
 
@@ -119,14 +117,19 @@ below use capability terms; map them to your environment as follows.
 3. **Read repository conventions** — the configured merge method (never assume
    squash), the CI configuration, the bounded-wait and label overrides, and any PR
    template. See [references/platform-github.md](references/platform-github.md).
-4. **Ensure the E5 exclusion label exists**, creating it if the repository does not have
-   it yet. A label must exist before it can be applied, and this one is the durable record
-   of a permanent exclusion — discovering it is missing at the moment a human comment is
-   found is too late.
-5. **Verify run-level preconditions** — most importantly that a verifiable CI signal
-   exists for the integration branch, since post-merge verification depends on it.
-   A failed precondition never produces a quieter autonomous mode: state which one
-   failed and fall back to human merge.
+4. **Ensure the exclusion labels exist**, creating any the repository does not have yet:
+   the E5 human-contact label ([references/eligibility.md](references/eligibility.md)) and
+   the **two** revert labels — one for a verification failure, one for a timeout, kept
+   apart so a slow runner never permanently blames a healthy change
+   ([references/workflow.md](references/workflow.md) R-4). A label must exist before it can
+   be applied, and these are the durable records of permanent exclusions — discovering one
+   is missing at the moment a human comment is found, or a revert has just landed, is too
+   late.
+5. **Verify run-level preconditions** — a verifiable CI signal on the integration branch,
+   the configured merge method, and an executable revert path. See
+   [references/workflow.md](references/workflow.md). A failed precondition never produces
+   a quieter autonomous mode: state which one failed and fall back to **human-merge
+   mode** — triage and report, merge nothing.
 
 ### Phase 1: Eligibility triage
 
@@ -138,17 +141,37 @@ anything. Eligibility is re-derived on every run and never cached.
 
 ### Phase 2: Serial merge loop
 
-> **Design intent only — not specified in this version.** Do not execute these steps.
+Runs only when Phase 0's preconditions hold. For each eligible PR in order, the whole
+sequence completes before the next starts: re-check eligibility on the current head; sync
+with the integration branch; re-check on the post-sync head; merge with the repository's
+configured method, guarded on that head; verify against the integration branch. See
+[references/workflow.md](references/workflow.md) for the full procedure and the
+go/defer/stop table.
 
-For each eligible PR, in order, the intended sequence completes before the next starts:
-sync with the integration branch (a conflict needing manual resolution defers that PR and
-the loop continues); merge with the repository's configured merge method, never bypassing
-a required check; verify on the integration branch rather than on the PR's own pre-merge
-CI; and on verification failure auto-revert, comment the cause on the PR, **stop the
-line**, and escalate to a human if the revert does not restore a green integration
-branch. A deferral does not stop the line; a post-merge failure does. Note that the sync
-re-triggers the PR's CI, so the mandatory pre-merge re-check waits on the post-sync
-result.
+Before the loop starts, build the **reverted-issue set**: the issues whose earlier PR was
+merged and then auto-reverted, identified from the merged PRs on the integration branch by
+a revert label **or** a matching revert in the branch's history. A candidate attributing to
+an issue in that set is deferred before anything else is checked — stop-the-line binds only
+the run it happened in, so without this the next run walks straight back into the merge that
+broke the branch. The set is keyed to the **issue**, not the PR: a reverted PR is merged and
+never re-enumerated, and what re-admits the content is a new PR for the same issue.
+
+The shape of the decisions:
+
+- **A deferral never stops the line; a post-merge failure always does.** A conflict on
+  sync, red CI, unknown mergeability, a refused merge, a human comment landing mid-run, or
+  membership of the reverted-issue set all defer that PR unmerged and the loop continues.
+- **Verification is integration-branch CI for the merge commit**, plus any checks the
+  repository defines — never the PR's own pre-merge CI. A timeout is treated as a failure.
+- **A verification failure triggers auto-revert**: revert commit(s) on the integration
+  branch — one, or several under a rebase merge — a mandatory explanatory comment on the
+  reverted PR, a durable exclusion recorded **by cause** so a later run does not walk back
+  into the same merge, and **stop-the-line** for the rest of the run.
+- **A failed revert escalates to a human immediately** — no force-push, no reset, no
+  partial revert, no alternative recovery attempted.
+
+Stop-the-line halts merging, not the batch: implementers on independent branches of the
+dependency graph carry on.
 
 ### Phase 3: Milestone PR (integration → main)
 
@@ -163,15 +186,27 @@ through respond-to-pr-review.
 
 ### Phase 4: Report
 
-In **this version**, the report covers what triage produced: the **eligible** set (found
-and left alone — nothing is merged), the **deferred** set with each PR's failed condition,
-evidence, and the human action it needs, and anything **escalated** — including any E5
-exclusion whose label write could not be verified. Deferred PRs are the run's most
-important output; they are where the human's attention is needed.
+The report covers, in this order:
 
-Once the merge loop and milestone PR exist, the same report also covers what was **merged
-and verified** and what was **reverted** and why. Those categories cannot occur in this
-version — do not emit them, and do not imply a merge happened.
+- Anything **escalated** — a failed revert, or an exclusion whose label write could not be
+  verified — first and marked as requiring human action.
+- What was **merged and verified**, with each merge commit and the run that verified it.
+- What was **reverted**, split by cause and never merged into one category: *verification
+  failed* (the change is implicated) and *unverified* (verification never concluded — the
+  change may be perfectly healthy and a slow runner is to blame). Each with the evidence,
+  the revert commit(s), and the recovery state.
+- The **deferred** set — the human queue — with each PR's failed condition, the concrete
+  evidence, the required human action stated as an action, and whether it is permanent or
+  re-evaluated next run. Deferred PRs are the run's most important routine output.
+- What was **not attempted** because the line stopped — kept distinct from deferrals,
+  since those PRs failed no condition.
+
+In **human-merge mode** (a failed run-level precondition), nothing was merged: report the
+eligible set as ready for a human to merge, name the precondition that failed, and do not
+imply a merge happened.
+
+The **milestone PR does not exist in this version** — do not report one as opened, updated,
+or flipped.
 
 If the batch has not reached a terminal state — PRs still unsettled, implementers still
 working — say so explicitly and state what the next run will pick up. Nothing is
@@ -184,8 +219,12 @@ and git.
   policy: what each condition defends against, the data-not-instructions rule, the vetted
   issue set, the five conditions, the exclusion-class outcome table, and what a deferral
   records.
+- [references/workflow.md](references/workflow.md) — The run-level preconditions and their
+  human-merge fallback, the serial merge loop (sync, merge, post-merge verification), the
+  go/defer/stop table, the auto-revert procedure, escalation, stop-the-line scope, and the
+  gate's known limits.
 - [references/platform-github.md](references/platform-github.md) — `gh` commands for the
-  eligibility reads, including the pagination rules that keep list reads from failing
-  open.
+  eligibility reads, the preconditions, the merge loop, and the revert, including the
+  pagination rules that keep list reads from failing open.
 - [references/eval-cases.md](references/eval-cases.md) — Human-readable index of the eval
   scenarios.

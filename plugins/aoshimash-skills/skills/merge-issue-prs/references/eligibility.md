@@ -1,17 +1,17 @@
 # Eligibility Policy
 
 > **Implementation status.** This policy — Phase 1 triage, and the Phase 0 setup it
-> depends on — is fully specified. The **merge loop it feeds is not part of this skill
-> version.** Produce the eligible/deferred decision and report it; do not merge, sync,
-> revert, or flip anything. Where the text below describes what happens to an eligible PR
-> downstream, that is design intent for a later version, not an instruction to act on now.
-> Triage does perform one write: the E5 exclusion label (see "Recording permanence").
+> depends on — is fully specified, and so is the merge loop it feeds
+> ([workflow.md](workflow.md)). What is **not** part of this skill version is the Phase 3
+> milestone PR: do not open, update, or flip one. Triage itself performs one write, the E5
+> exclusion label (see "Recording permanence"); the merge loop performs the rest.
 
 The procedure behind Phase 1. It decides, for one PR, exactly one of two outcomes:
 
 - **ELIGIBLE** — every condition below was affirmatively established from platform
-  state. In a version with the merge loop, the PR would enter it; in this version it is
-  reported as eligible and left alone.
+  state. The PR enters the merge loop, where it is re-checked in full immediately before
+  its merge ([workflow.md](workflow.md) 2-1). Eligibility is a licence to attempt a merge,
+  not a decision that one will happen: the loop has its own deferral rules.
 - **DEFERRED** — at least one condition was not established. The PR is **not merged**,
   the failed condition and its evidence are recorded, and the run continues with the
   next PR.
@@ -325,9 +325,11 @@ Overall:
   still produce a PR with no checks, so neither check subsumes the other.
 
 **The bounded window.** Waiting is capped so an unattended run cannot hang: **15 minutes
-per PR** by default, re-reading at a sensible interval, overridable by the repository's
-agent instructions. It is a per-PR cap, not a per-run one. A PR that has not settled when
-the window closes is deferred, not merged.
+per PR** by default, re-reading at a sensible interval, overridable as `ci_wait_window` in
+the repository's agent instructions. It is a per-PR cap, not a per-run one. A PR that has
+not settled when the window closes is deferred, not merged. Enforce the cap by polling
+against a wall-clock deadline — a blocking watch command with no timeout would defeat it
+(see [platform-github.md](platform-github.md)).
 
 ### E5 — No human comment or review
 
@@ -429,11 +431,21 @@ because state moves between runs: CI turns green, gates finish, and — most imp
 a human comments. A PR eligible ten minutes ago is re-checked immediately before its
 merge, so a human who comments during the run wins the race by default.
 
-One interaction to expect once the merge loop exists: syncing a PR with the integration
-branch before merging pushes a new head commit, which re-triggers CI and returns the
-rollup to a running state. The pre-merge re-check must therefore wait for the *post-sync*
-checks within the bounded window rather than reading the pre-sync result — and defer if
-they do not settle in time. (Design intent; no merge or sync happens in this version.)
+One interaction with the merge loop: syncing a PR with the integration branch before
+merging pushes a new head commit, which re-triggers CI and returns the rollup to a running
+state. The pre-merge re-check must therefore wait for the *post-sync* checks within the
+bounded window rather than reading the pre-sync result — and defer if they do not settle
+in time. See [workflow.md](workflow.md) 2-2.
+
+The loop also applies **one exclusion of its own**, outside these five conditions: a PR
+attributing to an issue whose earlier PR was merged and then auto-reverted is deferred
+before any condition is read ([workflow.md](workflow.md) 2-1). That set is built from a
+revert label **or** a matching revert in the integration branch's history — never the label
+alone, since stripping a label needs only triage access. It is not a sixth eligibility
+condition — it records what happened *after* a PR was found eligible, and it is keyed to
+the **issue** rather than the PR, because a reverted PR is merged and therefore never
+enumerated as a candidate again — but it is checked in the same place and cleared the same
+way, by a human.
 
 ## Known limits
 
