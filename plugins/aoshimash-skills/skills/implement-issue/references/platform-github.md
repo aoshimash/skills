@@ -156,6 +156,40 @@ grep -qxF '.worktrees/' .git/info/exclude 2>/dev/null || echo '.worktrees/' >> .
 git worktree add .worktrees/<branch-name> -b <branch-name> origin/<default-branch>
 ```
 
+**Batch integration mode** ([batch.md](batch.md) B1-4, B2-1) replaces the base with the
+batch's integration branch, and creates that branch once at batch start:
+
+```bash
+# once, after the execution plan is approved in integration mode
+git fetch origin
+if git show-ref --verify --quiet refs/remotes/origin/integration/issue-<parent-number>; then
+  : # already exists — reuse as-is; create nothing, push nothing
+else
+  git branch --no-track integration/issue-<parent-number> origin/<default-branch>
+  git push -u origin integration/issue-<parent-number>
+fi
+
+# per issue, immediately before dispatching its implementer
+git fetch origin
+git worktree add .worktrees/<branch-name> -b <branch-name> origin/integration/issue-<parent-number>
+```
+
+The existence probe is not optional: `git branch` on a name that already exists fails with
+`fatal: a branch named '<name>' already exists` and exit 128, and pushing a freshly cut
+branch over a remote branch that has advanced is rejected non-fast-forward — so the create
+path cannot double as the reuse path. `--no-track` keeps the new branch from inheriting the
+default branch as its upstream; the `push -u` then sets the upstream to its own remote
+branch. Never reset, force-push, or delete the branch while a batch is running.
+
+To report what a reused branch already carries (batch.md B1-3, as a plan input — B1-4 acts
+on what the plan established rather than discovering it), compare it against the default
+branch — `ahead_by` and `behind_by` are reported independently, so a branch can be both:
+
+```bash
+gh api repos/{owner}/{repo}/compare/<default-branch>...integration/issue-<parent-number> \
+  --jq '{ahead: .ahead_by, behind: .behind_by, status: .status}'
+```
+
 ## Push Branch
 
 ```bash
@@ -197,6 +231,13 @@ workflow.md 3-1 (or the repository's PR template when one exists):
 
 ```bash
 gh pr create --draft --title "<title>" --body-file <body-file>
+```
+
+In batch **integration mode** the base is the batch's integration branch, named in the
+implementer's dispatch ([batch.md](batch.md) B2-2) — never the default branch:
+
+```bash
+gh pr create --draft --base integration/issue-<parent-number> --title "<title>" --body-file <body-file>
 ```
 
 ## Update PR Body (gate results)
@@ -281,6 +322,202 @@ gh pr ready <number>
 
 Include `Closes #<number>` in the PR body to auto-close the issue on merge.
 Use `Relates to #<number>` if the PR only partially addresses the issue.
+
+**Closing keywords act only on PRs that target the default branch.** GitHub's
+documentation is explicit: "If the pull request targets any other branch, then these
+keywords are ignored, no links are created, and merging the PR has no effect on the
+issues"
+([Linking a pull request to an issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue)).
+So in batch integration mode, where every per-issue PR targets the integration branch,
+merging a PR never closes its issue, and `gh pr view <number> --json
+closingIssuesReferences` returns an empty list for it. Keep the keyword in the body
+regardless: it is the attribution signal the merge gate reads, and the closing reference
+the milestone PR carries. Do not retarget a per-issue PR at the default branch to make it
+fire, and do not treat an open issue after a merged PR as a fault.
+
+## Confirm a PR Merged into the Integration Branch — and Was Not Reverted
+
+Used by [batch.md](batch.md) B2-4 to confirm a merge from platform state rather than from
+the merge gate's report alone. **Two reads, both required.**
+
+**1. The merge.**
+
+```bash
+gh pr view <number> --json number,state,baseRefName,mergeCommit,labels \
+  --jq '{number, state, base: .baseRefName, merge: .mergeCommit.oid,
+         labels: [.labels[].name]}'
+```
+
+`state` must be `MERGED` and `base` must be the batch's integration branch. `mergeCommit`
+is `null` while the PR is open, so treat a null merge commit as "not merged", never as
+"merged without a commit".
+
+**2. The revert check — this is what makes the first read mean anything.** An auto-revert
+adds a *new commit on top* of the branch; it does not reopen the PR or change its base. A
+PR whose merge was reverted therefore still reports `MERGED` against the integration
+branch, and a check that stops at read 1 would report reverted work as merged and let a
+dependent branch from a base that no longer contains it. A merge counts only when
+**neither** revert signal is present:
+
+```bash
+# a. a revert label on the PR (read from the `labels` field above; the merge gate's
+#    defaults, both overridable in the repository's agent instructions)
+#      merge-gate:reverted    — verification failed
+#      merge-gate:unverified  — nothing verified it
+
+# b. a revert of this merge commit in the branch's history — fetch first, or a stale
+#    remote-tracking ref makes this half silently miss
+git fetch origin
+git log origin/integration/issue-<parent-number> --grep="This reverts commit <mergeCommit>" --oneline
+```
+
+Either signal present → **not merged** for the batch's purposes. Both are needed because
+they fail differently: a label can be stripped by anyone with triage access, and the
+history signal survives only while the branch keeps the revert commit. This is the same
+pair the merge gate uses to build its own reverted-issue set — reuse it rather than
+inventing a third rule.
+
+## List the PRs on the Integration Branch
+
+Used by [batch.md](batch.md) B3 to check that the merge gate's report **covers** every PR
+on the branch, before the human queue is published. This checks coverage only — the reason
+for each verdict comes from the report, never from re-deriving it here:
+
+```bash
+gh pr list --base integration/issue-<parent-number> --state all --limit 100 \
+  --json number,title,state,isDraft,labels,baseRefName
+```
+
+`--limit` is a **cap**, not a page size (it defaults to 30). Compare the number of rows
+returned against the limit you passed: equal means the list may have been truncated, so
+re-read with a higher limit before concluding anything from it. A coverage check built on a
+truncated list fails open — it under-reports the human queue.
+
+## Re-derive a Batch's State (re-entry)
+
+Used by [batch-reentry.md](batch-reentry.md) to rebuild a batch's state in a session that
+has no memory of it. Every read here is read-only.
+
+**1. Find the integration branch when its name cannot be computed** (batch-reentry.md R2).
+`integration/issue-<parent-number>` is derivable from a parent-issue batch source;
+`integration/<date>-<slug>`, used for a milestone, a label, or a manual list, is not — its
+date is the day the first session ran. Enumerate instead, and match on the slug:
+
+```bash
+git fetch origin --prune
+git ls-remote --heads origin 'refs/heads/integration/*'
+```
+
+`git ls-remote` returns the complete ref list in one response, so no pagination rule
+applies to it. Corroborate a candidate by checking that read 2 returns PRs attributing to
+this batch's issues; more than one surviving candidate is a stop, never a guess.
+
+When **no** ref matches, that is not yet a fresh batch — a deleted branch leaves no ref
+either. Look for the PRs it would have left behind before concluding anything:
+
+```bash
+gh pr list --state all --limit 200 \
+  --json number,state,baseRefName,headRefName,body \
+  --jq '[.[] | select(.baseRefName | startswith("integration/"))]'
+```
+
+The filter is client-side, so `--limit` caps what is **fetched** while the `--jq` above
+emits only what *matched* — comparing that number against the limit checks nothing. Compare
+the **fetched** count against the limit, and raise the limit until it is strictly below:
+
+```bash
+gh pr list --state all --limit 200 --json number --jq 'length'   # must be < 200
+```
+
+PRs
+whose base is an `integration/` branch and which attribute to this batch's issues mean the
+branch existed and is gone ([batch-reentry.md](batch-reentry.md) R2).
+
+**2. Every PR based on the integration branch, in any state** — the primary artifact, and
+the same result serves the recency check, the per-issue mapping, and the gate budget:
+
+```bash
+gh pr list --base <integration-branch> --state all --limit 200 \
+  --json number,title,state,isDraft,baseRefName,headRefName,createdAt,mergeCommit,labels,body
+```
+
+`state` is `OPEN` / `MERGED` / `CLOSED`. `mergeCommit` is `null` while a PR is open and
+carries `.oid` once it merged. `body` carries the Gate Results section, which is where a
+resumed run reads each stage's remaining fix rounds — never a verdict it may act on
+([batch-reentry.md](batch-reentry.md) R6). Apply the truncation rule of
+[List the PRs on the Integration Branch](#list-the-prs-on-the-integration-branch) — a row
+count equal to `--limit` means the read may be short, and a short read here fails **open**:
+a hidden PR is one re-entry would re-implement.
+
+`createdAt`, not `updatedAt`, is the recency field. `updatedAt` moves on any comment or
+label change, including from the repository's own automated reviewers, so keying on it
+would stop every unattended run in a repository with routine bot activity.
+
+**3. The milestone PR** — the integration branch as the **head**, not the base:
+
+```bash
+gh pr list --head <integration-branch> --base <default-branch> --state all \
+  --limit 200 --json number,state,isDraft,url,title,body
+```
+
+This read survives the branch's deletion: `--head` matched a PR whose head branch had
+already been deleted when this was checked against this repository on 2026-08-07 (PR #120,
+head `feat/115-integration-mode`, absent from `git ls-remote --heads origin`). That is what
+lets a merged milestone be distinguished from a batch that never started, both of which
+present as "the integration branch does not exist". `body` carries the
+`## Needs Human Attention` section, where the merge gate records an escalation that has to
+outlive the session it was reported to. The same truncation rule applies — `--limit` is a
+cap, and a row count equal to it means the read may be short.
+
+**4. Remote branches an earlier session pushed** — including per-issue branches that never
+became a PR:
+
+```bash
+git ls-remote --heads origin
+```
+
+As in read 1, `git ls-remote` returns the complete ref list in one response, so no
+pagination rule applies. Match the batch's branch naming (`<type>/<issue-number>-…`)
+against read 2: a branch with no PR is an orphan
+([batch-reentry.md](batch-reentry.md) R7), never a base to build on.
+
+**5. Timestamps for the recency check** ([batch-reentry.md](batch-reentry.md) R3). GitHub
+returns `createdAt` as ISO-8601 UTC with a `Z` suffix, and such timestamps compare
+lexicographically without conversion. `git log --format=%cI` does **not** — it carries the
+local offset (`2026-08-07T15:21:25+09:00`), which sorts wrongly against a `Z` string.
+Normalize the integration branch's head and the per-issue branch heads into that shape:
+
+```bash
+git fetch origin --prune
+
+# the integration branch's head time
+TZ=UTC0 git log -1 --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ \
+  origin/<integration-branch>
+
+# every remote branch head time in one pass — ref name and time together
+TZ=UTC0 git for-each-ref \
+  --format='%(refname:short) %(committerdate:format-local:%Y-%m-%dT%H:%M:%SZ)' \
+  --exclude=refs/remotes/origin/HEAD \
+  'refs/remotes/origin/**'
+
+# now, for the comparison
+date -u +%Y-%m-%dT%H:%M:%SZ
+```
+
+**The pattern needs `**`, not `*`.** `for-each-ref` matches with pathname semantics, so a
+single `*` does not cross a `/` — and every branch in this convention is
+`<type>/<issue-number>-<slug>`, which contains one. Run against this clone on 2026-08-07,
+`'refs/remotes/origin/*'` returned 2 refs (`origin`, `origin/main`) while
+`'refs/remotes/origin/**'` returned all 10, including `origin/feat/112-resumable-reentry`
+and `origin/integration/issue-109`. The single-star form fails **open**: it silently drops
+every per-issue branch from the recency comparison, and a just-pushed branch with no PR yet
+is exactly the signal R3 needs it for. `--exclude` drops `refs/remotes/origin/HEAD`, which
+`for-each-ref` otherwise prints as `origin` — a symbolic ref to the default branch, not a
+batch artifact.
+
+`git ls-remote` returns SHAs rather than times, which is why the per-branch times come from
+`for-each-ref` over freshly fetched remote-tracking refs. Filter its output down to the
+branches matching this batch's per-issue naming, over the issue set R1 established.
 
 ## Monitor CI
 

@@ -4,13 +4,13 @@ description: >
   Read platform issues (GitHub/GitLab/Backlog), analyze the codebase,
   implement autonomously, and open review-first pull/merge requests: draft
   PR with decisions logged in the body, two-stage review (spec compliance,
-  then code quality), a pre-push security review, an automatic response to the
-  repository's own bot/AI reviewers, and a flip to ready-for-review once gates,
-  CI, and those reviewers are done. Implements a single issue end to
-  end with zero routine questions by default; when given a parent issue, a
-  milestone, a label, or a list of issues, offers batch implementation with
-  a dependency graph, git worktrees, and parallel agent instances where the
-  environment supports them (sequential otherwise). Use when the user says
+  then code quality), a pre-push security review, an automatic response to
+  the repository's bot/AI reviewers, and a flip to ready-for-review once
+  gates, CI, and those reviewers are done. Implements one issue end to end
+  with zero routine questions by default; given a parent issue, milestone,
+  label, or list of issues, offers batch implementation with a dependency
+  graph, git worktrees, and parallel agent instances where supported
+  (sequential otherwise). Use when the user says
   "implement issue", "issue を実装", "issue #N を対応", "この issue をやって",
   "implement #N", "fix issue #N", "work on issue", "run sprint",
   "スプリント実行", "これらの issue を実装", "implement these issues",
@@ -64,7 +64,9 @@ parent issues, milestones, labels, or explicit lists.
    be one PR, implement incrementally with clear scope per commit.
 7. **Batch mode: the DAG is the scheduler** — Dependency-driven parallelism,
    one worktree per issue, fail fast without blocking independent issues (see
-   [references/batch.md](references/batch.md)).
+   [references/batch.md](references/batch.md)). In integration mode the DAG
+   advances on **merges** rather than on ready flips, so a dependent's worktree
+   contains its dependency's code.
 
 ## Environment Adaptation
 
@@ -75,9 +77,50 @@ below use capability terms; map them to your environment as follows.
 |---|---|---|
 | **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`, which can carry several questions in one round) | Numbered options as plain text; wait for the user's reply |
 | **Separate agent instance** — run a task in a fresh context that has not seen this conversation | Subagent dispatch (e.g. Claude Code's Task tool) | Run sequentially in the current context; for verification, mark the result `SELF-REVIEWED` in the artifact it lands in (e.g. the PR body) |
-| **Model selection** — run a separate agent instance on a chosen model | Per-instance model override (e.g. Claude Code's Task tool `model` parameter, or an agent definition's `model` frontmatter) | Run every instance on the session's default model — only the reviewer-stronger-than-implementer recommendation (see [references/review-gates.md](references/review-gates.md)) is unavailable |
+| **Model selection** — run a separate agent instance on a chosen model | Per-instance model override (e.g. Claude Code's Task tool `model` parameter, or an agent definition's `model` frontmatter) | Run every instance on the session's default model — the implementer classification is skipped entirely rather than approximated, and the reviewer-stronger-than-implementer recommendation is unavailable |
 | **Security review** — security-focused review of the pending diff | Dedicated command (e.g. Claude Code's `/security-review`) | Review the diff yourself against the checklist in [references/workflow.md](references/workflow.md) step 2-6 |
 | **User-level configuration** — a durable instruction store belonging to the user, outside any repository | User-level instruction file (e.g. `~/.claude/CLAUDE.md` on Claude Code) | No such store: cross-repository preferences cannot be promoted — offer repository scope or skip (see [references/harvesting.md](references/harvesting.md) C) |
+| **Skill invocation** — run another installed skill's procedure from this one | Skill dispatch by name (e.g. Claude Code's Skill tool) | Read that skill's `SKILL.md` and the reference files it points to from the installed skill directory, and follow them inline |
+| **Background execution** — run long commands without blocking | Background shell (e.g. Claude Code's background Bash) | Run commands sequentially |
+| **Scheduled invocation** — run this skill again later without a user present | Recurring or cron-scheduled agent runs (e.g. Claude Code's scheduled tasks) | Re-invoke manually once per session; a resumed batch re-derives its state from the tracker and git (see [references/batch-reentry.md](references/batch-reentry.md)) |
+
+The last three are used only by Batch mode's **integration mode**. *Skill invocation* and
+*background execution* serve its call into the merge-issue-prs skill
+([references/batch.md](references/batch.md) B2-4). That skill performs
+bounded waits — for a PR's checks to settle, and for post-merge verification on the
+integration branch — and those waits happen inside whatever runs it, which is this run
+wherever the invocation is inline rather than a separate process. Both waits are bounded by
+a wall-clock deadline the agent owns, not by a blocking watch command; background execution
+frees the agent during them, it does not supply the bound.
+
+*Scheduled invocation* is the **repeated-invocation operating pattern**: one invocation
+advances the batch as far as that session gets, and the next one re-derives where it
+stopped and carries on from there — within the scope limit below (batch.md B0,
+[references/batch-reentry.md](references/batch-reentry.md)). The pattern is the same
+whether the repeat is scheduled or typed by hand — same batch source, one invocation per
+session, until the milestone PR is ready — because nothing is persisted between sessions
+either way: no state file, no session memory, only the tracker and git. Scheduling removes
+the person from the loop; it is not what makes resumption work.
+
+The two differ in **scope**, not mechanism. Which issues a batch implements is settled at
+the execution-plan approval and recorded nowhere durable, so an invocation with no user
+reachable advances the work an approved plan already produced — review gates on the drafts,
+the merge gate, the reports — and **dispatches no new implementer**, naming instead whatever
+is waiting on an approval. Since that bound is artifact evidence rather than plan
+membership, an unattended run drains the group the last session dispatched and then stalls
+on the next one, even though the user approved it; a batch is advanced without ever being
+widened, and finishing one still takes a session with a user in it. That, and the rest of
+what re-derivation cannot recover, is in batch-reentry.md's Known limits.
+
+*Model selection* is used in **both** modes, for different things. Reviewers use it
+everywhere: each one runs at least at the tier of the dispatch that produced the code it is
+reviewing ([references/review-gates.md](references/review-gates.md)), which in Single mode is
+the session's own model. **Implementer** tiers are Batch-only, because batch dispatch is the
+one point where a model is chosen per unit of work: the orchestrator classifies each issue by
+**content** — mechanical work runs cheaply, judgment-heavy work does not, and uncertainty and
+the hard-exclusion classes resolve upward
+([references/model-selection.md](references/model-selection.md)). Single mode classifies
+nothing; its implementer is the session itself, on the model the user chose.
 
 ## Phase 0: Setup and Mode Selection
 
@@ -160,6 +203,29 @@ solely when the user explicitly asks for a plan gate; never by default.
 Used for a parent issue's sub-issues, a milestone, a label, or a manual list.
 See [references/batch.md](references/batch.md) for the full procedure.
 
+Batch mode runs in one of two **merge modes**, chosen inside the execution-plan
+approval — never as a separate gate, and never in Single mode:
+
+- **Standard** — every worktree and PR is based on the default branch; each PR
+  stops at ready for review and a human merges it.
+- **Integration** — the batch creates one integration branch, bases every
+  worktree and PR on it, and hands each ready PR to the **merge-issue-prs**
+  skill, which owns the whole merge lifecycle. A dependency counts as satisfied
+  only once its PR *merged into that branch and was not reverted*, so dependents
+  finally build on their dependencies' code, and human review happens once, on
+  the integration→main milestone PR that skill raises, instead of once per
+  issue. Available where that skill is installed and the repository is on
+  GitHub.
+
+An integration-mode batch is **resumable across sessions**: before the dependency graph,
+a fresh session re-derives where an earlier one stopped — from the tracker and git only,
+since nothing else persists — and then starts the batch, resumes it, or stops (see
+[references/batch-reentry.md](references/batch-reentry.md), invoked from batch.md B0).
+Existing PRs, branches, and worktrees are never recreated; a body-recorded gate verdict
+never substitutes for re-running the gate; a batch another session appears to be working
+on is not dispatched at all; and dispatching an implementer needs an approved plan every
+session, so an unattended resume advances existing PRs rather than starting new work.
+
 **Summary:**
 
 1. **Dependency graph** — collect dependencies from the platform's own
@@ -168,26 +234,45 @@ See [references/batch.md](references/batch.md) for the full procedure.
    build a DAG from the union; detect cycles and ask the user how to resolve
    them; compute parallel execution groups (topological levels); visualize the
    plan; get approval via a user choice (see Environment Adaptation) with
-   options Approve / Reorder / Abort (Reorder collects dependency-graph edits
-   and re-presents the plan — see batch.md B1-3).
+   options Approve (standard) / Approve (integration mode, when available) /
+   Reorder / Abort (Reorder collects dependency-graph edits and re-presents the
+   plan — see batch.md B1-3). The plan shows the ordering edges integration mode
+   would add for same-file collisions inside a group (batch.md B1-2), so the
+   whole schedule is settled in that one approval; the integration branch is
+   created or reused right after it (batch.md B1-4).
 2. **Execution loop** — for each group, implement its issues, each in its own
    git worktree, executing [references/workflow.md](references/workflow.md) in
    the **Orchestrated** context (see that file's Invocation Contexts). Where
    the environment supports separate agent instances, dispatch one implementer
-   per issue in parallel; otherwise implement sequentially in dependency order
-   — the DAG, review gates, and failure cascade are identical either way.
+   per issue in parallel — where model selection also exists, each on the
+   capability tier its issue's content calls for
+   ([references/model-selection.md](references/model-selection.md)); otherwise
+   implement sequentially in dependency order — the DAG, review gates, and
+   failure cascade are identical either way.
    After each draft PR is created, the orchestrator runs the two-stage review
    gates ([references/review-gates.md](references/review-gates.md)), including
    **Stage 2.5 pattern propagation** across other in-flight PRs when a
    rule-violation is found, then the **automated review response**
    ([references/automated-review.md](references/automated-review.md)) with the
    reviewer set detected once for the whole batch, and flips the PR to ready
-   when gates, CI, and that response are done.
+   when gates, CI, and that response are done. **In integration mode**, the
+   group's ready PRs then go to the merge gate (batch.md B2-4), which merges,
+   verifies, reverts, and defers; the batch records what it reports and never
+   overrides it.
    Update the DAG as issues complete; on failure, mark the issue `BLOCKED`,
    cascade `SKIPPED` to its transitive dependents, and continue with
-   independent issues.
-3. **Summary and harvest** — present a status table (issue, title, status, PR)
-   covering DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED / SKIPPED,
+   independent issues. In integration mode a dependency that was deferred,
+   reverted, or never merged cascades the same way — merged-into-integration is
+   the only satisfied state.
+3. **Summary and harvest** — in integration mode, first invoke the merge gate
+   once more with the terminal-state declaration (batch.md B3): the dispatched
+   issue set, a final status for each of its members, and the assertion that no
+   implementer is still running — only the orchestrator can supply that, and a
+   partial declaration counts as none. Then present a status table
+   (issue, title, status, PR) covering DONE / DONE_WITH_CONCERNS /
+   NEEDS_CONTEXT / BLOCKED / SKIPPED, plus MERGED / DEFERRED / NOT_ATTEMPTED /
+   REVERTED in integration mode, where the deferred and reverted PRs are the
+   human queue and merged issues stay open until the milestone PR merges;
    explain any blockers, and optionally post a summary comment on the parent
    issue. Then harvest generalizable decisions
    ([references/harvesting.md](references/harvesting.md)) **once for the whole
@@ -197,6 +282,8 @@ See [references/batch.md](references/batch.md) for the full procedure.
 
 - [references/workflow.md](references/workflow.md) — Canonical autonomous pipeline (Direct context for Single mode, Orchestrated context for Batch implementers)
 - [references/batch.md](references/batch.md) — Batch mode dependency graph, dispatch, and failure handling
+- [references/batch-reentry.md](references/batch-reentry.md) — Resuming an integration-mode batch in a fresh session: the artifacts state is re-derived from, concurrent-session detection, and the idempotency rules
+- [references/model-selection.md](references/model-selection.md) — Batch dispatch's content-based implementer tiers: the classification rubric, the default mapping, the classes never dispatched cheaply, and the repository override
 - [references/review-gates.md](references/review-gates.md) — Two-stage review procedure (Stage 1 spec compliance, Stage 2 code quality, Stage 2.5 pattern propagation)
 - [references/automated-review.md](references/automated-review.md) — Responding to repository-configured automated (bot/AI) reviewers before the draft → ready flip
 - [references/harvesting.md](references/harvesting.md) — Post-PR promotion of generalizable decisions into repository agent instructions or user-level configuration

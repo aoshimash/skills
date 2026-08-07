@@ -21,6 +21,8 @@ A review is strongest when run by a **separate agent instance** (see Environment
 
 **Reviewer model.** Where the environment supports **model selection** (see Environment Adaptation in SKILL.md), run each reviewer on a model at least as capable as — ideally more capable than — the implementer's. Well-formed issues deliberately carry no implementation detail (they record decisions and constraints, never steps), so the implementer derives the implementation plan itself; a stronger reviewer is the cheapest guard against derivation errors, especially when implementers run on a faster/cheaper model. On Claude Code, pass a `model` override when dispatching the reviewer as a subagent (e.g. an `opus`-class reviewer over `sonnet`-class implementers). Where model selection is unavailable, run reviewers on the default model — the two-stage structure and fix routing are unchanged.
 
+**What "the implementer's" means, per mode.** In **Batch mode** it is the capability tier of **the dispatch that produced the code under review** ([model-selection.md](model-selection.md)) — the tier the orchestrator classified the issue into at B2-1 for a first review, and the **strongest** tier when re-reviewing after a fix round, since fix rounds are dispatched there. Reviewers run at that tier or above, and an implementer dispatched at the **fast** tier does not get fast-tier reviewers: the cheapest tier is available for implementing work whose shape the repository already carries, not for judging whether the result is right. On a roster whose tiers resolve to distinct models, a downgraded implementer is therefore reviewed relatively more strongly; where two tiers resolve to the same model, the comparison is inert between them and nothing was saved either. In **Single mode** the implementer is the session itself, on the model the user chose, and the rule reads against that model as before — model selection is still in use here, for the reviewer. The tier is chosen per session and recorded nowhere, so both halves of the comparison come from the same session's classification — including on a resumed batch, which re-runs the gates on a still-draft PR and re-classifies for them.
+
 **Fallback when no separate agent instance is available.** Run the stage's checklist yourself and produce the stage's real verdict exactly as defined below (Stage 1: PASS/FAIL with the issue list; Stage 2: severity-tagged issue counts and PASS/NEEDS_FIXES). Then mark that verdict `SELF-REVIEWED (no independent reviewer available)`. The marker **rides on** the real result — it does not replace it — so the On-Failure fix routing (max 2 rounds, then DONE_WITH_CONCERNS in Batch / record-and-stay-draft in Single) applies unchanged. Record the marker next to the gate outcome in the PR/MR body so a human can see the independent-review guarantee did not hold.
 
 ## Stage 1: Spec Compliance Review
@@ -71,7 +73,7 @@ If spec compliance fails:
 1. Fix the issues found (in Batch mode: send the review output to the implementer, which fixes and pushes; in Single mode: the main agent fixes and pushes directly).
 2. Re-run spec compliance review.
 3. Max 2 fix rounds. If still failing:
-   - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS` and include the review output in the batch summary.
+   - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS` and include the review output in the batch summary. **In batch integration mode, an issue that has dependents does not stop here** — a draft PR never merges, so its dependents cascade to `SKIPPED`; see [batch.md](batch.md) B2-3, which turns that case into an explicit choice before the status is recorded.
    - **Single mode**: record the remaining findings in the PR body (Risk Areas and Gate Results), leave the PR/MR a **draft**, and surface the findings in the recap's review-focus areas. Do not ask the user mid-run — the draft state plus the recorded findings put the decision where it belongs, at PR review.
 
 ## Stage 2: Code Quality Review
@@ -127,7 +129,7 @@ If code quality review finds Critical or Important issues:
 1. Fix Critical and Important issues (Minor issues are optional). In Batch mode, send the review output to the implementer; in Single mode, the main agent fixes directly.
 2. Re-run code quality review.
 3. Max 2 fix rounds. If Critical issues remain:
-   - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS`.
+   - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS`. **In batch integration mode, an issue with dependents goes through [batch.md](batch.md) B2-3 first** — the cascade its unfinished PR would cause is decided explicitly rather than absorbed silently.
    - **Single mode**: record the remaining Critical findings in the PR body (Risk Areas and Gate Results), leave the PR/MR a **draft**, and surface them in the recap's review-focus areas.
 
 ## Stage 2.5: Pattern Propagation (Batch Mode Only)
