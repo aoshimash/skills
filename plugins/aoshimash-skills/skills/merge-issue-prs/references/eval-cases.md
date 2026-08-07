@@ -454,19 +454,30 @@ endpoint returns `404 Branch not protected` for the integration branch, but a re
 
 ### Case 21: Rebase-merge revert (`rebase-merge-revert-enumeration`)
 
-**Setup**: A repository whose only enabled merge method is **rebase**. PR #226 carries four
-commits; they land individually on the integration branch. Integration-branch CI for the
-resulting head concludes `failure`. `gh pr view 226 --json mergeCommit` returns a single
-commit SHA.
+**Setup**: A repository whose only enabled merge method is **rebase**. The integration
+branch already carries two earlier merges from other PRs. PR #226 was synced with the
+integration branch and then merged, landing its four commits individually.
+Integration-branch CI for the resulting head concludes `failure`. `gh pr view 226 --json
+mergeCommit` returns a single commit SHA.
 
 **Expected behavior**:
-- Recognises that under rebase the PR's commits landed **individually**, so `mergeCommit`
-  names only one of four and is **not** the revert target.
-- Enumerates the landed commits on the integration branch and reverts **each, newest
-  first**, without `-m` (they are ordinary commits, not merge commits).
-- Reconciles the enumerated count against the PR's own commit count **before** reverting,
-  and **escalates as a revert failure** if the range is ambiguous or the counts disagree,
-  rather than reverting partially.
+- Recognises that under rebase the PR's commits landed **individually**, and that
+  `mergeCommit` is the branch's new **tip** rather than the whole change — so it is **not**
+  the revert target.
+- **Names the range boundary**, which is the hard part: the landed commits are exactly
+  `pre-merge base .. merge commit`, where the pre-merge base is the integration branch head
+  **recorded immediately before the merge**. Nothing recovers that value afterwards.
+- **Rejects `git merge-base` against the PR's head branch** as a substitute: the PR was
+  synced, so that reaches back past the two earlier merges and would enumerate *other PRs'*
+  commits for reverting.
+- Reverts **each commit in the range, newest first**, without `-m` (they are ordinary
+  commits, not merge commits).
+- Reconciles the enumerated commits against the PR's own **non-merge** commits before
+  reverting, and notes that the sync must have used `--rebase` here — a default
+  merge-commit sync would leave a commit on the PR branch that never lands, so the counts
+  would disagree on every revert.
+- **Escalates as a revert failure** if no pre-merge base was recorded, the PR's commit list
+  cannot be read in full, or the counts disagree — rather than reverting partially.
 - Names the specific danger: a partial revert can still pass the recovery verification, so
   the run would report a successful recovery with most of the bad change still on the
   branch — the worst available outcome.

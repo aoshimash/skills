@@ -148,11 +148,19 @@ configured method, guarded on that head; verify against the integration branch. 
 [references/workflow.md](references/workflow.md) for the full procedure and the
 go/defer/stop table.
 
+Before the loop starts, build the **reverted-issue set**: the issues whose earlier PR was
+merged and then auto-reverted, identified from the merged PRs on the integration branch by
+a revert label **or** a matching revert in the branch's history. A candidate attributing to
+an issue in that set is deferred before anything else is checked — stop-the-line binds only
+the run it happened in, so without this the next run walks straight back into the merge that
+broke the branch. The set is keyed to the **issue**, not the PR: a reverted PR is merged and
+never re-enumerated, and what re-admits the content is a new PR for the same issue.
+
 The shape of the decisions:
 
 - **A deferral never stops the line; a post-merge failure always does.** A conflict on
-  sync, red CI, unknown mergeability, a refused merge, or a human comment landing mid-run
-  all defer that PR unmerged and the loop continues.
+  sync, red CI, unknown mergeability, a refused merge, a human comment landing mid-run, or
+  membership of the reverted-issue set all defer that PR unmerged and the loop continues.
 - **Verification is integration-branch CI for the merge commit**, plus any checks the
   repository defines — never the PR's own pre-merge CI. A timeout is treated as a failure.
 - **A verification failure triggers auto-revert**: revert commit(s) on the integration

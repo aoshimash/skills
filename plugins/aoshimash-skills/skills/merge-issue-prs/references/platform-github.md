@@ -298,15 +298,20 @@ gh api repos/{owner}/{repo} --jq '.permissions'      # {"push": true, ...}
 # BOTH protection mechanisms — they are separate systems and either can block a push.
 # 1. Classic branch protection (404 "Branch not protected" = no classic protection)
 gh api repos/{owner}/{repo}/branches/{integration_branch}/protection 2>&1
-# 2. Repository rulesets that apply to this branch ([] = none)
-gh api repos/{owner}/{repo}/rules/branches/{integration_branch}
+# 2. Repository rulesets that apply to this branch ([] = none). This is a LIST
+#    endpoint, so it takes the pagination rule above: a page-1-only read on a branch
+#    with many applicable rulesets can miss the one that restricts updates.
+gh api --paginate -X GET repos/{owner}/{repo}/rules/branches/{integration_branch} \
+  -f per_page=100
 ```
 
-Checking only the first is a fail-open: a ruleset can block direct pushes to a branch whose
-classic endpoint reports `404 Branch not protected` — both behaviours verified live against
-this repository. `push: false`, classic protection this account cannot satisfy, or a
-ruleset restricting updates to the branch, all mean the revert path is a revert PR — confirm
-that path explicitly or fail P3.
+Checking only the first is a fail-open: the two are separate systems, so a ruleset can
+restrict a branch whose classic endpoint reports `404 Branch not protected`. What was
+observed here is that both endpoints answer independently for this repository — `404` from
+the classic one and `[]` from the rulesets one; this repository has no ruleset, so the
+blocking case itself was not exercised. `push: false`, classic protection this account
+cannot satisfy, or a ruleset restricting updates to the branch, all mean the revert path is
+a revert PR — confirm that path explicitly or fail P3.
 
 ## Sync a PR with the integration branch (2-2)
 
@@ -321,8 +326,11 @@ finished computing mergeability — re-read within the bounded window; it is **n
 synonym for clean.
 
 ```bash
-# Behind but clean → update from the base (merge commit by default; --rebase to rebase)
-gh pr update-branch {pr}
+# Behind but clean → update from the base. The default creates a merge commit;
+# when P2 recorded the REBASE method, --rebase is mandatory (workflow.md 2-2):
+# a merge commit on the PR branch breaks R-1's count reconciliation.
+gh pr update-branch {pr}            # merge / squash methods
+gh pr update-branch {pr} --rebase   # rebase method
 ```
 
 The underlying endpoint is `PUT /repos/{owner}/{repo}/pulls/{pull_number}/update-branch`,
@@ -350,6 +358,14 @@ gh pr merge {pr} --merge --match-head-commit {head_sha_that_passed_the_recheck}
 - `--delete-branch` is optional and follows the repository's `delete_branch_on_merge`
   setting; do not delete a branch the loop may still need to revert from.
 
+**Record the integration branch's head immediately before merging** — the *pre-merge base*.
+Under the rebase method it is the only value that makes the revert enumerable, and nothing
+recovers it afterwards:
+
+```bash
+git fetch origin && git rev-parse origin/{integration_branch}   # {pre_merge_base}
+```
+
 Confirm from platform state, not from the exit status:
 
 ```bash
@@ -358,8 +374,13 @@ gh pr view {pr} --json state,mergeCommit,headRefOid \
 git fetch origin && git merge-base --is-ancestor {merge_sha} origin/{integration_branch}
 ```
 
-Under the **rebase** method `mergeCommit` names only one of the commits the PR landed —
-enough to confirm the merge, **not** enough to revert it. See Auto-revert below.
+Under the **rebase** method `mergeCommit` is specifically the branch's new **tip**: "If
+rebased, `merge_commit_sha` represents the commit that the base branch was updated to"
+([GitHub REST docs, "Pull requests"](https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28)).
+Two things follow: the head-equality guard at R-1 is valid under rebase, since the tip is
+exactly what the branch head should still be; and `{pre_merge_base}..{merge_sha}` is a
+correct upper bound for the landed commits. It is enough to confirm the merge, **not**
+enough to revert it. See Auto-revert below.
 
 ## Post-merge verification (2-4)
 
@@ -422,13 +443,22 @@ git -C {scratch_dir} revert -m 1 --no-edit {merge_sha}
 # squash method — one ordinary commit, no mainline selector
 git -C {scratch_dir} revert --no-edit {merge_sha}
 
-# rebase method — the PR's commits landed INDIVIDUALLY. Enumerate them, then revert
-# each newest-first. `mergeCommit` names only one of them, so reverting from it alone
-# leaves the rest of the change on the branch.
-gh pr view {pr} --json commits --jq '.commits | length'          # expected count
-git -C {scratch_dir} log --format=%H {merge_base}..{merge_sha}   # the landed commits
+# rebase method — the PR's commits landed INDIVIDUALLY. The range is the pre-merge
+# base recorded at 2-3 (the integration branch head immediately before the merge)
+# up to the merge commit. `mergeCommit` under rebase is the branch's new TIP, so
+# reverting from it alone leaves the rest of the change on the branch.
+git -C {scratch_dir} log --no-merges --format=%H {pre_merge_base}..{merge_sha}
+gh pr view {pr} --json commits --jq '[.commits[] | select(.parents|length < 2)] | length'
 git -C {scratch_dir} revert --no-edit {sha_newest} {sha_next} …  # newest first
 ```
+
+Do **not** substitute `git merge-base` against the PR's head branch for `{pre_merge_base}`:
+once the PR has been synced, that reaches back past earlier merges and would enumerate
+other PRs' commits for reverting. The recorded pre-merge base is exact because the loop
+keeps one merge in flight, so nothing else of the loop's can land inside the range — and if
+something outside the loop did (a human pushing directly between the base read and the
+merge), the count reconciliation is what catches it: the range would hold more commits than
+the PR has, which escalates rather than reverting a stranger's work.
 
 ```bash
 git -C {scratch_dir} push origin HEAD:refs/heads/{integration_branch}
@@ -438,8 +468,13 @@ git worktree remove {scratch_dir}
 `-m/--mainline <parent-number>` selects which parent's history to keep; for a merge commit
 created **on** the integration branch, parent 1 is the integration branch itself.
 
-Under rebase, **reconcile the enumerated count against the PR's own commit count before
-reverting anything.** If they disagree, or the range cannot be established, escalate as a
+Under rebase, **reconcile the enumerated count against the PR's own non-merge commit count
+before reverting anything.** Both sides exclude merge commits: 2-2 must sync with `--rebase`
+in a rebase-method repository so no merge commit reaches the PR branch, and `--no-merges` /
+the `parents` filter above enforce it either way. `--json commits` returns a paginated
+connection, so a PR large enough to be truncated yields a count that is **not established**
+— treat that as uncertain and escalate rather than reconciling against a short list. If the
+counts disagree, or the range cannot be established, escalate as a
 revert failure (workflow.md R-1) — a partial revert can still pass R-3's recovery
 verification, which would make the run report a recovery that did not happen.
 
@@ -478,17 +513,17 @@ the revert stands, but its permanence was not recorded.
 
 ### Building the reverted-issue set (2-1)
 
-The exclusion is keyed to the **issue**, because a reverted PR is `MERGED` and candidates
+The exclusion is keyed to the **issue**, because a reverted PR is `MERGED` while candidates
 are `--state open`, so a PR-keyed check could never fire — and an open PR's `mergeCommit` is
-`null` (both verified live). Build the set from the **merged** PRs on the integration
-branch, then attribute each with E1c's rules:
+`null` where a merged PR's is populated (observed here on both). Build the set from the
+**merged** PRs on the integration branch, then attribute each with E1c's rules:
 
 ```bash
 git fetch origin        # required: a stale remote-tracking ref makes the git half miss
 
 gh pr list --state merged --base {integration_branch} --limit 200 \
   --json number,headRefName,body,labels,mergeCommit \
-  --jq '.[] | {number, branch: .headRefName,
+  --jq '.[] | {number, branch: .headRefName, body,
                labels: [.labels[].name],
                merge_commit: .mergeCommit.oid}'
 
@@ -522,7 +557,12 @@ can match the revert of a *different* commit sharing the prefix.
 - unverified_label: merge-gate:unverified    # reverted after a verification TIMEOUT
 ```
 
-Every override the skill reads is in that block, and each is named at its point of use:
-`ci_wait_window` in eligibility.md E4, `verification_window` in workflow.md 2-4,
-`human_review_label` in eligibility.md E5, `reverted_label` / `unverified_label` in
-workflow.md 2-1 and R-4.
+That block is the complete set of overrides the skill reads. Each is consumed by exactly one
+rule:
+
+| Key | Read by |
+|---|---|
+| `ci_wait_window` | eligibility.md E4's bounded window |
+| `verification_window` | workflow.md 2-4's post-merge wait |
+| `human_review_label` | eligibility.md E5's permanent exclusion |
+| `reverted_label` / `unverified_label` | workflow.md 2-1 and R-4 |

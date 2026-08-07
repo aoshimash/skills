@@ -105,12 +105,13 @@ merge — not after a failure — that:
 
 1. The authenticated account has **push access** to the repository.
 2. The integration branch accepts a **direct commit**. Check **both** protection
-   mechanisms: classic branch protection *and* repository **rulesets**, which are separate
-   systems. A ruleset can block direct pushes to a branch whose classic-protection
-   endpoint reports `404 Branch not protected` — verified live against this repository —
-   so probing only the classic endpoint lets P3 pass on a branch that will reject the
-   revert push. That failure would surface as an R-2 revert failure *after* a bad merge had
-   already landed, which is exactly what confirming beforehand exists to prevent.
+   mechanisms: classic branch protection *and* repository **rulesets**. They are separate
+   systems answering independently (confirmed against this repository, which returns `404
+   Branch not protected` from one and `[]` from the other), so a ruleset can restrict a
+   branch the classic endpoint calls unprotected. Probing only the classic endpoint lets P3
+   pass on a branch that will reject the revert push — a failure that would surface as an
+   R-2 revert failure *after* a bad merge had already landed, which is exactly what
+   confirming beforehand exists to prevent.
 
 If direct pushes are refused, the revert path becomes a revert PR, which needs its own
 merge and therefore its own preconditions. Confirm that path explicitly or fail P3. **No
@@ -152,10 +153,11 @@ Stop-the-line binds only the run it happened in, so without this the next schedu
 walks straight back into the merge that broke the branch.
 
 **The exclusion is keyed to the issue, not to the PR, because a PR-keyed one cannot
-fire.** Candidates are *open* PRs on the integration branch; a reverted PR is `MERGED`,
-so it is never enumerated as a candidate again, and an open PR's `mergeCommit` is `null`
-(both verified live). A rule reading "this PR carries the revert label" or "this PR's merge
-commit was reverted" is therefore vacuous for every input it would ever see. What *is*
+fire.** Candidates are *open* PRs on the integration branch, so a reverted PR — which is
+`MERGED` — is never enumerated as a candidate again; and an open PR's `mergeCommit` is
+`null` while a merged PR's is populated (observed here on both). A rule reading "this PR
+carries the revert label" or "this PR's merge commit was reverted" is therefore vacuous for
+every input it would ever see. What *is*
 reachable — and what actually re-admits the reverted content — is a **new PR for the same
 issue**: an implement-issue re-run, or the author redoing the work. That PR carries neither
 signal and is otherwise fully eligible.
@@ -205,8 +207,12 @@ Read the PR's mergeability against the integration branch before touching it.
   ([GitHub Docs, "About merge conflicts"](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/addressing-merge-conflicts/about-merge-conflicts)).
   This skill resolves neither: it does not edit the branch, does not force anything, does
   not retarget the PR, and does not close it. A conflict is a human's to resolve.
-- **Behind but clean** → update the PR branch from the base, using the repository's
-  convention (the default update creates a merge commit; `--rebase` is the alternative).
+- **Behind but clean** → update the PR branch from the base. **When P2 recorded the rebase
+  method, the sync must rebase too.** The default update creates a merge commit on the PR
+  branch, which a rebase merge does not land as such — so R-1's count reconciliation would
+  compare a commit list containing that merge commit against landed commits that do not,
+  disagree systematically, and escalate on *every* revert in a rebase repository. Under the
+  merge and squash methods the default update is fine.
 - **Clean and current** → nothing to sync.
 
 **Why sync at all, when the platform will merge a behind-but-clean PR without it.**
@@ -235,10 +241,17 @@ settle red, or do not settle in time, **defers**. Never merge on a pre-sync resu
   required check, a review the agent cannot supply) → **defer**. Both paths defer, so a
   misread costs a deferral, never a merge.
 - **Never `--admin`, never a required-check bypass.** A refused merge is a **deferral**.
+- **Record the integration branch's head immediately before merging.** This is the
+  *pre-merge base*, and under the rebase method it is the only thing that makes the revert
+  enumerable: the landed commits are exactly `pre-merge base .. merge commit`. It has to be
+  captured here, because after the merge nothing recovers it — and the obvious substitute,
+  a merge base against the PR's head branch, reaches back past earlier merges whenever the
+  PR was synced and would enumerate *other PRs'* commits for reverting. The one-merge-in-
+  flight invariant is what makes the range exact: nothing else can land inside it.
 - **Confirm the merge from platform state, not from the command's exit status:** the PR
   reports as merged, and its merge commit is reachable from the integration branch's new
-  head. Record the merge commit SHA — it is both the verification target and the revert
-  target.
+  head. Record the merge commit SHA — it is the verification target, and with the pre-merge
+  base it defines the revert target.
 
 ### 2-4: post-merge verification
 
@@ -313,7 +326,7 @@ anyway".
 | Platform refuses the merge (head moved twice, required check, protection) | 2-3 | **defer** | continues |
 | **Verification timeout** — no run, no completion, or nothing that concluded `success`, within the window | 2-4 | **auto-revert** | **stops** |
 | **Verification failure** — a run concluded non-success, or a repo-defined check failed | 2-4 | **auto-revert** | **stops** |
-| **Revert failure** — the revert cannot be created, pushed, or verified | revert | **escalate to a human** | **stops immediately** |
+| **Revert failure** — the revert cannot be created, pushed, or verified, or (under rebase) the landed commits cannot be enumerated with certainty | revert | **escalate to a human** | **stops immediately** |
 
 ## Auto-revert
 
@@ -329,25 +342,27 @@ branch, revert what the merge landed, in the form P2's table requires:
 - **merge** — revert the merge commit against its **first parent**, the integration
   branch's own history.
 - **squash** — revert the single ordinary commit directly.
-- **rebase** — the PR's commits landed **individually**. Enumerate them on the integration
-  branch and revert **each, newest first**; `mergeCommit` names only one of them, so
-  reverting from it alone leaves most of the change on the branch. If the enumeration
-  cannot be established with certainty — the range is ambiguous, or the count does not
-  match the PR's commits — that is a **revert failure**: escalate. A partial revert is the
-  worst outcome available here, because R-3 can pass on it and the run would then report a
-  recovery that did not happen.
+- **rebase** — the PR's commits landed **individually**. Enumerate them as the range
+  **`pre-merge base .. merge commit`** recorded at 2-3, and revert **each, newest first**.
+  `mergeCommit` under rebase is the branch's new *tip*, not the whole change, so reverting
+  from it alone leaves the rest on the branch. Reconcile the enumerated commits against the
+  PR's own non-merge commits before reverting anything. If the enumeration cannot be
+  established with certainty — no pre-merge base was recorded, the PR's commit list cannot
+  be read in full, or the counts disagree — that is a **revert failure**: escalate. A
+  partial revert is the worst outcome available here, because R-3 can pass on it and the
+  run would then report a recovery that did not happen.
 
 **Never reset, force-push, or rewrite the branch.** Implementers may have the integration
 branch checked out as a base; rewriting its history turns one failure into many. The revert
 is a new commit on top.
 
-**R-2 — Push it and confirm it landed.** Push the revert to the integration branch and
-confirm from platform state that the branch head is now the revert commit. A rejected push
-— non-fast-forward, protection, permissions — is a **revert failure**.
+**R-2 — Push and confirm it landed.** Push the revert to the integration branch and confirm
+from platform state that the branch head is now the newest revert commit. A rejected push —
+non-fast-forward, protection, permissions — is a **revert failure**.
 
-**R-3 — Verify the recovery.** Re-run 2-4's verification against the **revert commit**. A
-revert that has not been verified is just another unverified change. Recovery verification
-failing, or timing out, is a **revert failure**.
+**R-3 — Verify the recovery.** Re-run 2-4's verification against the branch head after the
+revert. A revert that has not been verified is just another unverified change. Recovery
+verification failing, or timing out, is a **revert failure**.
 
 **R-4 — Comment on the reverted PR. Mandatory.** Not "when useful": an unattended revert
 with no durable explanation is how trust in automation dies, and the PR is the only place
