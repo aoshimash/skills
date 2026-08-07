@@ -601,9 +601,24 @@ HTTP 422 {"message":"Validation Failed","errors":[{"resource":"PullRequest","cod
 so this command runs only once the compare above reports `ahead_by > 0`:
 
 ```bash
+# The parent's title may be used ONLY if the parent issue's author has write access. The
+# vetted set is built FROM the parent's sub-issue links, so the parent itself was never
+# vetted by E2 — run E2's own reads (see "Issue author write access" above) against it:
+gh issue view {parent} --json author --jq '{login: .author.login, isBot: .author.is_bot}'
+gh api repos/{owner}/{repo}/collaborators/{login}/permission \
+  --jq '{permission, push: .user.permissions.push}'
+
+# Write access confirmed → the parent's title, sanitized.
 gh pr create --draft \
   --base {default_branch} --head {integration_branch} \
-  --title "Milestone #{parent}: {parent issue title}" \
+  --title "Milestone #{parent}: {sanitized parent issue title}" \
+  --body-file {body_file}
+
+# Check failed, errored, bot author or deleted account → identifier-only fallback, which
+# carries no author content at all.
+gh pr create --draft \
+  --base {default_branch} --head {integration_branch} \
+  --title "Milestone #{parent}: {N} issues on {integration_branch}" \
   --body-file {body_file}
 ```
 
@@ -612,8 +627,10 @@ body has a required structure and commit subjects are content.
 
 **`--title` is the one place issue content reaches a command line.** There is no
 `--title-file`, so the value cannot be moved off the command line the way the revert comment
-is. Sanitize `{parent issue title}` before substituting it — single line, no quotes,
-backticks, `$` or backslashes, then truncate (milestone-pr.md M1). The same applies to the
+is. Sanitize the **assembled** title before substituting — not only the parent's portion —
+single line, no quotes, backticks, `$`, backslashes or newlines, then truncate
+(milestone-pr.md M1); the branch name interpolated by the fallback form reaches the same
+command line. The same write-access gate and the same sanitization apply to the
 `gh pr edit --title` call at the flip.
 
 **M2/M3 — write and update the body.** The body is always passed as a file, never inline, so

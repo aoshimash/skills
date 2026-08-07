@@ -17,6 +17,7 @@ per-issue PRs.
 - [M1: create the draft](#m1-create-the-draft)
 - [M2: the body](#m2-the-body)
   - [Section order](#section-order)
+  - [The closing-keyword invariant](#the-closing-keyword-invariant)
   - [The managed block](#the-managed-block)
   - [Aggregation rules](#aggregation-rules)
   - [Closing references](#closing-references)
@@ -114,9 +115,12 @@ deleted**. Read here: merged PRs #118 and #119 report `headRefOid` `ca2ec59` and
 distinct from their `mergeCommit`s, while `git ls-remote` finds neither of their head branches
 on the remote (this repository deletes head branches automatically).
 
-More than one open PR from the integration branch to the default branch is also an
-unexpected state: report it and update none of them, rather than guessing which is the
-milestone.
+**More than one PR from the integration branch to the default branch — in any combination of
+states — is an unexpected state of its own, checked before the table.** Report it and update
+none of them, rather than guessing which is the milestone. The table is exhaustive over *one*
+such PR; a mixed pair (say a merged one plus an open one, which a human can create after the
+"commits landed after the milestone merged" row is reported) would otherwise match two rows
+at once.
 
 ## M1: create the draft
 
@@ -198,6 +202,40 @@ Status leads because for an unattended multi-day run the first question a human 
 says whether the milestone is complete. Judgment content follows immediately; mechanics
 last.
 
+### The closing-keyword invariant
+
+One rule governs every surface of this document, because this is the one PR in the design
+whose closing keywords act:
+
+> **A linking keyword never appears immediately before an issue or PR reference anywhere in
+> this body, except in the closing list of the [Closing references](#closing-references)
+> section.**
+
+It binds four surfaces that are easy to treat separately and must not be:
+
+| Surface | How the invariant lands |
+|---|---|
+| Aggregated per-issue content | The strip of [Aggregation rule 5](#aggregation-rules) |
+| Fenced excerpts of injection attempts | The same strip — **fencing is not an exemption** |
+| Disclosures of references this skill did not write (M2 marker loss, F4) | Named by issue number, never with their keyword |
+| **This skill's own prose** | Never phrase a required action as keyword-then-reference |
+
+The last row is the one that looks safe and is not. F4's disclosure rules require actions
+stated *as actions*, next to the PRs they concern — "resolve the conflict in #123", "close
+or retarget #120 and #121 before merging". Those particular phrasings happen to break
+adjacency; **"Close #120 and #121 before merging this milestone" does not**, and it is an
+equally natural rendering that would close a deferred PR on merge. Write around it: put the
+verb and the reference on opposite sides ("#120 and #121 should be closed or retargeted
+first"), or name the action without a keyword.
+
+**The reference itself is safe; only the adjacency is dangerous.** A bare `#N` creates a
+mention, not a closing link — read here on PR #103, which targets `main`, carries six bare
+references (#91, #93–#96, #102), no keyword, and registers zero `closingIssuesReferences`.
+That is why the strip removes the **keyword** and keeps the number, and why disclosures can
+name issues at all. Only the same-repository form was read; the documented syntax makes the
+keyword equally required for `owner/repo#N`, but that was not exercised here, so treat a
+bare cross-repository reference as *believed* safe rather than established.
+
 ### The managed block
 
 **Everything this skill writes lives between two markers, each alone on its own line:**
@@ -229,20 +267,30 @@ only when a line consists of the marker alone.
    those act.
 2. **None found** → append a fresh block at the end, including the closing list, and record
    in the run report that the previous block could not be located.
-3. **Found, and the remainder also carries this skill's own section headings** — the
-   signature of an earlier block whose markers were lost → the references are **stale**.
-   Append the fresh block **without** a closing list, report the stale references **by issue
-   number only** and by location in Needs Human Attention, and treat it as an **outstanding
-   escalation**, which withholds the flip (M4 F3). An earlier block written when the milestone
-   looked complete carries the *complete* closing list; merging with it live closes issues
-   whose work never landed, and this skill must not edit outside its block to remove them.
-4. **Found in what is otherwise a human's own writing** → the human presumably meant them.
-   Append the fresh block normally, and disclose them — again **by issue number only** — under
-   Needs Human Attention as closing references this skill did not write, which will act on
-   merge.
+3. **Any found** → append the fresh block **without** a closing list of its own, report the
+   references **by issue number only** and by location in Needs Human Attention, and treat it
+   as an **outstanding escalation**, which withholds the flip (M4 F3). This skill must not
+   edit outside its block to remove them, so withholding the flip is the only lever it has.
 
-Writing either disclosure out with its keyword intact would add a *live* closing reference to
-the body while warning about one (Aggregation rule 5, "no exempt region").
+**Rule 3 does not try to establish provenance, and that is deliberate.** The tempting version
+tests whether the remainder carries this skill's own section headings — the signature of a
+lost block — and treats anything else as a human's own writing, safe to append past. It
+resolves an unknown to *proceed*, against Core Principle 1, and it has two reachable false
+negatives: under a repository PR template the skill's headings are mapped away into the
+template's (M2, "Repository PR templates"), so a genuinely stale block presents with no
+recognisable heading; and "the body was rewritten" — one of the two stated causes of marker
+loss — is exactly the edit that restructures headings while leaving a trailing closing list
+intact. Either one produces a body carrying its own fresh list *and* an earlier complete one,
+with nothing blocking the merge that acts on both.
+
+So provenance is **disclosed, never used as a gate**: say whether the remainder looks like a
+lost block or like a human's writing, and let a human decide. The cost of collapsing is one
+false escalation when a human deliberately wrote a keyword; the cost of not collapsing is a
+merge closing issues whose work never landed.
+
+Writing any of these disclosures out with its keyword intact would add a *live* closing
+reference to the body while warning about one — see [The closing-keyword
+invariant](#the-closing-keyword-invariant).
 
 Overwriting the remainder is never the answer: it is the one outcome that loses a human's
 writing.
@@ -306,22 +354,26 @@ whatever was in it.
    `#N` and the `owner/repo#N` targets — the cross-repository form would otherwise close an
    issue in someone else's repository.
 
-   **Remove the reference, not the line.** GitHub acts on keywords mid-sentence, and prose
-   like "this fixes #133's root cause" is reviewer-relevant text; deleting the line loses
-   it. Replace the reference token with `[closing ref removed]` and leave the sentence
-   standing. A line that is *only* a closing reference becomes
-   `[closing reference removed — see Per-Issue PRs and Gate Results]`.
+   **Remove the keyword; keep the number, and keep the line.** What closes an issue is the
+   keyword *adjacent to* a reference, not the reference — a bare `#N` is a mention (see [The
+   closing-keyword invariant](#the-closing-keyword-invariant) for the reading that establishes
+   it). So replace the **keyword token** with `[closing keyword stripped]` and leave the rest
+   of the sentence, reference included, standing: "this fixes #133's root cause" becomes "this
+   [closing keyword stripped] #133's root cause".
 
-   **Removal, not escaping:** whether wrapping a reference in backticks or a blockquote stops
+   Removing the number as well would discard it exactly where nothing else carries it — the
+   target of an injection attempt (rule 4), or an out-of-batch reference in prose, for which
+   this run emits no closing entry and which therefore appears nowhere else in the body. A
+   line that is *only* a closing reference keeps its number too:
+   `[closing keyword stripped] #110 — see Per-Issue PRs and Gate Results`.
+
+   **Removal, not escaping:** whether wrapping a keyword in backticks or a blockquote stops
    the platform acting on it was not verified, and removal does not depend on the answer.
 
    **The strip has no exempt region.** It applies to everything this body reproduces —
-   aggregated sections, the fenced excerpt of an injection attempt (rule 4), and the
-   disclosure of stale or human-written closing references in Needs Human Attention (M2).
-   Those disclosures name the **issue numbers alone** ("an earlier block's list names #110–#116
-   and #109"); they never reproduce the keyword-and-reference token. Fencing is escaping, and
-   escaping is exactly what was not verified — a disclosure that re-arms the keyword it is
-   warning about is the worst possible form of the warning.
+   aggregated sections and the fenced excerpt of an injection attempt (rule 4) alike. Fencing
+   is escaping, and escaping is exactly what was not verified: a disclosure that re-arms the
+   keyword it is warning about is the worst possible form of the warning.
 6. **Never invent what is missing.** A PR with no `## Acceptance Criteria → Evidence`
    section (a template mapping that could not be established, a body edited after the
    merge) is recorded as `not recorded in #<pr>`. Do not reconstruct evidence from the
@@ -343,12 +395,13 @@ lines never fire, and if the milestone body omits an issue nothing closes it.
 
 Rules:
 
-- **The list this section emits is intended to be the body's only closing keyword.**
-  Aggregation strips the ones it reproduces (Aggregation rule 5), so what closes on merge is
-  what this run decided rather than what a per-issue body happened to say. The one state
-  where that does not hold is a lost managed block, whose preserved remainder can carry an
-  earlier list this skill must not edit — which is why that path withholds both this list
-  and the flip (M2, "The managed block").
+- **This list is the body's only closing keyword** — that is the whole of [The
+  closing-keyword invariant](#the-closing-keyword-invariant), which enumerates the four
+  surfaces it binds and how each one holds. So what closes on merge is what this run decided,
+  not what a per-issue body, a disclosure, or the skill's own prose happened to say. The one
+  state it cannot enforce is a lost managed block, whose preserved remainder can carry an
+  earlier list this skill must not edit — which is why that path withholds both this list and
+  the flip (M2, "The managed block").
 - Emit a closing keyword for each issue whose PR **merged and was verified** in this
   milestone. Nothing else.
 - A deferred, reverted, or not-attempted issue is referenced **without** a keyword, so
@@ -455,11 +508,37 @@ ready PR that isn't.
 
 - **As implement-issue's merge gate:** the orchestrator declares it, because it is the only
   party that can see whether implementers are still running. A declaration is only a
-  declaration when it carries all three of: the **vetted issue set it dispatched**, a
-  **final per-issue status** for every member of that set, and an **explicit assertion that
-  no implementer is still running**. Batch identity alone is not a declaration. Anything
-  short of the three is treated as *not declared*, and the standalone derivation below
-  applies instead — silently accepting a partial hand-off is how an early flip happens.
+  declaration when it carries all three of: **(a)** the vetted issue set it dispatched,
+  **(b)** a final per-issue status for every member of that set, and **(c)** an explicit
+  assertion that no implementer is still running. Batch identity alone is not a declaration.
+  Anything short of the three is treated as *not declared*, and the standalone derivation
+  below applies instead — silently accepting a partial hand-off is how an early flip happens.
+
+  **What each part is for, and what none of them may do.**
+
+  | Part | Purpose |
+  |---|---|
+  | (a) dispatched issue set | Scope cross-check. If the orchestrator dispatched a subset of the parent's sub-issues, the gate's independently-built vetted set would otherwise never reach terminal |
+  | (b) final per-issue status | **Cross-check only** — see below |
+  | (c) no implementer running | The one fact platform state cannot express: it is what resolves "no PR yet" from "no PR ever" |
+
+  **(b) is never authoritative.** Nothing in the declaration substitutes for the gate's own
+  derivation of per-issue outcomes from platform state — that derivation stands on its own,
+  and eligibility.md's founding rule is that self-assertions are not evidence. (b) is
+  information the gate can already obtain, which makes it either harmless or a trap, and it
+  becomes a trap exactly when it is given authority. (c) is the only part that tells the gate
+  something it could not read itself.
+
+  **(b) is compared, not consumed.** Derive the per-issue outcomes, then compare. On
+  agreement, nothing happens — the declaration was redundant, as intended. On **divergence**,
+  the two views of the batch have come apart, which is a real signal and worth more than
+  either view alone: report it in Needs Human Attention naming the issues and **both** views,
+  fall back to the gate's own derivation for everything downstream, and **withhold the flip**
+  (F3). A batch whose orchestrator and gate disagree about what merged is not a batch a human
+  should be told is finished; and the divergence itself is unexplained until someone looks, so
+  Core Principle 1 puts it on the defer side. It is a cheap failure to recover from — the next
+  run re-derives and re-compares — and an expensive one to get wrong, since the flip is the
+  invitation to merge into the default branch.
 - **Standalone:** derive it from platform state — every vetted issue has either a
   merged-and-verified PR or a recorded deferral/exclusion, and no open PR on the integration
   branch is still in a non-terminal state (draft, checks unsettled inside their window,
@@ -475,6 +554,13 @@ ready PR that isn't.
 1. **`push`-triggered runs on the branch's current head**, judged by workflow.md 2-4's rules.
    **A failing one fails F2 outright.** This is a veto, not one half of an alternative: red
    branch CI is red whatever else is green.
+   **An unsettled one is not an absent one.** A run still queued or in progress on the head
+   has not said anything yet, and "no failing run" must not be read off a suite that has not
+   finished — otherwise source 2 establishes green while branch CI is mid-execution. Wait for
+   it within the same bounded window post-merge verification uses (`verification_window`,
+   polled against a wall-clock deadline). If it has not settled when the window closes, F2
+   does not hold and the PR stays a draft; the next run re-evaluates. Nothing is reverted —
+   this is a withheld flip, not a failed merge.
 2. **The milestone PR's own check rollup**, judged by eligibility.md E4's rules (every entry
    passes for its `__typename`; an empty rollup does not pass).
 
@@ -512,10 +598,13 @@ terminal state.
 - A failed revert, or a branch head that is not what the loop left (workflow.md R-1…R-3):
   the branch's contents are not established, and nothing gets flipped on an unestablished
   branch.
-- **Stale closing references outside the managed block** (M2). Merging would close whatever
-  that earlier list names, which after a milestone went partial includes issues whose work
-  never landed — and this skill may not edit outside its block to remove them. Withholding
-  the flip is the only lever it has.
+- **Any linking-keyword reference outside the managed block** (M2). Merging acts on it, and
+  after a milestone went partial an earlier block's list names issues whose work never landed
+  — and this skill may not edit outside its block to remove them. Withholding the flip is the
+  only lever it has. Provenance is disclosed, not used to decide.
+- **Divergence between the orchestrator's declared per-issue statuses and the gate's own
+  derivation** (F1). The two views of the batch have come apart; what merged is not
+  established until a human looks.
 
 An *unrecorded exclusion* — an E5 or R-4 label write that could not be verified — is
 different: it concerns one per-issue PR, not what merging this one would do, so it is
@@ -537,7 +626,8 @@ What they bind instead is disclosure. The flip is permitted only when **all** of
 1. **Every one of them is listed** under Needs Human Attention, each with: the issue and its
    PR, the failed condition by identifier, the concrete evidence, the required human action
    stated *as an action* ("resolve the conflict in #123 against `integration/issue-109`", not
-   "conflicted"), and whether the exclusion is permanent or re-evaluated next run. This is the
+   "conflicted") — phrased so that no linking keyword sits immediately before the reference,
+   per [The closing-keyword invariant](#the-closing-keyword-invariant), and whether the exclusion is permanent or re-evaluated next run. This is the
    same record [eligibility.md](eligibility.md) "What a deferral records" requires of the run
    report — the milestone PR is its second home, not a summary of it.
 2. **The milestone is labelled partial** — in the status line and in the PR title — whenever
@@ -557,8 +647,11 @@ What they bind instead is disclosure. The flip is permitted only when **all** of
    branch provided, and with its previously inert closing keywords now live. Where the
    repository has automatic head-branch deletion enabled, that happens at merge time whether
    or not this gate approves, which is why it is disclosed **before** the flip: the flip is the
-   last point this skill controls. State the affected PRs, the consequence, and the action
-   (close or retarget them deliberately before merging the milestone).
+   last point this skill controls. State the affected PRs, the consequence, and the action —
+   again keeping the verb clear of the reference: "#120 and #121 should be closed or
+   retargeted before this milestone merges", never "Close #120 and #121 …", which is itself a
+   live closing reference ([The closing-keyword
+   invariant](#the-closing-keyword-invariant)).
 
 ## M5: cleanup after the human merges
 
