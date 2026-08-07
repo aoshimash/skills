@@ -2608,3 +2608,58 @@ list were corrected.
   that "a vetted issue with no PR at all is not terminal standalone" — the pair C8 turns on.
 - `review-gates.md`: the two stages' findings "exist only in this session" — still the fact
   the gate-verdict rule rests on.
+
+### 2026-08-07 — Design axis and repository documentation (Refs #116)
+
+No behavioral change and no new cases. The only edit inside this skill is
+`SKILL.md`'s frontmatter `description`, trimmed from **1032 to 992 characters**:
+the [Agent Skills spec](https://agentskills.io/specification) caps `description`
+at 1024, and the field had been over that cap since before this batch — a
+validation failure, untouched by every other PR in it. Everything else in the
+change is outside the skill (`AGENTS.md`'s Issue Skill Design Axis, `README.md`).
+
+**The trim is a routing-surface edit, so the question it raises is triggering,
+not behavior.** Only descriptive prose was shortened — "the repository's own
+bot/AI reviewers" → "the repository's bot/AI reviewers"; "a single issue end to
+end" → "one issue end to end"; "when given a parent issue, a milestone, a label,
+or a list of issues" → "given a parent issue, milestone, label, or list of
+issues"; "parallel agent instances where the environment supports them" →
+"parallel agent instances where supported". All **14** quoted trigger phrases are
+byte-identical and in the same order, established by parsing both frontmatters as
+YAML and diffing the extracted phrase lists rather than by reading them. Cases
+1–66 exercise the body, which is untouched, so none were re-run.
+
+**What is unmeasured, and why no run closes it here.** This skill carries no
+`evals/evals.json` — unlike `merge-issue-prs`, `merge-renovate-prs`,
+`respond-to-pr-review`, `sync-agent-rules`, and `collect-agent-rules`, it has no
+`evals/` directory at all, so there is no trigger suite to re-run against the
+shortened description. The residual risk is therefore not "a suite we skipped"
+but "a surface this skill has never measured": two of the four shortened spans
+sit in the capability sentence a trigger judgment reads, and "where supported" is
+vaguer than "where the environment supports them". The trigger phrase list, which
+is what a positive case keys on, did not move. Building a trigger suite for this
+skill is the way to close it and is out of scope for #116.
+
+**Not added: integration-mode trigger phrases.** The description gained no
+coverage for integration mode or the merge gate. That is outside #116's
+acceptance criteria, and the 32 characters of headroom the trim created are worth
+more as headroom than spent re-approaching the cap.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 1–66 | Not re-run | Body untouched; the edit is confined to frontmatter |
+| Trigger | No suite | This skill has no `evals/` directory — see above |
+
+**Verified this round, each command run exactly as written:**
+
+- Parsing every `plugins/aoshimash-skills/skills/*/SKILL.md` frontmatter as YAML
+  and measuring `name` / `description` / `compatibility` against the spec's
+  64 / 1024 / 500 caps — all 8 skills are now within them; `implement-issue` was
+  the only one over, at 1032.
+- The cap itself, from <https://agentskills.io/specification> fetched this
+  session: `description` — "Max 1024 characters. Non-empty."
+- `ls -d plugins/aoshimash-skills/skills/*/evals` — 5 directories, none of them
+  `implement-issue`'s.
+- Resolving every non-HTTP markdown link across all **49** `.md` files under
+  `plugins/aoshimash-skills/skills/` plus `README.md`, `AGENTS.md`, `CLAUDE.md` —
+  52 files in total, 0 broken.

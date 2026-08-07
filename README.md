@@ -22,7 +22,7 @@ The plugin is only one distribution channel. Each skill under `plugins/aoshimash
 
 ## Issue Workflow
 
-`create-issue` and `implement-issue` cover the full issue lifecycle. Each adapts to scale: `create-issue` goes from a quick single issue to a researched, user-annotated design decomposed into an issue hierarchy; `implement-issue` goes from one autonomous implementation to a dependency-ordered parallel batch. The issue tracker is the interface between them — either skill also works standalone, since a hand-written issue works with `implement-issue` and a `create-issue` issue can be implemented manually.
+`create-issue`, `implement-issue`, and `merge-issue-prs` cover the full issue lifecycle. Each adapts to scale: `create-issue` goes from a quick single issue to a researched, user-annotated design decomposed into an issue hierarchy; `implement-issue` goes from one autonomous implementation to a dependency-ordered parallel batch; `merge-issue-prs` merges a batch's own PRs into a per-milestone integration branch, so the issues it merged cost one human review per milestone rather than one apiece — a PR it defers still goes to a human individually, and holds up the integration branch's cleanup until it is closed. The issue tracker is the interface between them — each skill also works standalone, since a hand-written issue works with `implement-issue`, a `create-issue` issue can be implemented manually, and the merge gate runs on a parent issue's ready PRs without the batch.
 
 ```
 create-issue                               implement-issue
@@ -39,9 +39,40 @@ create-issue                               implement-issue
 │  → Approve → Issues         │            │  Dependency graph            │
 │                             │            │  → Parallel worktrees        │
 │                             │            │  → Review gates + pattern    │
-│                             │            │    propagation → Summary     │
+│                             │            │    propagation               │
+│                             │            │  → Merge gate (integration   │
+│                             │            │    mode) → Summary           │
 │                             │            │  → Harvest (once per batch)  │
 └─────────────────────────────┘            └──────────────────────────────┘
+```
+
+Batch mode picks one of two **merge modes** inside the execution-plan approval, and that choice decides where a ready PR goes next:
+
+```
+                    ready PR (draft → ready = "machines done")
+                                     │
+             standard mode ──────────┴────────── integration mode
+                   │                                     │
+                   ▼                                     ▼
+      a human reviews and merges         merge-issue-prs (the merge gate)
+      each PR — N issues cost            eligibility, fail closed
+      N human reviews                    → serial merge, one in flight
+                                         → verify on integration-branch CI
+                                         → revert + stop the line on failure
+                                                         │
+                                                         ▼
+                                         integration/issue-<parent>
+                                                         │
+                                                         ▼
+                                         one integration→main PR per
+                                         milestone: a live dashboard while
+                                         the batch runs, flipped to ready
+                                         when it is terminal, green,
+                                         unescalated, and fully disclosed
+                                                         │
+                                                         ▼
+                                         one human review per milestone
+                                         → merge to main
 ```
 
 **Typical usage:**
@@ -55,26 +86,37 @@ create-issue                               implement-issue
 # Single issue → understand & decide (no routine questions) → implement & verify
 #   → security review → draft PR → two-stage review gates → CI
 #   → automated reviewers → flip to ready → harvest decisions → recap
-# Parent issue / milestone / label / list → confirm batch → dependency graph
-#   → parallel worktrees → review gates → summary → harvest once
+# Parent issue / milestone / label / list → confirm batch (standard or
+#   integration mode) → dependency graph → parallel worktrees → review gates
+#   → merge gate (integration mode) → summary → harvest once
+
+> /merge-issue-prs
+# Parent issue / integration branch → eligibility triage (fail closed)
+#   → serial merge → verify on integration-branch CI → revert on failure
+#   → milestone PR (integration→main): draft while the batch runs, ready
+#     once all four flip conditions hold → a human reviews and merges it
 ```
 
 **Key properties:**
 
-- **Issue tracker is the interface** — Both skills connect only through the issue tracker (GitHub, GitLab, Backlog). No skill-specific files persist after completion.
+- **Issue tracker is the interface** — The skills connect through the issue tracker (GitHub, GitLab, Backlog) and, for the merge gate, the repository's git state. No skill-specific files persist after completion; every run re-derives what it needs.
 - **Works with humans and AI** — Issues created by `create-issue` are readable and implementable by anyone. Issues written by hand work with `implement-issue`. A good issue is the same for both readers: it explains why and what — never how.
 - **Splitting is always proposed, never automatic** — `create-issue` defaults to a single issue; a parent + sub-issue (or nested grandchild) hierarchy is only created after the user confirms a Split Proposal.
 - **Annotation cycle** — in the Design Flow, plans are refined through inline notes in a local markdown file. The file is deleted after issues are created.
 - **Autonomous implementation, decisions logged not asked** — `implement-issue` runs from invocation to PR without routine questions. There is no plan-approval gate: decisions come from the issue, its parent, the repository's agent instructions, or user-level configuration, and land in the PR body instead of in chat. Only genuinely undecidable decisions stop the run, as one batched question whose answers are written back to the issue.
-- **Parallel execution** — in Batch mode, `implement-issue` resolves issue dependencies as a DAG and dispatches independent issues in parallel using git worktrees.
+- **Parallel execution** — in Batch mode, `implement-issue` resolves issue dependencies as a DAG and dispatches independent issues in parallel using git worktrees. Where the environment supports per-instance model selection, each runs on the capability tier its issue's content calls for: mechanical work runs cheaply, judgment-heavy work does not, and uncertainty resolves upward.
+- **Two merge modes in Batch mode** — **standard** bases every worktree and PR on the default branch, and each PR waits for its own human reviewer. **Integration** bases them on one integration branch and hands each ready PR to `merge-issue-prs`, so a dependency counts as satisfied only once its PR merged and was not reverted — dependents finally build on their dependencies' code rather than on a base that lacks it. The mode is chosen inside the execution-plan approval, never as a separate gate; Single mode never offers it, and integration mode is offered only where `merge-issue-prs` is installed and the repository is on GitHub.
+- **Machine merges land only on the integration branch** — `merge-issue-prs` never merges into the default branch, and it decides each PR under a fail-closed eligibility policy (pipeline-created PR, source issue authored by a user with repository write access, machine gates passed, CI green, no human comment). Merges run one at a time, each verified after it lands against the integration branch's own CI, with auto-revert and stop-the-line when verification does not hold and immediate escalation when a revert itself fails. Anything unknown, ambiguous, or possibly truncated is deferred to a human rather than merged.
+- **One human review per milestone** — the integration→main PR is the batch's single human checkpoint: a live dashboard while the batch runs, flipped to ready only once the batch is terminal, the branch is green at the head a human would merge, no escalation is outstanding, and the body is final — with every deferred, blocked, or reverted issue listed alongside the human action it needs. A human comment on any per-issue PR removes it from the autonomous path permanently and sends it to `respond-to-pr-review`.
+- **A batch survives its session** — an integration-mode batch re-derives where an earlier session stopped from the issue tracker and git alone; no state file persists between sessions. An unattended session advances what an approved plan already produced — gates, merges, reports — and dispatches no new implementer, so scheduling extends a batch's reach across sessions without widening its scope. Because that bound reads artifact evidence rather than plan membership, an interruption partway through leaves later groups waiting: finishing a batch still takes a session with a user in it.
 - **Two-stage review, always** — every PR (single or batch) is reviewed for spec compliance (does it match the issue?) then code quality (is it well-written?). Pattern propagation across in-flight PRs only applies in Batch mode.
 - **Nothing unsafe leaves the machine** — a security review of the pending changes runs after checks and self-review pass and before the branch is pushed. Unresolved Critical/High findings block the push.
-- **Machines finish before humans start** — every PR opens as a **draft** and flips to ready-for-review only once the review gates pass, CI is green, and the repository's own automated reviewers have been responded to. A PR that can't clear them stays a draft with the unresolved state recorded. Human review comments are never auto-addressed — those go through `respond-to-pr-review`.
+- **Machines finish before humans start** — every PR opens as a **draft** and flips to ready-for-review only once the review gates pass, CI is green, and the repository's own automated reviewers have been responded to. A PR that can't clear them stays a draft with the unresolved state recorded. Human review comments are never auto-addressed — those go through `respond-to-pr-review`. The flip means the same thing in both merge modes — *machines done* — and only its reader changes: a human by default, the merge gate in integration mode.
 - **Decisions are harvested after delivery** — once the PR is ready, decisions that generalize past the issue are offered for promotion into a durable store: the repository's agent instructions (as a separate PR) or user-level configuration. One batched confirmation, nothing written without it, and most runs produce no candidates at all.
 
 ### Design Philosophy
 
-The issue workflow draws from two sources, combines them with an issue-centric approach, and has since been revised for an autonomy-first workflow built on 2026-era models:
+The issue workflow draws from two sources, combines them with an issue-centric approach, has since been revised for an autonomy-first workflow built on 2026-era models, and was then extended to close the merge loop:
 
 **From [superpowers](https://github.com/obra/superpowers):**
 - Brainstorming quality — deep clarifying questions, multiple approaches with trade-offs
@@ -107,12 +149,20 @@ superpowers also contributed a staged workflow with hard approval gates, and bot
 - This revision is the design contract both skills were rewritten against — `implement-issue` in [#93](https://github.com/aoshimash/skills/issues/93), [#94](https://github.com/aoshimash/skills/issues/94), [#95](https://github.com/aoshimash/skills/issues/95), and `create-issue` in [#96](https://github.com/aoshimash/skills/issues/96) — and the diagram above describes them as they are today. All tracked under [#91](https://github.com/aoshimash/skills/issues/91)
 - Informed by Anthropic's published guidance at the time of this revision — [Prompting Claude Fable 5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5), [Claude Code best practices](https://code.claude.com/docs/en/best-practices), and [harness design for long-running apps](https://www.anthropic.com/engineering/harness-design-long-running-apps) — and the Claude Code team's published workflow ([How Boris uses Claude Code](https://howborisusesclaudecode.com/)). Full rationale and decision log: [#91](https://github.com/aoshimash/skills/issues/91)
 
+**Closing the loop — machine merges, one human checkpoint (2026, original):**
+- The autonomy-first revision moved human judgment to the PR, and per-PR review then became the pipeline's throughput cap. `implement-issue` ended at ready-for-review and contained no merge step at all, so N issues meant N human reviews — and because every batch worktree branched from the default branch, a dependent issue could not build on its dependency's code until a human merged it. Batch mode parallelized implementation but not review
+- The model this follows puts human judgment at spec/design approval upstream and at risk-tiered review downstream, with machine gates in between. The upstream checkpoint already existed (`create-issue`'s Design Flow), so what was missing was the downstream half — the part the 2025–2026 write-ups referenced below address
+- **Stage B is what exists today** — machine merges confined to a per-milestone integration branch, and human review relocated rather than removed: one integration→main PR per milestone, which nothing in the pipeline merges, approves, or reviews. Reaching the default branch therefore still costs a human reviewing and merging a PR; what changes is that it costs one per milestone instead of one per issue. The safety model is not new either: it is ported from `merge-renovate-prs`, this repository's existing precedent for merging without sign-off — machine-checkable preconditions instead of a sign-off, strictly serial merges, post-merge verification, fail-closed auto-revert, stop-the-line on the first failure, and escalation when the revert itself fails
+- **Stage A is deferred on purpose** — risk-tiered auto-merge straight to the default branch under a low-risk policy. A risk policy has to be calibrated on observed history rather than invented upfront, and integration mode is what produces that history. It is recorded here so the follow-up arrives with provenance instead of as a fresh idea; AGENTS.md's design axis is explicit that introducing it changes the axis rather than applies it
+- What autonomy here does *not* buy: the plan is approved by a person and recorded nowhere durable, so an unattended session can advance a batch and never widen one. Scheduling makes a batch outlive its session; it does not make one finish without a human
+- Tracked under [#109](https://github.com/aoshimash/skills/issues/109) — the merge gate in [#110](https://github.com/aoshimash/skills/issues/110), [#114](https://github.com/aoshimash/skills/issues/114), [#111](https://github.com/aoshimash/skills/issues/111); integration mode, cross-session re-entry, and model tiers in [#115](https://github.com/aoshimash/skills/issues/115), [#112](https://github.com/aoshimash/skills/issues/112), [#113](https://github.com/aoshimash/skills/issues/113); this documentation in [#116](https://github.com/aoshimash/skills/issues/116). Informed by Anthropic's [Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents) — externalized state, fresh context per work unit, independent verification — and by [Ona](https://ona.com/stories/auto-approving-low-risk-prs) and [Rewind](https://rewind.com/blog/ai-approve-pull-requests-safely/) on risk-tiered auto-approval, which inform Stage A rather than Stage B
+
 ## Skills
 
 | Skill | Description |
 |-------|-------------|
 | [create-issue](plugins/aoshimash-skills/skills/create-issue/) | Create well-structured issues on any platform (GitHub, GitLab, Backlog) with codebase analysis — from a quick single issue (one batched question round, one approval) to a designed issue hierarchy (one annotated plan file → parent + sub-issues, research kept as an issue comment) |
-| [implement-issue](plugins/aoshimash-skills/skills/implement-issue/) | Read issues, implement autonomously, and open review-first draft PRs — two-stage review, pre-push security review, automated-reviewer response, flip to ready, then post-PR decision harvesting; batch mode (dependency graph, worktrees, parallel agents) for parent issues / milestones / labels / lists |
+| [implement-issue](plugins/aoshimash-skills/skills/implement-issue/) | Read issues, implement autonomously, and open review-first draft PRs — two-stage review, pre-push security review, automated-reviewer response, flip to ready, then post-PR decision harvesting; batch mode (dependency graph, worktrees, parallel agents on content-based model tiers) for parent issues / milestones / labels / lists, with an optional integration mode that bases every PR on one integration branch, hands the ready ones to `merge-issue-prs`, and resumes across sessions from the tracker and git |
 | [analyze-sessions](plugins/aoshimash-skills/skills/analyze-sessions/) | Analyze Claude Code session history to detect recurring patterns and propose improvements to skills and settings.json |
 | [respond-to-pr-review](plugins/aoshimash-skills/skills/respond-to-pr-review/) | Process PR review comments one by one — explain, confirm actions, implement fixes, and post reply comments |
 | [merge-issue-prs](plugins/aoshimash-skills/skills/merge-issue-prs/) | Merge the pipeline's own per-issue implementation PRs into a per-milestone integration branch without per-PR human review — a fail-closed eligibility policy (pipeline-created PR, write-access issue author, gates passed, CI green, no human comment) rules each PR eligible or deferred, merges run strictly serially with post-merge verification and auto-revert, and one integration→main PR carries the human review |
