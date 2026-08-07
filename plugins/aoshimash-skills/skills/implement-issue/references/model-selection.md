@@ -330,8 +330,11 @@ earlier tier:
   reviewer-at-least-the-implementer's-tier relation holds within a session, which is where
   both halves of it are decided.
 
-An unattended resume dispatches no new implementer at all (batch-reentry.md R8), so the only
-classifications it makes are the fix-round ones.
+An unattended resume dispatches new implementers only for the issues an approval record
+licenses (batch-reentry.md R8 §1), and classifies each of those from scratch exactly as an
+attended dispatch does — the record carries no tier and could not be trusted for one if it
+did (see "What is never persisted"). With no trusted record it dispatches nothing new, and
+the only classifications it makes are the fix-round ones.
 
 ## What is never persisted
 
