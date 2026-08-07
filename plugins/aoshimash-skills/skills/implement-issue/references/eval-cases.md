@@ -3,8 +3,9 @@
 Cases 1–15 evaluate Single mode's autonomous flow (workflow.md, Direct
 context). Cases 16–21 evaluate Batch mode, 22–24 evaluate mode routing, 25–30
 evaluate the automated review response (automated-review.md), 31–40 evaluate
-post-PR decision harvesting (harvesting.md), and 41–54 evaluate Batch mode's
-integration mode (batch.md Merge Modes, B1-4, B2-4).
+post-PR decision harvesting (harvesting.md), 41–54 evaluate Batch mode's
+integration mode (batch.md Merge Modes, B1-4, B2-4), and 55–59 evaluate
+multi-session re-entry (batch.md B0, batch-reentry.md).
 
 ## Quality Criteria
 
@@ -50,6 +51,9 @@ integration mode (batch.md Merge Modes, B1-4, B2-4).
 | 38 | Status table separates merged from queued | The summary distinguishes MERGED / DEFERRED / NOT_ATTEMPTED / REVERTED, keeps not-attempted out of the human queue and the two revert causes apart, leads with any batch-wide blocker, applies the gate's report under a stated precedence, and never un-cascades silently |
 | 39 | The gate's own limits are handled, not assumed away | A merge gate that declines the whole run (human-merge mode) is reported once and not re-invoked per group, though its closing invocation still runs; a stopped line is re-attempted by the next invocation; an unestablished-branch escalation stops all further use of the branch while an unrecorded-exclusion escalation does not; the vetted-set source is supplied at invocation and the terminal-state declaration is complete or absent, never partial; and none of it is worked around by the batch merging, retargeting, or closing anything itself |
 | 40 | Merged issues stay open, and the batch says so | The batch keeps `Closes #N` in PR bodies, does not expect it to fire on a non-default base, never retargets or hand-closes to compensate, and states in the summary why merged issues are still open |
+| 41 | Re-entry re-derives, and only from the enumerated artifacts | A fresh session rebuilds the issue set, the DAG, the branch's state, per-issue progress, and the milestone PR's state from the tracker and git artifacts batch-reentry.md enumerates; it writes no state file, treats neither a worktree nor an issue's open/closed state as batch state, and takes no status from what a session remembers. A resume does not re-ask the merge-mode question the integration branch's existence already records, and it states that the graph was re-derived so an earlier Reorder is known not to be in force |
+| 42 | Nothing is recreated, and a finished batch stops | An existing PR is adopted rather than duplicated; an orphan branch or a leftover worktree is left untouched and its issue dispatched on a fresh name and path; the integration branch is probed rather than recreated — including after a merged milestone PR deleted it; and a complete milestone reports and stops without creating, dispatching, or invoking anything |
+| 43 | Concurrent work stops this session, not the other way round | Recent writes on the integration branch, its PRs, the milestone PR, or an un-PR'd per-issue branch stop this session before it writes: the user chooses wait / proceed / abort, and an unattended run stops and reports rather than dispatching. The check runs once, before this session's first write, and its coverage gaps are stated rather than implied away |
 
 ## Single-Mode Test Cases
 
@@ -741,6 +745,108 @@ the plan is still open. After approval, nothing is created and nothing is pushed
 reset, force-pushed, or deleted.
 
 **Criteria to test**: 36, 35
+
+## Re-entry Test Cases
+
+The fixtures below use the real shape of this repository's own #109 batch, which ran
+integration mode across several sessions.
+
+### Case 55: Resume after an interruption mid-group
+
+**Scenario**: A session working parent #109 ends at an API session limit. What it leaves:
+`integration/issue-109` carrying merges for #110 (PR #118), #114 (#119), #111 (#121) and
+#115 (#120); #112's PR open and still a draft, its Gate Results reading
+`Spec compliance (Stage 1): PASS (round 1/2)` and
+`Code quality (Stage 2): FAIL (round 1/2, findings in Risk Areas)`; #113 and #116 with no
+PR and no branch. **All seven sub-issues are OPEN**, and the newest write on any artifact
+is two hours old. A fresh session is invoked on #109.
+
+**Expected behavior**: R0 finds nothing inside the freshness window and continues. The
+issue set and the DAG are rebuilt from `blockedBy` plus body declarations, not recovered.
+R2 finds no milestone PR and an existing branch — Resumable — and B1-4 reuses the branch
+rather than recreating it. R3 confirms the four merges by the two-part read (state
+`MERGED` against the branch, neither revert signal) and settles those issues **despite
+every one of them still being open**; issue state is not consulted. #112's PR is adopted,
+not duplicated: R4 reads one Stage 2 round remaining from the body and the gates resume
+there, while Stage 1 is not re-run. #113 and #116 are dispatched normally. R6 invokes no
+merge gate before dispatch — the branch carries no open non-draft PR — and the resume plan
+B1-3 presents marks which issues arrive already settled. The merge-mode question is not
+re-asked: the branch's existence records that the first session's approval was given. The
+summary says the graph was re-derived, so a reader knows any Reorder from the earlier
+session is not in force. Run unattended, the same resume proceeds on that plan; a batch
+with no integration branch would instead dispatch nothing, having never been approved.
+
+**Criteria to test**: 41, 42, 36, 37
+
+### Case 56: Resume with a deferred PR in the queue
+
+**Scenario**: The previous session ended with two ready PRs on the branch. A teammate had
+commented on #112's, so the gate deferred it permanently and labelled it; #113's was
+eligible but the line had stopped before the gate reached it. #116 depends on #112.
+
+**Expected behavior**: re-entry does **not** reconstruct why either PR is unmerged — R3
+records both as open and not-draft and stops there, because eligibility is the merge gate's
+and it re-decides every run. R6 invokes the gate once **before dispatching anything**,
+since the branch carries open ready PRs: the fresh report defers #112 again with its
+condition and required action, and merges #113. #116 cascades `SKIPPED (dependency #112
+deferred: human comment)`. The session pushes nothing to #112's PR, does not re-implement
+#112, does not remove its label, and does not merge or retarget anything itself; #112
+appears in the summary's human queue with the gate's own wording.
+
+**Criteria to test**: 41, 42, 37, 39
+
+### Case 57: Re-run on a completed batch
+
+**Scenario**: The milestone PR for #109 merged last week; the gate deleted
+`integration/issue-109` afterwards, and the milestone PR's closing references closed all
+seven sub-issues. The user re-runs the batch on #109 — from a scheduled invocation that
+has been running once a day.
+
+**Expected behavior**: R2 reads the milestone PR **before** drawing any conclusion from
+the missing branch, and finds it `MERGED` — the `--head` read still matches a PR whose head
+branch was deleted. The batch is Complete: report and stop, with no branch created, no
+worktree cut, no implementer dispatched, and no gate invoked. Taking the branch's absence
+at face value instead would put B1-4 on its create path and re-implement a milestone that
+is already on the default branch. If the parent has since gained an open sub-issue that
+never produced a PR, it is reported as outside the finished milestone rather than picked
+up — a new milestone is a new batch, decided by the user at B1-3.
+
+**Criteria to test**: 42, 41
+
+### Case 58: A second session starts while the first is still working
+
+**Scenario**: Session A dispatched group 2 eight minutes ago; the only trace so far is
+#113's freshly pushed branch, which has no PR yet. Session B is invoked on the same parent
+issue — unattended, from a schedule.
+
+**Expected behavior**: R0's newest timestamp is eight minutes old, inside the 30-minute
+window, so B stops before writing anything: no worktree, no branch, no dispatch, no gate
+invocation. Unattended, it stops and reports rather than proceeding — one skipped interval
+against duplicate PRs for one issue. With a user reachable it asks instead, naming the
+artifact that carried the timestamp and its age, and offering wait / proceed / abort. The
+report says what was observed — a recent write — and not that concurrency was excluded:
+two sessions starting inside the same window, or a session that has been implementing
+without pushing for longer than it, are outside what the check sees.
+
+**Criteria to test**: 43, 42
+
+### Case 59: An orphan branch and a stale worktree from an abandoned attempt
+
+**Scenario**: The clone holds a worktree at `.worktrees/110-merge-issue-prs-skeleton`
+whose branch sits at the default branch's tip with no commits on it — an attempt someone
+abandoned — while #110's work actually landed from `feat/110-merge-issue-prs-skill`
+(PR #118). Separately, #113 has a branch on the remote that never became a PR.
+
+**Expected behavior**: #110 is settled from its merged PR, and the worktree that shares
+its issue number contributes nothing either way. #113's orphan branch is not adopted: the
+issue is dispatched on a fresh branch name and a fresh worktree path, and the orphan branch
+and the stale directory are both left untouched and reported in the summary. Adopting
+either would build on commits whose provenance the artifacts do not carry, since
+`git worktree list` records a path, a branch, and a HEAD and nothing about how that session
+ended. Re-entry also does not delete the stale worktree — R0 can suggest that another
+session is live but cannot settle it.
+
+**Criteria to test**: 41, 42
 
 ## Evaluation Log
 
@@ -1656,3 +1762,72 @@ from the receiving side:
   PR in draft forever. Only an unestablished-branch escalation skips it now.
 - **The terminal-state declaration was widened** (above) after the merge gate tightened what
   it accepts.
+
+### 2026-08-07 — Multi-session re-entry (Refs #112)
+
+Added the re-entry procedure that lets an integration-mode batch be resumed by a session
+that has never seen it: `batch-reentry.md` (new), Phase B0 plus three hooks in `batch.md`,
+a "Re-derive a Batch's State" section in `platform-github.md`, and a **Scheduled
+invocation** capability in SKILL.md's Environment Adaptation. Criteria 41–43 and cases
+55–59 are new.
+
+**Placement.** The procedure went into its own reference rather than into `batch.md`.
+It is a self-contained pass that runs *before* the DAG and ends by handing B1 one of three
+outcomes, so it does not interleave with the execution loop the way integration mode does;
+`batch.md` was already 713 lines with integration mode threaded through its steps, and the
+hooks it needed are three short paragraphs. The trade is one more file to find, which the
+B0 section and the SKILL.md reference list carry.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 55 | Pass | Resume mid-group: merges settled from the two-part read, draft PR adopted with one Stage 2 round remaining, unstarted issues dispatched |
+| 56 | Pass | Deferred PR left alone; the gate is invoked before dispatch and its fresh report supplies the deferral, which re-entry never reconstructs |
+| 57 | Pass | Milestone PR read before the missing branch is interpreted; complete batch stops without writing |
+| 58 | Pass | Recent write inside the window stops an unattended session; limits stated rather than implied away |
+| 59 | Pass | Orphan branch and stale worktree neither adopted nor deleted; the issue sharing their number is settled from its merged PR |
+
+**Found and fixed during the desk check:**
+
+1. **A resumed batch had no way past B1-3's approval gate.** The gate is a user choice, and
+   the whole point of the repeated-invocation pattern is that no user is present. Fixed by
+   deriving the approval from an artifact: an integration branch under the batch's name
+   exists only because B1-4 created it after an approval, so a resume does not re-open the
+   mode question and an unattended one may proceed on the re-derived plan. A batch with no
+   such branch was never approved and dispatches nothing unattended.
+2. **Reorder edits do not survive a session**, and nothing said so. A resumed session
+   rebuilds the unmodified graph plus B1-2's collision edges; both directions of the
+   difference are now stated, with the summary line that tells a reader the earlier Reorder
+   is not in force.
+3. **Fix-round budgets had no durable record.** B2-3 now writes each stage's round count
+   beside its verdict, and R4 reads the remaining budget from it. A verdict with no count —
+   a body written before this, or by something else — is treated as final rather than as a
+   fresh budget, which is the only reading that does not let a PR consume unbounded rounds
+   across resumes.
+4. **PR attribution led with the weaker signal** (found by the pre-push security review).
+   The first draft attributed a PR to an issue by its body's `Closes #N`, corroborated by
+   the head branch — the inverse of the merge gate's E1c trust ordering, where the branch
+   name is stronger because it is fixed before the body is written. Re-entry's attribution
+   decides whether an issue is implemented at all, so a body-led rule lets editable content
+   drop an issue from a session's dispatch. Now head-branch-first, with the two signals
+   disagreeing attributing to neither, and attribution confined to the platform-derived
+   issue set. The residual exposure — content can subtract an implementation, never add
+   merged code — is stated in Known limits.
+
+**Verified live against this repository on 2026-08-07** (the reads the procedure depends
+on, run here rather than recalled):
+
+- `gh pr list --head <branch>` matches a PR whose head branch has been deleted — PR #120,
+  head `feat/115-integration-mode`, absent from `git ls-remote --heads origin`. This is what
+  distinguishes a merged milestone from a batch that never started, since both present as
+  "the integration branch does not exist".
+- Four PRs are `MERGED` against `integration/issue-109` while `gh issue view 109` reports
+  `0/7` sub-issues completed — issue state is not a signal for landed work.
+- `git worktree list --porcelain` reports path, branch and HEAD only; this clone listed a
+  live implementation worktree and an abandoned one in identical form.
+- `git log --format=%cI` carries a local offset (`+09:00`) that sorts wrongly against
+  GitHub's `Z` timestamps; `TZ=UTC0 git log --date=format-local:%Y-%m-%dT%H:%M:%SZ`
+  produces the comparable shape.
+
+Cases 1–54 are unaffected: B0 is a new phase that runs only in integration mode, and the
+three `batch.md` hooks add rules for resumed batches without changing any existing step for
+a fresh one.

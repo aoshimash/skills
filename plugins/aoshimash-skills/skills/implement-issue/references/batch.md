@@ -64,6 +64,37 @@ environment lists the skills available to this run, and treated as **unavailable
 that cannot be established. Where either does not hold, do not offer the option; give the
 reason in one line of the plan and run the batch in standard mode.
 
+## Phase B0: Re-entry (integration mode only)
+
+A batch can outlive the session that started it — an interruption, a context or session
+limit, or a deliberate one-session-at-a-time schedule. **Before Phase B1, establish
+whether this invocation starts a batch or resumes one**, and establish it from the tracker
+and git rather than from anything this session remembers, because a fresh session
+remembers nothing. The procedure is [batch-reentry.md](batch-reentry.md); what belongs
+here is when it runs and what it hands back.
+
+**Integration mode only.** The artifacts it keys on — the integration branch, its merge
+history, and the PRs based on it — exist only in that mode. A standard-mode batch bases
+every PR on the default branch, where a re-run is an ordinary implement-issue invocation.
+
+**Run it whenever integration mode is available for this batch source** (Merge Modes),
+before B1-3 draws the plan — not only when the user says "resume". A session cannot tell
+from its own context that an earlier one existed, so the check is unconditional; on a
+genuinely fresh batch it finds nothing and costs a handful of read-only calls.
+
+It hands back one of four outcomes:
+
+| Outcome | What the rest of this file does with it |
+|---|---|
+| **Fresh** — no integration branch, no PRs based on it, no milestone PR | Continue as written; nothing changes |
+| **Resumable** — some of those exist and the milestone is unfinished | B1-3 presents a **resume** plan carrying the re-derived per-issue statuses, marking which issues will be dispatched and which are already settled; B1-4 reuses the branch; B2-1 dispatches only the unsettled ones. The mode is not asked again — the branch's existence records that it was approved — and where no user is reachable the resume proceeds on the re-derived plan (batch-reentry.md R6) |
+| **Complete** — the milestone PR merged, or it is ready for review with the batch terminal | Report and stop. Create no branch, cut no worktree, dispatch no implementer, invoke no merge gate |
+| **Stop** — a human closed the milestone PR without merging it | Report and stop, the same way. What happens to the branch is that human's call, not this batch's |
+
+**A recency stop outranks all four.** Where re-entry finds evidence that another session
+is working on this batch (batch-reentry.md R0), nothing is dispatched this run: the plan
+is not drawn and the merge gate is not invoked.
+
 ## Phase B1: Dependency Graph
 
 ### B1-1. Collect Dependencies
@@ -291,6 +322,14 @@ codebase revealed surfaces later as a merge conflict, which the gate defers to a
 rather than resolving. Nothing here prevents that — B1-2's edge and this dispatch scope
 only make it less likely, and the deferral is the backstop.
 
+**Resumed batches (B0): adopt a pull request, never a branch or a worktree.** An earlier
+session can leave a per-issue branch on the remote that never became a PR, and a worktree
+directory in this clone, and neither artifact records how that session ended — an
+abandoned attempt and an interrupted one are the same record. Dispatch such an issue on a
+**fresh branch name and a fresh worktree path**, leave the old ones untouched, and report
+them; a PR, by contrast, is adopted and never duplicated. The rules and their rationale
+are in [batch-reentry.md](batch-reentry.md) R5.
+
 ### B2-2. Implementer Instruction Template
 
 Run each issue's implementer with an instruction set that includes:
@@ -325,7 +364,7 @@ After each issue's PR/MR is created (and the implementer has reported):
 
    Where the environment supports model selection, run reviewers on a model at least as capable as the implementer's — see review-gates.md "Reviewer model".
 3. Stage 2.5: **Pattern Propagation** — if a `rule-violation-instance` is found, scan other in-flight PRs for the same pattern and offer to propagate the fix (see [review-gates.md](review-gates.md)). This stage only runs in Batch mode, when 2+ issues are in flight.
-4. If issues are found at Stage 1 or 2 → re-run the implementer to fix → re-review (max 2 fix rounds per stage).
+4. If issues are found at Stage 1 or 2 → re-run the implementer to fix → re-review (max 2 fix rounds per stage). **Record each stage's verdict together with its round count** in the PR body's Gate Results as the stage settles — `Spec compliance (Stage 1): PASS (round 1/2)`, `Code quality (Stage 2): FAIL (round 2/2, findings in Risk Areas)`. The count is what a later session reads the remaining budget from: the PR body is the only record of it that survives this one, and a verdict written without a count is treated as final rather than as a fresh budget ([batch-reentry.md](batch-reentry.md) R4).
 5. **Automated review response** — once the gates and CI pass, run [automated-review.md](automated-review.md) for this PR/MR: detect the repository's automated reviewers, wait (bounded) for their findings, and address them (fix, push, reply) for at most 2 rounds, recording leftovers in the PR body. Detection results are per repository, so detect once per batch and reuse the reviewer set for every PR in it. Fix rounds run like the gate fix rounds — re-run the implementer, or apply the fix directly where the orchestrator is already doing the work. Human review comments are never auto-addressed. With no automated reviewer configured this step records that and ends immediately.
 6. **Flip draft to ready** — when both stages pass, the PR/MR's CI is green, and the automated review response has completed, mark it ready for review (see the platform guide). A PR whose gates or CI never passed stays a draft with the unresolved state recorded in its body, and the issue is reported `DONE_WITH_CONCERNS`; automated review findings recorded as remaining do not hold the draft.
 
@@ -676,6 +715,11 @@ Around it, in this order:
    Repeating it here is for the human reader, not the gate.
 6. **Any dependent left `SKIPPED` behind a dependency that later merged** (B2-6), with the
    note that re-running the batch picks those issues up.
+7. **Whether this session resumed an earlier one** (B0), and if so: which issues arrived
+   already settled rather than being implemented here, that the dependency graph was
+   re-derived and any earlier Reorder is therefore not in force, and every orphan branch
+   and leftover worktree re-entry declined to adopt
+   ([batch-reentry.md](batch-reentry.md) R5, R6).
 
 The parent-issue summary comment carries the same content.
 

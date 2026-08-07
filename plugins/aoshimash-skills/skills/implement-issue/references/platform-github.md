@@ -393,6 +393,66 @@ returned against the limit you passed: equal means the list may have been trunca
 re-read with a higher limit before concluding anything from it. A coverage check built on a
 truncated list fails open — it under-reports the human queue.
 
+## Re-derive a Batch's State (re-entry)
+
+Used by [batch-reentry.md](batch-reentry.md) to rebuild a batch's state in a session that
+has no memory of it. Every read here is read-only.
+
+**1. Every PR based on the integration branch, in any state** — the primary artifact:
+
+```bash
+gh pr list --base integration/issue-<parent-number> --state all --limit 200 \
+  --json number,title,state,isDraft,baseRefName,headRefName,updatedAt,mergeCommit,labels,body
+```
+
+`state` is `OPEN` / `MERGED` / `CLOSED`. `mergeCommit` is `null` while a PR is open and
+carries `.oid` once it merged. `body` carries the Gate Results section, which is where a
+resumed run reads each stage's remaining fix rounds. Apply the truncation rule of
+[List the PRs on the Integration Branch](#list-the-prs-on-the-integration-branch) — a row
+count equal to `--limit` means the read may be short, and a short read here fails **open**:
+a hidden PR is one re-entry would re-implement.
+
+**2. The milestone PR** — the integration branch as the **head**, not the base:
+
+```bash
+gh pr list --head integration/issue-<parent-number> --base <default-branch> --state all \
+  --limit 200 --json number,state,isDraft,updatedAt,url,title
+```
+
+This read survives the branch's deletion: `--head` matched a PR whose head branch had
+already been deleted when this was checked against this repository on 2026-08-07 (PR #120,
+head `feat/115-integration-mode`, absent from `git ls-remote --heads origin`). That is what
+lets a merged milestone be distinguished from a batch that never started, both of which
+present as "the integration branch does not exist".
+
+**3. Remote branches an earlier session pushed** — including per-issue branches that never
+became a PR:
+
+```bash
+git ls-remote --heads origin
+```
+
+`git ls-remote` returns the complete ref list in one response, so no pagination rule
+applies to it. Match the batch's branch naming (`<type>/<issue-number>-…`) against the PR
+list from read 1: a branch with no PR is an orphan ([batch-reentry.md](batch-reentry.md)
+R5), never a base to build on.
+
+**4. Timestamps for the recency check** (batch-reentry.md R0). GitHub returns `updatedAt`
+as ISO-8601 UTC with a `Z` suffix, and such timestamps compare lexicographically without
+conversion. `git log --format=%cI` does **not** — it carries the local offset
+(`2026-08-07T15:21:25+09:00`), which sorts wrongly against a `Z` string. Normalize it:
+
+```bash
+git fetch origin --prune
+
+# branch head time, in the same shape as GitHub's timestamps
+TZ=UTC0 git log -1 --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ \
+  origin/integration/issue-<parent-number>
+
+# now, for the comparison
+date -u +%Y-%m-%dT%H:%M:%SZ
+```
+
 ## Monitor CI
 
 ```bash
