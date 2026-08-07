@@ -704,7 +704,9 @@ For blocked issues, explain what went wrong and suggest next steps. If the issue
 
 **Where model selection was used, give each issue's tier a column in the table** —
 `| Issue | Title | Status | PR | Tier |`, the same way integration mode adds its merge column
-below, and both together in integration mode. A **fast** tier carries the evidence that
+below. In integration mode both columns are present, with **Merge before Tier** —
+`| Issue | Title | Status | PR | Merge | Tier |` — so the merge column keeps the position that
+section gives it. A **fast** tier carries the evidence that
 justified it, and any tier whose executed model was not that tier's own resolution says what
 changed it — a floor raise, a rejected override table, or an upward fallback
 ([model-selection.md](model-selection.md)):

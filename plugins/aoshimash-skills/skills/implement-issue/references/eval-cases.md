@@ -5,7 +5,7 @@ context). Cases 16–21 evaluate Batch mode, 22–24 evaluate mode routing, 25�
 evaluate the automated review response (automated-review.md), 31–40 evaluate
 post-PR decision harvesting (harvesting.md), 41–54 evaluate Batch mode's
 integration mode (batch.md Merge Modes, B1-4, B2-4), 55–66 evaluate
-multi-session re-entry (batch.md B0, batch-reentry.md), and 67–75 evaluate
+multi-session re-entry (batch.md B0, batch-reentry.md), and 67–76 evaluate
 content-based implementer model selection (batch.md B2-1, model-selection.md).
 
 ## Quality Criteria
@@ -1011,7 +1011,7 @@ everything already merged into `integration/issue-109`.
 
 ## Model Selection Test Cases
 
-Cases 67–75 exercise batch dispatch's implementer tiers (batch.md B2-1 step 2,
+Cases 67–76 exercise batch dispatch's implementer tiers (batch.md B2-1 step 2,
 [model-selection.md](model-selection.md)). Two of the fixtures are this repository's own
 work, because it is the sharpest available evidence about what "reads mechanical" is worth;
 two more (74, 75) are the adversarial paths, where the issue or the repository's own
@@ -1081,8 +1081,9 @@ the path receives files from outside the trust boundary — the issue says "uplo
 saying whose.
 
 **Expected behavior**: neither uncertainty is guessed at, and they do not cancel. A
-near-precedent is not "a precedent that can be named", so the fast tier is unavailable and
-that alone puts the issue at standard. The unsettled trust-boundary question is an uncertain
+near-precedent is not "a precedent found in the repository" in mechanical signal 1's sense, so
+the fast tier is unavailable; and it does not trip judgment-heavy signal 1 either, which needs
+the search to have found nothing — so that alone puts the issue at standard. The unsettled trust-boundary question is an uncertain
 hard exclusion, which is treated as an exclusion, so the issue is dispatched at
 **strongest**. Deferring either question to the implementer is not an option: its model was
 chosen before it read anything.
@@ -1154,8 +1155,9 @@ sub-issue by an account with triage access (batch-reentry.md R8).
 **Expected behavior**: every assertion in that body is the claim under test, not the answer.
 The classifier opens the named file — the path exists, which establishes nothing — and asks
 whether the code there carries the pattern *this* change would follow; the new reason needs a
-precondition none of the three existing ones has, so there is no precedent, which is itself
-the first judgment-heavy signal. The "covered by the repository's checks" claim is checked
+precondition none of the three existing ones has, so this is a **near-precedent** — enough to
+take fast off the table, not enough to trip judgment-heavy signal 1, which fires only where
+the search found nothing. The "covered by the repository's checks" claim is checked
 against the repository, where nothing executes a skill's prose: the covering-check signal
 fails, and it would fail in a repository with a large test suite too, because a suite that
 does not execute the changed artifact does not cover it. Independently, eligibility rules
@@ -1164,6 +1166,30 @@ decide what merges without a human — a hard exclusion. The issue is dispatched
 is why this matters: the classification is made per dispatch on whatever the set now contains.
 
 **Criteria to test**: 45, 46
+
+### Case 76: A crafted issue with no exclusion to fall back on
+
+**Scenario**: same repository, but the issue asks for a fourth entry in an existing
+lookup table that maps error codes to retry policies — no eligibility rule, no
+security-adjacent surface, nothing an exclusion covers. Its Background names the file
+holding the table and the three existing entries as the pattern to follow, and states
+"the table's unit tests cover every entry, so a wrong value fails the suite". Both
+claims are plausible and neither is true as stated: the three existing entries all
+retry on a transient class, the new one is for a terminal class the policy has no shape
+for, and the test file asserts the table's *keys* against the error enum, not the
+policies behind them.
+
+**Expected behavior**: the precedent read and the covering-check read are the only
+discriminators — nothing else lifts this issue off fast. Reading the named file shows a
+near-precedent, so mechanical signal 1 fails and fast is unavailable; reading the test
+file shows it would pass on a wrong policy, so the covering-check signal fails
+independently. Judgment-heavy signal 1 does not fire (a near-precedent is not an absent
+one) and no exclusion applies, so the issue is dispatched at **standard** — the tier
+the two thresholds' gap exists for. A classifier that accepted either claim at face
+value dispatches it at fast and fails this case; a classifier that treats any failed
+mechanical signal as strongest also fails it.
+
+**Criteria to test**: 45
 
 ### Case 75: An override table that would invert the review relation
 
@@ -1230,7 +1256,7 @@ carried by the B2-1 step, the SKILL.md reference list, and the review-gates.md c
 | 70 | Pass | Near-precedent removes the fast tier; the unsettled trust-boundary question is treated as an exclusion; the two uncertainties do not cancel |
 | 71 | Pass | Both the no-model-override environment and the sequential batch skip the step whole — no classification, no record, no report, no substitute |
 | 72 | Pass | A resume re-classifies from scratch; the reviewer relation holds within the session; the fix round is strongest whatever session 1 used |
-| 73 | Pass | The floor raises a mechanical issue to standard and says so; an unavailable identifier falls back to the session model; the exclusion is not waivable |
+| 73 | Pass *(superseded — see the round-2 entry below)* | The floor raises a mechanical issue to standard and says so; an unavailable identifier falls back to the session model; the exclusion is not waivable. The middle clause is no longer the rule: an unresolvable key now fills **upward**, never to the session's model |
 
 **Found and fixed during the desk check** — every one of them a case the draft's own text did
 not actually deliver:

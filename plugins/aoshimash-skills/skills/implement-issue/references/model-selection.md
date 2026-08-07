@@ -129,12 +129,18 @@ mechanical runs into.
   it, which is where most documentation and prose changes land — and a check that does execute
   the artifact still only counts for what it would catch. A link checker over a rewritten
   reference file covers its links, not whether the rule it now states is the right one, so it
-  does not establish the signal for that change. Where a check genuinely would fail on the
-  change being wrong — a doctest over the snippet being edited, a schema validation over the
-  config being changed — name it, and the signal holds.
-- **A change with no precedent is already carrying the first judgment-heavy signal**, so it is
-  not a borderline fast case that the other three signals could rescue; it is a strongest-tier
-  case by the mapping below.
+  does not establish the signal for that change. The same trap in a stronger-looking form: a
+  schema validation over a config file catches its *shape*, so it establishes nothing about a
+  change from `timeout: 30` to `timeout: 3000`. Where a check genuinely would fail on the
+  change being wrong — a doctest over the snippet being edited, a unit test asserting the
+  behaviour the config drives — name it, and the signal holds.
+- **The two precedent thresholds are different, and the gap between them is the standard
+  tier.** Mechanical signal 1 needs a *close* precedent, so a near-precedent — a sibling that
+  does almost this, differing in some respect the change has to work out — fails it and takes
+  fast off the table. Judgment-heavy signal 1 fires only on a precedent the search found
+  **nothing** for; a near-precedent does not trip it. So a near-precedent alone lands on
+  standard, and only total absence is "already carrying the first judgment-heavy signal" and
+  therefore strongest by the mapping below.
 
 ### Hard exclusions — never fast, always strongest
 
@@ -243,9 +249,15 @@ ordered" are different problems with opposite remedies.
 1. **Resolve each key against the environment's roster.** A key naming a model the environment
    does not offer is unresolvable; that is step 2's problem, not a defect in the table.
 2. **Fill each unresolvable key upward, never sideways.** The tier takes the model of the
-   **next higher tier that did resolve** — fast → standard's, standard → strongest's — and an
+   **next higher tier that resolved, or that was itself filled** — fast → standard's,
+   standard → strongest's — and an
    unresolvable `strongest` takes the most capable model the environment offers, which is what
-   that tier means. Falling back to the session's model instead would place the tier outside
+   that tier means. Filling from a filled tier is what gives the step a base case: `strongest`
+   always fills, so a table pasted wholesale from another provider resolves to that one model
+   throughout rather than stalling with nothing above it. A key that is **absent** is not
+   filled at all — it goes through the default mapping (above), and a lower key fills from the
+   next higher key that has a model by either route. Falling back to the session's model
+   instead would place the tier outside
    the ordering entirely: a typo in `strongest` would leave every hard-exclusion issue — the
    security-adjacent class the exclusions exist for — running below an ordinary standard-tier
    issue in the same batch, with reviewers to match. Because each fill takes a *higher* tier's
@@ -253,17 +265,23 @@ ordered" are different problems with opposite remedies.
 3. **Then check the filled set is non-decreasing, and apply it only if it is.**
    `fast: <a strong model>` with `standard: <a weak one>` inverts the relation outright, since
    reviewers are barred from the fast tier and would resolve at standard — strictly below their
-   implementer. Where the filled set is not non-decreasing, **do not apply the section at all**:
-   resolve every tier through the environment's default mapping instead, and say so in the run's
-   report, naming the section. Where two resolvable identifiers cannot be ordered against each
+   implementer. Where the filled set is not non-decreasing, **reject the pinned table**: resolve
+   every tier through the environment's default mapping instead, and say so in the run's report,
+   naming the section. Where two resolvable identifiers cannot be ordered against each
    other from the roster, that is the uncertainty rule again — treat the table as non-monotone
    rather than assuming the repository meant well.
 
-**Say which model a tier actually ran on whenever it is not that tier's own resolution.** A
-floor raise, a rejected table, and an upward fill all produce a run whose reported tier and
-executed model differ, and a summary that reports the tier alone reads as a plain
-classification. One clause where the tier is reported — what raised it, or what it resolved
-through — is what lets a reader tell the three apart.
+   **`floor` survives a rejection.** It is evaluated on the classification, not on the table, so
+   rejecting the pins does not touch it. Otherwise a repository running `floor: strongest` would
+   lose that floor the moment anyone added a non-monotone pair to the same section — a
+   configuration edit lowering a classification, which this section promises is not on offer, and
+   a cheaper route to it than the pinning the check exists to catch.
+
+**Say why a reported tier is not a plain classification.** A floor raise changes which tier
+the issue ran at; a rejected table and an upward fill change which model that tier resolved
+to. Either way a summary naming the tier alone reads as an ordinary classification. One clause
+where the tier is reported — what raised it, or what it resolved through — is what lets a
+reader tell the three apart. Naming the cause is the bar, not the model identifier.
 
 ## Reviewer model
 
@@ -291,7 +309,9 @@ those tiers.
 **A fix round is a dispatch, so it is classified like one.** When a review gate sends an issue
 back to its implementer (batch.md B2-3 step 4), the failed stage is itself a judgment-heavy
 signal: a reviewer has already found the first attempt wanting on exactly this issue. Fix
-rounds therefore run at the strongest tier, whichever tier the first dispatch used.
+rounds therefore run at the strongest tier, whichever tier the first dispatch used. **The same
+holds for the automated-review fix rounds of B2-3 step 5**, which also re-run the implementer:
+a finding another reviewer raised is the same signal, and that dispatch pushes code.
 
 ## Sessions that resume a batch
 
