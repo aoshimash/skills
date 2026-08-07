@@ -253,8 +253,10 @@ ordered" are different problems with opposite remedies.
    standard → strongest's — and an
    unresolvable `strongest` takes the most capable model the environment offers, which is what
    that tier means. Filling from a filled tier is what gives the step a base case: `strongest`
-   always fills, so a table pasted wholesale from another provider resolves to that one model
-   throughout rather than stalling with nothing above it. A key that is **absent** is not
+   always ends up with a model — its own if it resolved, the most capable available if it did
+   not, the default mapping's if the key is absent — so a table pasted wholesale from another
+   provider resolves to that one model throughout rather than stalling with nothing above it.
+   A key that is **absent** is not
    filled at all — it goes through the default mapping (above), and a lower key fills from the
    next higher key that has a model by either route. Falling back to the session's model
    instead would place the tier outside

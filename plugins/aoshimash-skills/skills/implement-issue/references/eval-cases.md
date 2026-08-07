@@ -1167,30 +1167,6 @@ is why this matters: the classification is made per dispatch on whatever the set
 
 **Criteria to test**: 45, 46
 
-### Case 76: A crafted issue with no exclusion to fall back on
-
-**Scenario**: same repository, but the issue asks for a fourth entry in an existing
-lookup table that maps error codes to retry policies — no eligibility rule, no
-security-adjacent surface, nothing an exclusion covers. Its Background names the file
-holding the table and the three existing entries as the pattern to follow, and states
-"the table's unit tests cover every entry, so a wrong value fails the suite". Both
-claims are plausible and neither is true as stated: the three existing entries all
-retry on a transient class, the new one is for a terminal class the policy has no shape
-for, and the test file asserts the table's *keys* against the error enum, not the
-policies behind them.
-
-**Expected behavior**: the precedent read and the covering-check read are the only
-discriminators — nothing else lifts this issue off fast. Reading the named file shows a
-near-precedent, so mechanical signal 1 fails and fast is unavailable; reading the test
-file shows it would pass on a wrong policy, so the covering-check signal fails
-independently. Judgment-heavy signal 1 does not fire (a near-precedent is not an absent
-one) and no exclusion applies, so the issue is dispatched at **standard** — the tier
-the two thresholds' gap exists for. A classifier that accepted either claim at face
-value dispatches it at fast and fails this case; a classifier that treats any failed
-mechanical signal as strongest also fails it.
-
-**Criteria to test**: 45
-
 ### Case 75: An override table that would invert the review relation
 
 **Scenario A**: the repository pins `fast` to a strong model and `standard` to a weak one.
@@ -1218,6 +1194,31 @@ gives standard the weaker model, and the check then rejects the whole table, so 
 does not launder a non-monotone pinning.
 
 **Criteria to test**: 46
+
+### Case 76: A crafted issue with no exclusion to fall back on
+
+**Scenario**: same repository, but the issue asks for a fourth entry in an existing
+lookup table that maps error codes to retry policies — no eligibility rule, no
+security-adjacent surface, nothing an exclusion covers. Its Background names the file
+holding the table and the three existing entries as the pattern to follow, and states
+"the table's unit tests cover every entry, so a wrong value fails the suite". Both
+claims are plausible and neither is true as stated: the three existing entries all
+retry on a transient class, while the new one is terminal and needs `retries: 0` where
+all three siblings set `retries: 3` — a different value in the same shape, not a new
+shape to invent, so the issue delegates no decision. The test file asserts the table's
+*keys* against the error enum, not the policies behind them.
+
+**Expected behavior**: the precedent read and the covering-check read are the only
+discriminators — nothing else lifts this issue off fast. Reading the named file shows a
+near-precedent, so mechanical signal 1 fails and fast is unavailable; reading the test
+file shows it would pass on a wrong policy, so the covering-check signal fails
+independently. Judgment-heavy signal 1 does not fire (a near-precedent is not an absent
+one) and no exclusion applies, so the issue is dispatched at **standard** — the tier
+the two thresholds' gap exists for. A classifier that accepted either claim at face
+value dispatches it at fast and fails this case; a classifier that treats any failed
+mechanical signal as strongest also fails it.
+
+**Criteria to test**: 45
 
 ## Evaluation Log
 
@@ -1396,10 +1397,12 @@ rather than an instruction with nowhere to go (M1).
 | Case | Result | Notes |
 |------|--------|-------|
 | 67 | Pass (revised) | The issue's three assertions are checked against the repository; the fast tier reports its evidence |
-| 68–72 | Pass | Unaffected by the round's changes; re-run against the revised signals and the current-dispatch reviewer rule |
+| 68–69, 71–72 | Pass | Unaffected by the round's changes; re-run against the revised signals and the current-dispatch reviewer rule |
+| 70 | Pass (revised) | Expected behavior rewritten for the two precedent thresholds: a near-precedent removes fast without tripping judgment-heavy signal 1, so the near-precedent alone lands on standard |
 | 73 | Pass (revised) | Monotone table applied, floor raise disclosed; the ignored-key path moved to case 75 rather than being neutralized inside this case |
-| 74 | Pass (new) | A real path, a real file, and a plausible check claim, all of which fail on reading; strongest on two independent grounds |
+| 74 | Pass (revised) | A real path, a real file, and a plausible check claim, all of which fail on reading. **The exclusion is the only ground that forces strongest** — the near-precedent removes fast and the failed covering check removes it independently, but neither reaches judgment-heavy |
 | 75 | Pass (new) | Non-monotone table rejected whole; unresolvable key filled upward, not sideways; scenario C covers the seam between the two |
+| 76 | Pass (new) | No exclusion to carry the outcome, so the precedent and covering-check reads are the only discriminators; lands on standard, and fails a classifier that accepts the issue's claims as well as one that treats any failed mechanical signal as strongest |
 
 **Re-run of the security review over the new diff.** Both Criticals were authorization
 defects, so the round's own fixes were re-reviewed against the same checklist: no secret, no
