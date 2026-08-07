@@ -30,8 +30,14 @@ Read the configured merge method — never assume squash:
 
 ```bash
 gh api repos/{owner}/{repo} \
-  --jq '{allow_merge_commit, allow_squash_merge, allow_rebase_merge, default_branch}'
+  --jq '{allow_merge_commit, allow_squash_merge, allow_rebase_merge, default_branch,
+         delete_branch_on_merge}'
 ```
+
+`default_branch` is the milestone PR's base, and `delete_branch_on_merge` decides what that
+PR has to disclose before its flip: with it enabled the platform deletes the integration
+branch the moment the milestone merges, which retargets any PR still based on it — see
+[milestone-pr.md](milestone-pr.md) M4/M5.
 
 A repository may enable one, two, or all three methods; use the one the repository's own
 history and conventions establish, and pass the matching `gh pr merge` flag when the merge
@@ -552,6 +558,156 @@ made to <parent>`) — verified locally. Two consequences: **do not rewrite the 
 message** (add to it if needed), and match on the **full 40-character SHA** — an
 abbreviation would also match, since it is a prefix of the full SHA in that line, but it
 can match the revert of a *different* commit sharing the prefix.
+
+## The milestone PR (Phase 3)
+
+See [milestone-pr.md](milestone-pr.md) for what each of these decides.
+
+**M0 — may a milestone PR exist yet, and does one already?**
+
+```bash
+# Existing milestone PR — matched by head AND base, never by title. --state all, because a
+# merged or closed one changes the action (M0's table) and an open-only read would miss it.
+# headRefOid is the cleanup discriminator: on a MERGED PR it is the integration-branch SHA
+# that merged, and the platform retains it (confirmed on merged PRs #118 and #119 here).
+gh pr list --state all --head {integration_branch} --base {default_branch} --limit 200 \
+  --json number,state,isDraft,url,headRefName,baseRefName,headRefOid
+
+git fetch origin && git rev-parse origin/{integration_branch}   # compare against headRefOid
+
+# ONLY for the creation gate — never for cleanup. See below.
+gh api repos/{owner}/{repo}/compare/{default_branch}...{integration_branch} \
+  --jq '{status, ahead_by, behind_by}'
+```
+
+Do **not** count `.commits | length` from the compare response as the ahead count: that list
+is paginated, while `ahead_by` and `behind_by` are totals. Apply the truncation rule to the
+`gh pr list` read as always.
+
+**`ahead_by` is a creation gate only.** A branch that is ahead *and* behind (`status:
+"diverged"`) still qualifies for creation. But after the milestone PR merges, `ahead_by`
+returns to `0` only under the **merge** method; under **squash** and **rebase** the branch's
+own commits never become ancestors of the default branch, so it stays positive permanently.
+Cleanup is therefore keyed to `headRefOid`, not to `ahead_by` (milestone-pr.md M0, M5).
+
+**M1 — create the draft.** Between refs with no commits between them the platform refuses
+outright — verified live against this repository:
+
+```
+HTTP 422 {"message":"Validation Failed","errors":[{"resource":"PullRequest","code":"custom",
+"message":"No commits between main and probe/empty-diff-111"}]}
+```
+
+so this command runs only once the compare above reports `ahead_by > 0`:
+
+```bash
+# The parent's title may be used ONLY if the parent issue's author has write access. The
+# vetted set is built FROM the parent's sub-issue links, so the parent itself was never
+# vetted by E2 — run E2's own reads (see "Issue author write access" above) against it:
+gh issue view {parent} --json author --jq '{login: .author.login, isBot: .author.is_bot}'
+gh api repos/{owner}/{repo}/collaborators/{login}/permission \
+  --jq '{permission, push: .user.permissions.push}'
+
+# Write access confirmed → the parent's title, sanitized.
+gh pr create --draft \
+  --base {default_branch} --head {integration_branch} \
+  --title "Milestone #{parent}: {sanitized parent issue title}" \
+  --body-file {body_file}
+
+# Check failed, errored, bot author or deleted account → identifier-only fallback, which
+# carries no author content at all.
+gh pr create --draft \
+  --base {default_branch} --head {integration_branch} \
+  --title "Milestone #{parent}: {N} issues on {integration_branch}" \
+  --body-file {body_file}
+```
+
+Pass `--head` explicitly rather than relying on the current branch, and never `--fill`: the
+body has a required structure and commit subjects are content.
+
+**`--title` is the one place issue content reaches a command line.** There is no
+`--title-file`, so the value cannot be moved off the command line the way the revert comment
+is. Sanitize the **assembled** title before substituting — not only the parent's portion —
+single line, no quotes, backticks, `$`, backslashes or newlines, then truncate
+(milestone-pr.md M1); the branch name interpolated by the fallback form reaches the same
+command line. The same write-access gate and the same sanitization apply to the
+`gh pr edit --title` call at the flip.
+
+**M2/M3 — write and update the body.** The body is always passed as a file, never inline, so
+aggregated content is never interpreted by the shell. Read the current body first and replace
+**only** the managed block:
+
+```bash
+# Per-issue content to aggregate — one call per merged PR
+gh pr view {pr} --json number,title,url,body,mergeCommit,labels
+
+# Current milestone body, then splice between the markers and write it back
+gh pr view {milestone_pr} --json body --jq '.body' > {current_body_file}
+gh pr edit {milestone_pr} --body-file {new_body_file}
+```
+
+The markers are `<!-- BEGIN merge-issue-prs:milestone -->` and
+`<!-- END merge-issue-prs:milestone -->`. They count only when a line consists of the marker
+alone, and the splice needs **exactly one of each, BEGIN before END** — zero, duplicates, or
+END-before-BEGIN are all the marker-loss path, which appends and never overwrites, after
+scanning the preserved remainder for linking keywords (milestone-pr.md M2). Re-read the body
+in the same step as the write: there is no compare-and-swap on `gh pr edit`.
+
+**M4 — the flip.** Read **both** F2 sources: a failing `push` run vetoes F2 outright, and the
+rollup can substitute only for *missing* push evidence, never override a red one.
+
+```bash
+# (a) push-triggered CI on the branch head — same query and rules as 2-4
+git fetch origin && git rev-parse origin/{integration_branch}
+gh run list --commit {branch_head} --branch {integration_branch} -e push --limit 100 \
+  --json databaseId,workflowName,event,status,conclusion,headSha
+
+# (b) the milestone PR's own rollup — judged by eligibility.md E4's per-__typename rules
+gh pr view {milestone_pr} --json statusCheckRollup,headRefOid
+
+# Conflict state: disclosed, never resolved (milestone-pr.md M3)
+gh pr view {milestone_pr} --json mergeable,mergeStateStatus
+
+# Still-open PRs based on the integration branch — the F4 disclosure set, and the read that
+# M5's deletion refusal depends on. TRUNCATION RULE APPLIES: compare the row count against
+# --limit and raise it if they are equal. A short read here fails OPEN — it deletes a branch
+# that still has PRs based on it, retargeting human-queued work onto the default branch.
+gh pr list --state open --base {integration_branch} --limit 200 --json number,title,url
+
+gh pr edit {milestone_pr} --title "Milestone #{parent}: … (partial: N/M)"   # only if partial
+gh pr ready {milestone_pr}
+```
+
+`gh pr ready` is the only flip command; this gate never runs `gh pr merge` or
+`gh pr review` against the milestone PR.
+
+**M5 — cleanup.** Confirm from platform state and git, then delete the remote ref:
+
+```bash
+gh pr view {milestone_pr} --json state,mergeCommit,headRefOid,baseRefName
+git fetch origin --prune
+git merge-base --is-ancestor {milestone_merge_sha} origin/{default_branch}
+
+# Nothing landed since the milestone merged? This, NOT `ahead_by` — under squash and rebase
+# the branch never becomes an ancestor of the default branch, so `ahead_by` stays positive
+# forever and would block cleanup permanently (milestone-pr.md M0, M5 condition 3).
+test "$(git rev-parse origin/{integration_branch})" = "{milestone_head_ref_oid}"
+
+# Does the branch still exist? (auto-deletion may already have removed it, and branch
+# protection or a ruleset may equally have prevented that — read, never assume)
+git ls-remote --exit-code --heads origin {integration_branch}
+
+# Only when the milestone PR is MERGED, its commit is on the default branch, the head
+# matches, and the open-PR read above returned none:
+gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/{integration_branch}
+```
+
+Deleting while PRs are still based on the branch does not fail. GitHub, on deleting a head
+branch **whose pull request has merged**, checks for open PRs specifying that branch as their
+base and **retargets** them — changing their base to *that merged PR's* base, i.e. the default
+branch here (milestone-pr.md M4/M5 quotes the docs precisely). The open-PR read is what keeps
+*this gate* from causing that; where the repository deletes head branches automatically, the
+platform does it at merge time regardless, which is why M4 discloses it before the flip.
 
 ## Agent Instructions Config Example
 

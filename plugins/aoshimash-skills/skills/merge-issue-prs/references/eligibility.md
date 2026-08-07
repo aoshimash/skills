@@ -1,10 +1,8 @@
 # Eligibility Policy
 
-> **Implementation status.** This policy — Phase 1 triage, and the Phase 0 setup it
-> depends on — is fully specified, and so is the merge loop it feeds
-> ([workflow.md](workflow.md)). What is **not** part of this skill version is the Phase 3
-> milestone PR: do not open, update, or flip one. Triage itself performs one write, the E5
-> exclusion label (see "Recording permanence"); the merge loop performs the rest.
+> Triage itself performs exactly one write — the E5 exclusion label (see "Recording
+> permanence"). The merge loop ([workflow.md](workflow.md)) and the milestone PR
+> ([milestone-pr.md](milestone-pr.md)) perform the rest.
 
 The procedure behind Phase 1. It decides, for one PR, exactly one of two outcomes:
 
