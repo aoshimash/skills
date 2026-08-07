@@ -42,6 +42,7 @@ where to point the next step.
 | Stage 2.5 pattern propagation (same) | nothing until a fix is applied | the matching PRs | **one line per in-flight PR scanned** |
 | Automated review response ([automated-review.md](automated-review.md) G) | the `Gate Results` line, one `Risk Areas` entry per remaining finding, and every reply on the PR thread | those two recorded lines | **the `Gate Results` line + the remaining count** |
 | Merge gate (B2-4) | its own labels, comments, reverts and milestone PR | its report, whose format belongs to the merge-issue-prs skill and is **not** changed here | what the orchestrator **retains**: one verdict per issue and one human-queue entry per issue |
+| Stage 2.5 fix pass (same) | the fix commit on that PR's branch | whether it applied | **one line per PR** — number, applied or not, commit or reason |
 | Harvest collection (B3-1) | nothing — promotion is separate and gated | the deduplicated candidate list | **one line per candidate + its provenance issues** |
 
 Where a step produces more findings than its bound carries, the return states the **count**
@@ -63,7 +64,14 @@ states for the fix-round count it reads from the same section.
 **These are caps on what is carried forward, not on what is looked at.** A reviewer reads the
 whole diff; an implementer reads the whole issue. The bound is on the return.
 
-**Where the environment has no separate agent instances there is no return to bound** — the
+**Work the orchestrator does inline has no return, so the same rule applies to its residue.**
+The one that matters at scale is B1-2 step 4's same-file collision analysis, which reads the
+codebase and iterates to a fixed point: what the batch needs afterwards is the **edges it
+added and the file scopes it assigned** (which B2-2 passes to each implementer), not the
+listings it read to get there. Keep those and drop the rest — R4 rebuilds the whole analysis
+from scratch on a resume, so nothing is lost by not carrying it.
+
+**Where the environment has no separate agent instances there is no return to bound** — every
 step runs in the orchestrator's own context. See C4.
 
 ## C2. Nothing the batch needs exists only in the orchestrator's context
@@ -149,6 +157,18 @@ same-file analysis to a fixed point. The graph is the reason this read is not th
 session's own writes against the freshness window and stop the run on its own footprints —
 which is why batch-reentry.md scopes it to "once, before this session's first write". It
 stays at B0 and does not move here.
+
+### A read that could not be completed is not a position
+
+The read's own failures all point the same way: an API error, or a list that may have been
+truncated (the platform guide's fetched-count rule), makes an issue that *has* a PR look like
+one that does not — and the cost of that is a second implementer on an issue already in
+flight. So **a position read that did not complete dispatches nothing new.** Advance the
+issues whose artifacts were positively established, report the read that failed, and leave the
+rest for the next boundary or the next invocation. Raise the limit and re-read before
+concluding anything from a list whose row count equals the limit it was fetched with; half a
+position is not a position, and treating it as one is how a lost record becomes a duplicate
+PR.
 
 ### The invariant that makes recovery safe
 

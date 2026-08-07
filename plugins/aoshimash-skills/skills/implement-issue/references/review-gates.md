@@ -175,7 +175,11 @@ Classify a violation as `rule-violation-instance` (rather than a one-off bug) wh
 3. Present findings to the user via a user choice (see Environment Adaptation):
    > "Pattern violation `<pattern>` found in N other in-flight PR(s): <list>. What would you like to do?"
    > Options: Apply fix to all / Select which PRs / Skip propagation
-4. For each approved PR, run a fix pass to apply the same fix — a separate agent instance where available, otherwise directly.
+4. For each approved PR, run a fix pass to apply the same fix — a separate agent instance where
+   available, otherwise directly. A dispatched fix pass returns **one line per PR** — the PR
+   number, whether the fix applied, and the pushed commit or the reason it did not
+   ([context-budget.md](context-budget.md) C1). A failure's detail goes in the batch summary
+   entry the Non-Blocking Rule below already calls for, not into the return.
 
 ### Non-Blocking Rule
 

@@ -189,6 +189,11 @@ in the B1-3 plan, since the batch cannot satisfy it.
      resolves to the edge: an unnecessary edge costs wall-clock, a missing one costs a
      deferred PR and its dependents.
 
+   This step reads the codebase, so what it leaves behind is the **edges it added and the file
+   scopes it assigned** — not the listings it read to reach them
+   ([context-budget.md](context-budget.md) C1). A resume rebuilds the whole analysis anyway
+   (batch-reentry.md R4), so carrying its inputs forward buys nothing.
+
    **Repeat this step until a pass adds no edge.** Recomputing the levels moves the higher
    issue down into a level whose members it was never compared against, and a collision
    with one of *those* would then be dispatched in parallel — the outcome the step exists
