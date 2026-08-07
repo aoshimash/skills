@@ -6,6 +6,12 @@ and the session's own picture of it gone. This file is how the **next** session 
 that picture, and it rebuilds it from the tracker and git alone, because that is all
 there is: nothing in this pipeline writes batch state anywhere else.
 
+One thing is **read rather than rebuilt** — which issues a human approved into this batch.
+No artifact implies it, so the session that took the approval records it on the parent issue
+(batch.md B1-5) and this one reads it (R8 §1). That is a decision, not state; the
+distinction, and why it is not the state file this design refuses, is in "What is not batch
+state" below.
+
 Invoked from [batch.md](batch.md) Phase B0, which states when it runs and what it hands
 back. This file is the procedure.
 
@@ -42,6 +48,7 @@ batch state.
 | Head commit times of the per-issue branches in this batch's naming | same | Whether another session has written recently (R3) |
 | Each issue's `blockedBy` links, and the dependency declarations in its body | [batch.md](batch.md) B1-1 | The DAG — rebuilt from scratch, never remembered (R4) |
 | Comments on each merged issue | platform guide, "Read Issue Comments" | Whether B2-4's per-merge comment was already posted for that merge commit |
+| `## Batch Plan Approved` comments on the parent issue, in the order the platform returns them, each with its author | platform guide, "Record and Read a Batch's Approved Plan" | Which issues a human approved into this batch — the one fact no other artifact carries (R8 §1) |
 
 **One PR list read serves R2, R3, R5 and R6.** It is the same
 `gh pr list --base <branch> --state all` query with the fields above; read it once per
@@ -75,8 +82,20 @@ run and reuse the result. "Re-derived on every run" means nothing is carried bet
 - **A fix-round count no PR body carries.** R6.
 
 There is no state file, and re-entry must not introduce one — neither on disk nor as a
-tracker comment written for the machine's own benefit. Everything above is an artifact
-that exists for its own reasons and that a human reads too.
+tracker comment written for the machine's own benefit, with the single exception stated
+next. Everything else above is an artifact that exists for its own reasons and that a human
+reads too.
+
+**The approval record is the one write this pipeline makes for a later session to read, and
+what keeps it from being a state file is that it records a decision rather than a state.**
+State goes stale: it describes something the tracker and git also describe, so a recorded
+copy and the artifacts drift apart and the copy lies. A decision cannot go stale, because
+nothing else ever described it — B1-3's approval exists only in the session that took it,
+and the artifacts a resume reads are equally consistent with an approval that covered seven
+issues, an approval that excluded five of them, and no approval at all. So the record is
+written **once, at the approval, and never updated**: no status, no progress, no graph, no
+tier. Anything a later session could derive, it derives (R1, R4, R5). If a rule here ever
+needs the record updated to stay true, that rule is wrong, not the record.
 
 ## R1. The issue set
 
@@ -87,8 +106,8 @@ waits for R4.
 The set is not assumed stable between sessions: an issue may have been closed, re-scoped,
 or added to the parent since the first one ran. Both directions matter later — R2 uses the
 set to identify which branch this batch is on, and R8 treats an issue with no evidence
-behind it as newly entering the batch, because nothing durable records which issues the
-first session's plan actually covered.
+behind it as newly entering the batch **unless an approval record names it** (R8 §1), since
+this set says which issues the *source* holds today and never which ones a human approved.
 
 ## R2. The integration branch, the milestone PR, and the stop conditions
 
@@ -423,34 +442,95 @@ costs one call and does not depend on what an earlier session saw.
 
 ## R8. Rejoin the pipeline
 
-### 1. What the integration branch licenses, and what it does not
+### 1. What licenses a dispatch
 
-B1-4 creates the branch only after an integration-mode approval, so a branch under this
-batch's name is evidence about the **mode**: which base to use, and that the merge gate is
-the consumer of the ready flip. That is the whole of it, and three facts bound it:
+Two artifacts are read here, and they license different things: the branch settles the
+**mode**, the approval record settles the **plan**. Neither substitutes for the other.
+
+**The integration branch licenses the mode, and only the mode.** B1-4 creates it only after
+an integration-mode approval, so a branch under this batch's name establishes which base to
+use and that the merge gate is the consumer of the ready flip. That is the whole of it, and
+three facts bound it:
 
 - **Any account with write access can push a branch by that name.** The branch establishes
   what to do *if* the batch continues, not that it may.
-- **B1-3's approval covers which issues get implemented, and nothing records that.**
-  Reorder can *exclude an issue from the batch* (batch.md B1-3), and the exclusion lives in
-  that session only — so R1's re-derived set contains the issue again.
-- **The set can widen between sessions.** Adding a sub-issue link needs only triage access
-  ([eligibility.md](../../merge-issue-prs/references/eligibility.md) Known limits #3).
+- **It names no issues.** Reading it as consent would license the whole of R1's re-derived
+  set — which is not what any approval covered, because Reorder can *exclude an issue from
+  the batch* (batch.md B1-3) and R1 rebuilds the source, not the plan.
+- **That set can widen between sessions.** Adding a sub-issue link needs only triage access
+  ([eligibility.md](../../merge-issue-prs/references/eligibility.md) Known limits #3), so a
+  branch-as-consent reading would license implementing issues nobody with write access ever
+  put in the batch.
 
 **So dispatching an implementer requires an approved plan, every session.** The mode is
-settled and is not asked again; the plan is not.
+settled and is not asked again; the plan has to come from somewhere.
+
+#### The approval record
+
+B1-5 writes it: a comment on the batch's **parent issue** headed `## Batch Plan Approved`,
+carrying the integration branch it belongs to, the issues B1-3 **Considered**, and the
+subset **Approved**. It is written once at the approval and never updated (see "What is not
+batch state"). Read the parent issue's comments in full — a partial read here silently
+narrows the plan — and apply these rules in order (platform guide, "Record and Read a
+Batch's Approved Plan"):
+
+1. **Keep only records naming this batch's integration branch**, as R2 identified it. A
+   record for another branch belongs to another batch, not to this one, and is skipped
+   rather than superseded.
+2. **Take the newest survivor** — the platform's comment list carries its own order, so the
+   newest is read off that rather than sorted for (platform guide). Every earlier record is
+   **superseded and licenses nothing**, which is how a re-planned batch retires the plan it
+   replaced.
+3. **Then check that one record's trust**, and never fall back to an older record when it
+   fails. The record that cannot be read or trusted may itself be the supersession — a
+   re-plan whose permission read timed out is exactly that shape — so stepping past it to
+   the record it replaced would act on a plan a human has already narrowed. Fail closed on
+   the newest instead.
+4. **Trust is the merge gate's E2, applied to the comment's author**
+   ([eligibility.md](../../merge-issue-prs/references/eligibility.md)): read the author's
+   repository permission from the collaborator-permission API; `admin` or `write` is
+   trusted. `read` / `none`, a bot author, and a deleted account are substantive answers
+   that disqualify. A read that errors is retried up to 3 times with backoff and then
+   **fails closed**, and a transient-exhausted failure is reported distinctly from a
+   substantive one — one flaky call must not read the same as a genuinely untrusted record.
+5. **A record that fails any of this — absent, superseded, untrusted, unreadable, or
+   malformed (no branch line, or no parseable Approved list) — is treated as no record**,
+   and the artifact-evidence bound below applies unchanged.
+
+**What a trusted record licenses is exactly the issues its Approved list names**, and it is
+read as a **closed enumeration**, never as a description of a source to re-read. An issue
+absent from that list is unlicensed whether it was excluded at B1-3 or linked into the
+parent afterwards. An approved issue that has since left R1's set is not dispatched either
+— only issues the platform still places in the batch are — and is reported.
+
+**The record does not raise the trust floor above write access, and does not need to.** An
+account with write access can already obtain an approval by running this skill and answering
+B1-3, so a forged record grants it nothing it could not do directly. What the record adds
+over the branch-as-consent reading rejected above is **scope**: the branch names no issues
+and would license everything in the set, including whatever triage access added, while the
+record licenses the issues it enumerates and nothing that arrives later. The floor is write
+access; the closed enumeration is the control.
+
+**It licenses a dispatch and nothing else.** It confers no eligibility, changes no
+ordering — the DAG is still R4's, and R5's settled issues are still settled — and moves no
+PR toward a merge. Code still reaches the default branch only through a human merging the
+milestone PR.
+
+#### The two paths
 
 - **With a user reachable:** present the resume plan and take the same approval, with the
-  same options. Mark every issue the artifacts show no evidence for — no PR, no branch — as
-  **newly entering the batch this session**, so an exclusion made earlier is visible to be
-  made again, and so an issue linked into the set since the last run is seen before it is
-  implemented.
-- **With no user reachable** — an unattended or scheduled invocation: **dispatch no new
-  implementer.** Advance what a plan already produced — re-run the gates on the unmerged
-  drafts (R6), which includes re-invoking an implementer for a gate fix round against a PR
-  that already exists, invoke the merge gate, post the merge comments, report — and name
-  the issues waiting on an approved plan. Merging needs no approval here: it is
-  merge-issue-prs' own autonomous remit under its own policy, and it acts only on PRs a
+  same options — the record is never a substitute for a user who is present. Mark every
+  issue the artifacts show no evidence for — no PR, no branch — as **newly entering the
+  batch this session**, so an exclusion made earlier is visible to be made again, and so an
+  issue linked into the set since the last run is seen before it is implemented. Then write
+  the new record (B1-5), superseding the old one.
+- **With no user reachable** — an unattended or scheduled invocation: **dispatch the issues
+  a trusted record licenses, and no others.** With no such record, dispatch no new
+  implementer at all. Either way, advance what a plan already produced — re-run the gates on
+  the unmerged drafts (R6), which includes re-invoking an implementer for a gate fix round
+  against a PR that already exists, invoke the merge gate, post the merge comments, report —
+  and name whatever is left waiting on an approved plan. Merging needs no approval here: it
+  is merge-issue-prs' own autonomous remit under its own policy, and it acts only on PRs a
   plan already produced.
 
 The boundary is scope, not caution: an unattended session may finish work a human
@@ -459,7 +539,9 @@ approved, and may not start work nobody did.
 **What a resume cannot recover is a Reorder.** Its edits — an excluded issue, a dropped
 stale edge, a forced ordering — live in the session that made them. R4 rebuilds the
 unmodified graph plus B1-2's own collision edges, and R1 the unmodified set. The exclusion
-is the consequential one and is handled by the approval rule above; of the graph edits, a
+is the consequential one, and it is the single Reorder edit that survives where B1-5
+applies: the record's Considered-minus-Approved difference is that exclusion, written down.
+Everywhere else it is handled by the approval rule above. Of the graph edits, a
 dropped edge coming back costs ordering, and a forced one going missing can put two issues
 in one group the user wanted apart, which B1-2 step 4 re-derives where the collision is
 visible in the codebase and which otherwise surfaces as a deferral. Say in the summary that
@@ -493,8 +575,20 @@ declaration is ever sendable and the milestone PR never leaves draft — on this
 later one. An issue in scope that the batch never dispatched is reported in the summary, not
 declared.
 
+**Where this session had no user, the declaration carries one additional requirement: every
+issue in R1's set must be accounted for.** Accounted for means it carries a final B2-6
+status, or the record in force **Considered** it — approved, or excluded at B1-3. An issue
+in neither class entered the batch after the last human looked at the plan, and no
+unattended session may finish a milestone over it: withhold the declaration, name the issue
+in the summary, and leave the milestone PR a draft for the next attended session to resolve
+at B1-3. This is why B1-5 records the Considered set and not only the Approved one — with
+only the latter, a deliberate exclusion and an issue nobody has seen are the same reading,
+and the safe treatment of the second would stall every batch that used Reorder. An attended
+session needs no such rule: B1-3 showed the set to a user, which is the human looking.
+
 **Waiting on a plan approval is not a B2-6 status**, so a session that could not obtain one
-cannot complete part (b). It therefore sends **no declaration at all** — and in particular
+— no user, and no trusted record covering the issues R5 left unsettled — cannot complete
+part (b) for them. It therefore sends **no declaration at all** — and in particular
 **never an empty dispatched set.** An empty set carries all three parts structurally, so
 [milestone-pr.md](../../merge-issue-prs/references/milestone-pr.md) F1 would treat it as a
 real declaration and use it *instead of* the standalone derivation whose whole purpose is
@@ -509,8 +603,9 @@ still runs; it merges what it can and carries no declaration, for the same reaso
 per-group invocation carries none.
 
 The summary describes work this session did not do, so it names the resume, which issues
-arrived already settled, anything waiting on an approval, and whether a declaration was
-sent.
+arrived already settled, which approval record was in force and what it licensed — or, where
+none was, whether it was absent, superseded, untrusted, or unreadable — anything still
+waiting on an approval, and whether a declaration was sent.
 
 ## Known limits
 
@@ -521,13 +616,30 @@ sent.
   per resume, for as long as the issue keeps producing it. Both gate stages likewise re-run
   on every resumed unmerged **draft** PR (R6); neither cost is recoverable without a state
   file.
-- **An unattended session cannot start new work** (R8), so a scheduled run drains the PRs a
-  plan already produced and then waits for a human. Scheduling advances a batch; it does not
-  approve one. The bound is **artifact evidence, not plan membership**: an interruption after
-  group 1 leaves groups 2 and later undispatchable unattended even though the user approved
-  them at B1-3, because nothing records that they were approved. That is a real narrowing of
-  what unattended operation delivers, and it is the price of having no durable record of the
-  plan.
+- **An unattended session starts only the work a record names** (R8 §1). Where B1-5 wrote
+  one, a scheduled run advances across group boundaries; where it did not, the bound is
+  **artifact evidence, not plan membership**, and the run drains the PRs a plan already
+  produced and then waits for a human. Scheduling advances a batch; it never approves one.
+- **B1-5 covers integration-mode batches over a parent issue, and nothing else.** A
+  milestone, label, or manual-list batch has no parent to host the record and no single
+  ordered place for a later record to supersede an earlier one, so those three keep the
+  artifact-evidence bound above. A pipeline running under a **bot** account cannot record an
+  approval either: E2 disqualifies a bot author, and mirroring E2 exactly is what keeps the
+  record's trust level auditable against one rule instead of two. Both cost a resume; neither
+  risks one.
+- **The record attests write access, not a person.** Its floor is the merge gate's E2 — an
+  author with repository write access — which is already enough to approve a batch by running
+  this skill, so a forged record grants no capability its author lacked. What it cannot do is
+  attest that a *human* typed Approve: no tracker artifact can, since the pipeline writes
+  under whatever account runs it. A write-access account can equally edit a record's body
+  after the fact or post a newer one; the comment's author field does not move, and the floor
+  is the same on both paths.
+- **An issue linked into the batch after the approval stalls an unattended finish** (R8 §3).
+  It is outside the record, so it is never dispatched, and it is not Considered, so the
+  declaration is withheld and the milestone PR stays a draft until an attended session
+  resolves it at B1-3. That is the deliberate direction: the alternative is an unattended run
+  flipping a milestone to ready over an issue no human ever saw. A batch with no record at all
+  inherits the same stall, since nothing Considered anything.
 - **A dispatch that produced no artifact is indistinguishable from one that never happened.**
   The declared set is inferred from PRs and branches, so an issue an earlier session
   dispatched whose implementer returned `BLOCKED` before pushing anything leaves nothing
@@ -541,16 +653,27 @@ sent.
   escalated before anything ever merged, no milestone PR exists to carry it, and the next
   session cannot see it.
 - **A batch whose source changed shape between sessions is re-derived, not reconciled**
-  (R1). The resume plan shows the user the set; nothing diffs it against the one the first
-  session approved, because that set was never recorded.
+  (R1). Where a record exists, the set the approving session Considered *is* recorded, and
+  R8 §3 uses it — but only to withhold a declaration on an unattended run. Nothing diffs the
+  two sets **for the user**: the resume plan shows today's set and marks what carries no
+  artifact as newly entering the batch, leaving the reader to notice what changed.
 - **Re-entry reads content anyone with write access can edit** — PR bodies, issue comments,
-  branch names, the milestone PR's escalation section. Every use of it is arranged to run in
-  one direction: content can withhold fix rounds, stop the run, or make an issue look
-  already handled and drop it from a dispatch, and it can never skip a review stage, start
-  an implementation, or merge **unreviewed** code. Restoring a spent fix-round budget is the
-  one edit that adds machine work rather than removing it, and what it buys is more review,
-  not less. The residue is a missing implementation or a
-  stalled batch, both visible in the summary.
+  branch names, the milestone PR's escalation section. With one stated exception, every use
+  of it runs in one direction: content can withhold fix rounds, stop the run, or make an
+  issue look already handled and drop it from a dispatch, and it can never skip a review
+  stage, start an implementation, or merge **unreviewed** code. Restoring a spent fix-round
+  budget is the one edit that adds machine work rather than removing it, and what it buys is
+  more review, not less. The residue is a missing implementation or a stalled batch, both
+  visible in the summary.
+- **The approval record is that exception, and the only one: content that starts an
+  implementation.** It is why it carries a trust check no other content read here has — an
+  author with repository write access, established by the same API call and the same
+  fail-closed retry rule as the merge gate's E2 — and why what it licenses is a closed
+  enumeration intersected with the platform-derived issue set, so the *worst* an edit
+  achieves is implementing an issue the platform already places in this batch. Everything
+  else the one-direction rule covers still holds against it: it skips no review stage, grants
+  no eligibility, and merges nothing. The code it starts reaches the default branch only
+  through a human merging the milestone PR.
 - **An artifact read only for stopping can still be removed.** Deleting the escalation from
   the milestone PR's `## Needs Human Attention` section leaves a resumed session reading a
   healthy branch, which is the behaviour this file had before it read that section at all.

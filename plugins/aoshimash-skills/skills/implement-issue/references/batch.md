@@ -96,7 +96,7 @@ It hands back one of three outcomes:
 | Outcome | What the rest of this file does with it |
 |---|---|
 | **Fresh** — no integration branch, no milestone PR, no PR ever based on that branch | Continue as written; nothing changes, and B1-1/B1-2 build the graph as usual |
-| **Resumable** — the batch is mid-flight | B1-3 presents a **resume** plan carrying the re-derived per-issue statuses and marking which issues are already settled; B1-4 reuses the branch; B2-1 dispatches only the unsettled ones. Re-entry has already rebuilt the set and the graph (batch-reentry.md R1, R4), so B1-1 and B1-2 do not run again. The **mode** is not asked again — the branch records that it was approved — but the **plan** is: which issues get implemented is not recorded anywhere, so an unattended run advances the PRs an approved plan already produced and dispatches no **new** implementer (batch-reentry.md R8) |
+| **Resumable** — the batch is mid-flight | B1-3 presents a **resume** plan carrying the re-derived per-issue statuses and marking which issues are already settled; B1-4 reuses the branch; B2-1 dispatches only the unsettled ones. Re-entry has already rebuilt the set and the graph (batch-reentry.md R1, R4), so B1-1 and B1-2 do not run again. The **mode** is not asked again — the branch records that it was approved — and the **plan** is asked again only where nothing recorded it: an unattended run dispatches the issues a trusted approval record (B1-5) enumerates and no others, and with no such record it advances the PRs an approved plan already produced and dispatches no **new** implementer (batch-reentry.md R8) |
 | **Stop** — the milestone is finished, under review or abandoned; the branch was destroyed, cannot be identified, or carries an outstanding escalation; or the artifacts exist while integration mode is no longer available | Report and stop. Create no branch, cut no worktree, dispatch no implementer, invoke no merge gate. batch-reentry.md R2 enumerates the causes |
 
 **A recency stop outranks all three.** Where re-entry finds evidence that another session
@@ -249,6 +249,19 @@ The merge mode is chosen inside this one approval — there is no separate mode 
 Reorder round re-presents the same option set, so the mode is still open until the plan is
 approved.
 
+**An integration-mode approval over a parent issue is recorded on that issue** (B1-5), so
+that a later session running without a user can implement the issues this approval covers
+instead of stopping at the first group. Say so in one line where the plan names the branch,
+since the approval is the point at which it becomes true.
+
+**With no user reachable, this step is not asked — it is read.** A resumed batch with no
+user-choice capability, or an unattended or scheduled invocation, takes its plan from the
+approval record instead ([batch-reentry.md](batch-reentry.md) R8 §1) and dispatches only what
+that record licenses; with no trusted record it dispatches nothing new. Such a session never
+presents this approval, never writes a record of its own, and never proceeds on the
+re-derived plan as though it had been approved. A **Fresh** batch has nothing to read, so it
+stops here and reports.
+
 ### B1-4. Create or Reuse the Integration Branch (integration mode only)
 
 Once the plan is approved in integration mode, act — before dispatching the first group —
@@ -285,6 +298,62 @@ fi
 - **Never reset, force-push, or delete the branch.** Implementers have it checked out as
   their base, and the merge gate reads its history to decide which work it already
   reverted. Deleting it is not the batch's business at all — that follows the milestone PR.
+
+### B1-5. Record the Approved Plan (integration mode, parent-issue batches)
+
+B1-3's approval settles **which issues this batch implements**, and that is the one thing a
+later session cannot re-derive. R1 rebuilds the batch *source*, not the approved set: an
+issue Reorder excluded is back in it, and an issue linked into the parent since arrives
+looking pending. A session with no user has nowhere to get the answer — which is why an
+unattended resume is otherwise bounded to issues that already carry an artifact
+([batch-reentry.md](batch-reentry.md) R8), and why a scheduled run drains one group and
+then waits for a human.
+
+So the session that **obtains** the approval writes it down, where the tracker can hold it:
+a comment on the batch's parent issue — the same place B3 posts the batch summary. Post it
+immediately after B1-4, before the first group is dispatched (see
+[platform-github.md](platform-github.md), "Record and Read a Batch's Approved Plan"):
+
+```markdown
+## Batch Plan Approved
+
+Integration branch: `integration/issue-109`
+Considered: #110, #111, #112, #113, #114, #115, #116
+Approved: #110, #111, #112, #114, #115, #116
+
+A later session may dispatch an implementer for an Approved issue without asking
+again. Nothing else is licensed: an issue not listed above — including one added
+to the parent after this comment — is outside this record. Superseded by any
+later `## Batch Plan Approved` comment naming the same integration branch.
+```
+
+**Two enumerations, both closed lists of issue numbers.** *Considered* is the set B1-3 drew
+the plan over — R1's set as it stood at the approval, Reorder's exclusions included.
+*Approved* is the subset the approval covers, and it is the only part that licenses
+anything. The difference between them is what makes a **deliberate exclusion**
+distinguishable from an issue nobody has seen yet, which B3's terminal-state declaration
+turns on ([batch-reentry.md](batch-reentry.md) R8 §3). Recording only the approved set
+would collapse the two.
+
+**Nothing else goes in it.** Not the DAG, not the groups, not per-issue status, not the
+model tiers. The record is a **decision**, written once and never updated; everything
+derivable stays derived. That is the line between it and the state file this pipeline does
+not have — and it is why re-entry may read it at all (batch-reentry.md, "What is not batch
+state").
+
+**Write it only where all three hold**: integration mode, the batch source is a **parent
+issue**, and this session obtained the approval from a user.
+
+- A standard-mode batch has no re-entry to read it.
+- A milestone, label, or manual-list batch has no parent to host it, and no single ordered
+  place where a later record could supersede an earlier one — so it keeps the
+  artifact-evidence bound, which costs a resume rather than risking one.
+- A Reorder round is not an approval. Post once, for the plan the user approved.
+- A **resume** that re-approves at B1-3 posts a new record the same way; it supersedes the
+  earlier one, and the earlier one licenses nothing from then on.
+
+**Failing to post it is not fatal.** Report the failure and run the batch: the consequence
+falls entirely on later unattended sessions, which fall back to the artifact-evidence bound.
 
 ## Phase B2: Execution Loop
 
@@ -771,6 +840,11 @@ Around it, in this order:
    were re-derived and any earlier Reorder is therefore not in force, and every orphan
    branch and leftover worktree re-entry declined to adopt
    ([batch-reentry.md](batch-reentry.md) R7, R8).
+   **Where the session had no user, say which approval record it acted on** — the comment
+   it came from and the issues it licensed — or, where it dispatched nothing new, whether
+   the record was absent, superseded, untrusted, or unreadable. Those four have the same
+   effect and different remedies, and this line is the only place a human sees which one
+   happened.
 
 The parent-issue summary comment carries the same content, minus the model tiers above.
 
