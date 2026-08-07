@@ -22,7 +22,7 @@ The plugin is only one distribution channel. Each skill under `plugins/aoshimash
 
 ## Issue Workflow
 
-`create-issue`, `implement-issue`, and `merge-issue-prs` cover the full issue lifecycle. Each adapts to scale: `create-issue` goes from a quick single issue to a researched, user-annotated design decomposed into an issue hierarchy; `implement-issue` goes from one autonomous implementation to a dependency-ordered parallel batch; `merge-issue-prs` merges a batch's own PRs into a per-milestone integration branch, so human review happens once per milestone instead of once per PR. The issue tracker is the interface between them — each skill also works standalone, since a hand-written issue works with `implement-issue`, a `create-issue` issue can be implemented manually, and the merge gate runs on a parent issue's ready PRs without the batch.
+`create-issue`, `implement-issue`, and `merge-issue-prs` cover the full issue lifecycle. Each adapts to scale: `create-issue` goes from a quick single issue to a researched, user-annotated design decomposed into an issue hierarchy; `implement-issue` goes from one autonomous implementation to a dependency-ordered parallel batch; `merge-issue-prs` merges a batch's own PRs into a per-milestone integration branch, so the issues it merged cost one human review per milestone rather than one apiece — a PR it defers still goes to a human individually, and holds up the integration branch's cleanup until it is closed. The issue tracker is the interface between them — each skill also works standalone, since a hand-written issue works with `implement-issue`, a `create-issue` issue can be implemented manually, and the merge gate runs on a parent issue's ready PRs without the batch.
 
 ```
 create-issue                               implement-issue
@@ -54,7 +54,7 @@ Batch mode picks one of two **merge modes** inside the execution-plan approval, 
              standard mode ──────────┴────────── integration mode
                    │                                     │
                    ▼                                     ▼
-      a human reviews and merges       merge-issue-prs (the merge gate)
+      a human reviews and merges         merge-issue-prs (the merge gate)
       each PR — N issues cost            eligibility, fail closed
       N human reviews                    → serial merge, one in flight
                                          → verify on integration-branch CI
@@ -67,8 +67,8 @@ Batch mode picks one of two **merge modes** inside the execution-plan approval, 
                                          one integration→main PR per
                                          milestone: a live dashboard while
                                          the batch runs, flipped to ready
-                                         when it is terminal, green, and
-                                         fully disclosed
+                                         when it is terminal, green,
+                                         unescalated, and fully disclosed
                                                          │
                                                          ▼
                                          one human review per milestone
@@ -93,8 +93,8 @@ Batch mode picks one of two **merge modes** inside the execution-plan approval, 
 > /merge-issue-prs
 # Parent issue / integration branch → eligibility triage (fail closed)
 #   → serial merge → verify on integration-branch CI → revert on failure
-#   → milestone PR (integration→main): draft while the batch runs,
-#     ready when it is terminal → a human reviews and merges it
+#   → milestone PR (integration→main): draft while the batch runs, ready
+#     once all four flip conditions hold → a human reviews and merges it
 ```
 
 **Key properties:**
