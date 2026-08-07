@@ -159,7 +159,8 @@ When B0 fails, every open PR based on the branch is **deferred**, recorded again
 not against any of E1–E5, because it failed none of them.
 
 This is not tidiness, and it is not one row of a table. A merge onto a branch whose milestone
-is terminal lands work no human checkpoint will ever see, and it destroys the branch's only
+is terminal lands work that never reaches a human checkpoint at all — not work a human might
+overlook, but work for which no reviewable PR can be created — and it destroys the branch's only
 route to cleanup — through `headRefOid` where the milestone merged, or through M5 condition
 1's requirement of a `MERGED` milestone PR where it was closed unmerged. Both routes end in a
 branch that can neither be reviewed nor deleted. One merge strands it. The gate must not be

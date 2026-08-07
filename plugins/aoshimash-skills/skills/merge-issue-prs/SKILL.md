@@ -2,19 +2,21 @@
 name: merge-issue-prs
 description: >
   Merge the issue pipeline's own implementation PRs into a per-milestone
-  integration branch without per-PR human review — decide eligibility under a
-  fail-closed policy (PR created by the pipeline, source issue authored by a
-  user with repository write access, machine gates passed, CI green, no human
-  comment or review), merge eligible PRs one at a time, verify each against
-  integration-branch CI, auto-revert failures, and raise one integration→main
-  PR per milestone for a human to review. Anything ambiguous is deferred,
-  never merged. Runs standalone on a parent issue's ready PRs, or as the merge
-  gate of implement-issue batch mode. GitHub only. Use when the user says
-  "merge the pipeline PRs", "process the ready PRs for issue #N", "run the
-  merge gate", "auto-merge the implementation PRs", "統合ブランチにマージして",
-  "issue #N の実装PRをマージしていって", "パイプラインのPRをマージして",
-  "自動マージできるPRを判定して". Not for dependency-bot PRs (that is
-  merge-renovate-prs) and never for human-authored PRs.
+  integration branch without per-PR human review — decide eligibility under
+  a fail-closed policy (pipeline-created PR, issue author has write access,
+  gates passed, CI green, no human comment or review), merge eligible PRs
+  one at a time, verify each against integration-branch CI, auto-revert
+  failures, and own the integration→main milestone (rollup) PR: create it,
+  keep it updated as a live dashboard, and flip it to ready. Anything
+  ambiguous is deferred, never merged. Runs standalone on a parent issue's
+  ready PRs, or as implement-issue's merge gate. GitHub only. Use when the
+  user says "merge the pipeline PRs", "process the ready PRs for issue #N",
+  "run the merge gate", "auto-merge the implementation PRs", "update the
+  milestone PR and flip it to ready", "統合ブランチにマージして", "issue #N
+  の実装PRをマージしていって", "パイプラインのPRをマージして",
+  "マイルストーンPRを最新化して", "自動マージできるPRを判定して".
+  Not for dependency-bot PRs (that is merge-renovate-prs) and never for
+  human-authored PRs.
 ---
 
 # Merge Issue PRs
@@ -22,11 +24,34 @@ description: >
 Merge the per-issue PRs that the issue pipeline itself produced — implement-issue's
 draft-to-ready implementation PRs — into a **per-milestone integration branch**, with
 no human reviewing each one. Human review is not removed; it is relocated to a single
-integration→main PR per milestone. The default branch never receives code no human read.
+integration→main PR per milestone.
+
+**State that relocation as the mechanism delivers it, not as a guarantee about attention.**
+What is enforced is that reaching the default branch **costs a human action on a pull
+request**: this gate never merges, approves, or reviews the milestone PR, `gh pr ready` is
+the only flip command it runs, and a PR targeting the default branch is not even a merge
+candidate ([references/eligibility.md](references/eligibility.md)). That confinement is
+solid, and it is what the whole design rests on.
+
+What it does **not** enforce is that anyone read the diff. A human who merges the milestone
+unread gets the same outcome as no review at all, and nothing here can detect that or prevent
+it. The relocation concentrates the reading into one place and makes it cheap to do; it
+cannot make it happen. Say "a human has to merge it", never "no unread code reaches the
+default branch" — the second is a claim about a person, and this skill only has mechanisms.
 
 **Scope: GitHub only, pipeline PRs only.** Dependency-bot PRs belong to
 merge-renovate-prs. Human-authored PRs belong to a human. A PR this skill cannot
 prove is pipeline-generated is left alone.
+
+> **Do not trim the description's closing sentence.** "Not for dependency-bot PRs (that is
+> merge-renovate-prs) and **never for human-authored PRs**" reads like a courtesy disclaimer
+> and is load-bearing for routing: the trigger benchmark established that the final clause is
+> the **only** thing keeping "merge my PR #42 into main" from invoking this skill. Nothing
+> else in the description distinguishes a human's own PR from a pipeline PR at the phrasing
+> level. A shortening pass that deletes it as decoration re-opens that misroute, which lands a
+> human-authored PR in a gate built on the assumption that no human wrote the diff. The
+> description is at 1018 of its 1024-character budget, so the pressure to cut is real; cut
+> elsewhere.
 
 This skill owns the whole merge lifecycle — eligibility, the merge loop, post-merge
 verification, revert, and the milestone PR — so it runs **standalone** ("process the
@@ -65,8 +90,9 @@ assertions that must **all** hold, and every gap in evidence resolves to *defer*
    integration branch, and a verification failure triggers a fail-closed auto-revert
    plus stop-the-line. Autonomy never converts a gate into silent risk-taking.
 6. **Blast radius stays on the integration branch.** Machine merges target the
-   integration branch only. Its contents reach the default branch through one
-   human-reviewed PR per milestone, and that PR is never self-merged.
+   integration branch only. Its contents reach the default branch through one PR per
+   milestone that **a human has to merge**, and that PR is never self-merged. The
+   enforceable half is the merge, not the reading — see the note above the principles.
 7. **Autonomy is scoped to the merge lifecycle.** Zero-gate covers deciding
    eligibility, merging, verifying, reverting, and maintaining the milestone PR —
    nothing else. This skill does not fix code, address review comments, rewrite

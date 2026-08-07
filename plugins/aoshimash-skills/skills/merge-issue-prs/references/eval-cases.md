@@ -25,6 +25,15 @@ near-misses that should **not**. Full set in `evals.json` under `trigger_evals`.
 - "自動マージ対象のPRを判定して、対象外は理由をつけて教えて"
 - "スプリントのPRまとめて統合ブランチに入れて、最後にmainへのPRを作って"
 
+The two **milestone-PR maintenance** cases (the 6th and 7th above) used to pass on a
+coincidence: the description said only that the skill *raises* an integration→main PR, so
+they matched on "milestone PR" being vocabulary no other skill uses. A user saying "the
+rollup PR" instead routed to `implement-issue`, whose description carries "a flip to
+ready-for-review once gates, CI, and those reviewers are done" verbatim — while M3 and M4
+here are what actually do the updating and the flipping. The description now says it owns the
+milestone PR's whole life: **create it, keep it updated as a live dashboard, flip it to
+ready**, and it names the *rollup* synonym. That was a routing fix, not a scope change.
+
 ### Should NOT trigger (near-misses)
 
 - **Renovate / dependency-bot PRs** ("renovate たまってるからやって") → that is
@@ -35,7 +44,13 @@ near-misses that should **not**. Full set in `evals.json` under `trigger_evals`.
   what that one produced, it does not write code.
 - **Creating** an issue hierarchy → `create-issue`.
 - Merging **one hand-written PR of my own** ("merge my PR #42 into main") → human-authored
-  PR straight to the default branch; outside the autonomous path entirely.
+  PR straight to the default branch; outside the autonomous path entirely. **What makes this
+  case pass is the description's final clause** — "never for human-authored PRs". The
+  benchmark established that by testing it: nothing else in the description separates a
+  human's own PR from a pipeline PR at the phrasing level, and the rest of the description
+  is about merging PRs, which is what the query asks for. Treat that clause as load-bearing
+  rather than as a disclaimer if the description is ever shortened; SKILL.md repeats the
+  warning where an editor would actually be working.
 - **Reviewing a PR** for quality or security before human review → general review.
 - **Configuring branch protection** or a merge queue → repository settings, not a merge run.
 - Resolving a **merge conflict** on a specific branch → a narrow git task.
