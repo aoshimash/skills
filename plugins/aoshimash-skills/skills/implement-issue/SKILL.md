@@ -4,13 +4,13 @@ description: >
   Read platform issues (GitHub/GitLab/Backlog), analyze the codebase,
   implement autonomously, and open review-first pull/merge requests: draft
   PR with decisions logged in the body, two-stage review (spec compliance,
-  then code quality), a pre-push security review, an automatic response to the
-  repository's own bot/AI reviewers, and a flip to ready-for-review once gates,
-  CI, and those reviewers are done. Implements a single issue end to
-  end with zero routine questions by default; when given a parent issue, a
-  milestone, a label, or a list of issues, offers batch implementation with
-  a dependency graph, git worktrees, and parallel agent instances where the
-  environment supports them (sequential otherwise). Use when the user says
+  then code quality), a pre-push security review, an automatic response to
+  the repository's bot/AI reviewers, and a flip to ready-for-review once
+  gates, CI, and those reviewers are done. Implements one issue end to end
+  with zero routine questions by default; given a parent issue, milestone,
+  label, or list of issues, offers batch implementation with a dependency
+  graph, git worktrees, and parallel agent instances where supported
+  (sequential otherwise). Use when the user says
   "implement issue", "issue を実装", "issue #N を対応", "この issue をやって",
   "implement #N", "fix issue #N", "work on issue", "run sprint",
   "スプリント実行", "これらの issue を実装", "implement these issues",
