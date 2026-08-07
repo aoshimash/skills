@@ -99,7 +99,7 @@ before the orchestrator moves past the step that produced it — before the next
 dispatched, before the next group starts, before the merge gate is invoked again. A fact
 written "at the end" is a fact that was context-resident for the whole run.
 
-**Two facts sit in neither column, and are named rather than papered over:**
+**Two facts fall outside both columns, and are named rather than papered over:**
 
 1. **`BLOCKED`, `NEEDS_CONTEXT`, and `SKIPPED` produce no artifact.** They are judgments that
    reach a summary. They are recovered the way a resumed session recovers them — by
@@ -107,15 +107,19 @@ written "at the end" is a fact that was context-resident for the whole run.
    moved forward ([batch-reentry.md](batch-reentry.md) R5) — at a cost of one implementer run
    per such issue. Because the recovery is re-derivation rather than recall, the batch does
    not rely on these staying settled; it relies on being able to reach them again.
-2. **The approved plan is neither durable nor re-derivable.** Which issues a batch implements
-   is settled at B1-3 and recorded nowhere, so a compaction can take it exactly as a session
-   boundary can (batch-reentry.md R8 §1, and its Known limits). C3 says what happens then.
-   Recording it is [#128](https://github.com/aoshimash/skills/issues/128), not this file.
+2. **The approved plan is durable only where B1-5 can write it.** Which issues a batch
+   implements is settled at B1-3 and is not re-derivable — R1 rebuilds the *source*, not the
+   approved set. B1-5 makes it durable by posting a `## Batch Plan Approved` comment on the
+   parent issue, and that record is read back under R8 §1's trust check. But B1-5 writes it
+   only for an **integration-mode, parent-issue** batch whose approval this session obtained:
+   a standard-mode batch, and a milestone, label, or manual-list batch, have no record and the
+   plan stays context-resident there. C3 says what happens in each case.
 
-**No state file, still.** Nothing here writes batch state to disk, and nothing writes a
-tracker comment for the machine's own benefit — the prohibition in batch-reentry.md's "What
-is not batch state" is unchanged. Every row above is an artifact that exists for its own
-reasons and that a human reads too.
+**No state file, still.** Nothing here writes batch state to disk. B1-5's record is not an
+exception and not a precedent for one: it is a **decision**, written once at the approval and
+never updated, which is the line batch-reentry.md's "What is not batch state" draws — and
+nothing in this file writes a tracker comment to remind itself of something it could derive.
+Every row above is an artifact that exists for its own reasons and that a human reads too.
 
 ## C3. The position read
 
@@ -181,26 +185,41 @@ with no PR is left untouched and the issue is dispatched on a fresh branch name 
 path. This is R7's idempotency rule applied per dispatch rather than only at re-entry, and it
 is what stops a lost position from becoming two PRs for one issue.
 
-### What the read does not restore
+### The approved plan is recovered separately, and only sometimes
 
-The approved plan (C2). A compaction does not make a session unattended, so the distinction
-is between work an approved plan already produced and work it has not:
+The reads above establish *what happened*; they do not establish *what was approved* (C2).
+A compaction does not make a session unattended, so the distinction is between work an
+approved plan already produced and work it has not:
 
 - **Issues with an artifact** — a PR or a branch — are advanced without re-asking anything:
   gates, fix rounds, CI, the automated review response, the merge gate, the reports. This is
   the part a compaction recovers with no human in the loop, and it is the same bound an
   unattended resume runs under (batch-reentry.md R8 §1).
-- **Issues with no artifact** are dispatched only against a plan approved in this session. If
-  the compaction took the approval, re-present the plan at B1-3 before dispatching the next
-  group; with no user reachable, dispatch nothing new and name what is waiting.
+- **Issues with no artifact** need an approved plan, and a compaction gets it the same way a
+  fresh session does — **R8 §1's two paths, unchanged**. With the user still reachable, the
+  plan is re-presented at B1-3 and B1-5 writes the new record; the record is never a
+  substitute for a user who is present, and this file adds no exception to that. With no user
+  reachable, a trusted B1-5 record licenses exactly the issues its Approved list names, and
+  with no such record nothing new is dispatched.
+
+**Never proceed on the re-derived plan as though it had been approved.** R1's set is the batch
+*source*, which is where an excluded issue reappears and a newly linked one arrives looking
+pending; that is the whole reason B1-5 records the approval rather than trusting the source.
+A compaction is not a licence to skip that distinction, and "the user approved something
+earlier in this session" is not evidence of *what* they approved once the record of it is
+gone.
 
 ### Standard mode at B0
 
 The light read is mode-independent, so a standard-mode batch re-invoked in a fresh session
 uses it too (B0): adopt the PRs that exist, dispatch only what has no artifact and an
 approved plan, and run R3 first — across sessions the newest write may genuinely be another
-session's. What standard mode does **not** acquire is batch-reentry.md's stop conditions;
-they key on the integration branch and the milestone PR, and neither exists here.
+session's. Two things standard mode does **not** acquire: batch-reentry.md's stop conditions,
+which key on the integration branch and the milestone PR and so have nothing to read here;
+and B1-5's approval record, which is written only for integration-mode parent-issue batches.
+So a standard-mode batch keeps the **artifact-evidence bound** in full — an unattended
+invocation advances the PRs that exist and starts nothing — and the position read is what
+makes that bound cheap rather than what lifts it.
 
 ## C4. The sequential fallback
 
@@ -276,9 +295,11 @@ execution-plan approval.
 - **The batch cannot measure its own context.** C5 reports depth and, where the environment
   supplies one, a readout; without a readout there is no threshold for the batch to stop
   itself at, and the deliberate stop depends on a human reading the line.
-- **The approved plan is still not durable** (C2), so a compaction that takes it costs one
-  re-approval before new work is dispatched, and an unattended run that loses it dispatches
-  nothing new. [#128](https://github.com/aoshimash/skills/issues/128) is where that is fixed.
+- **The approved plan survives a compaction only where B1-5 wrote it** (C2) — an
+  integration-mode parent-issue batch. Everywhere else a compaction that takes the approval
+  costs one re-approval before new work is dispatched, and an unattended run that loses it
+  dispatches nothing new. That is a property of which batches can carry a record, not
+  something the position read can close.
 - **A dispatch that produced no artifact is indistinguishable from one that never happened.**
   An implementer that returned `BLOCKED` before pushing leaves nothing for the position read
   to find, so the issue is re-dispatched. This is batch-reentry.md's limit of the same name,

@@ -108,21 +108,25 @@ either way: no state file, no session memory, only the tracker and git. Scheduli
 the person from the loop; it is not what makes resumption work.
 
 The two differ in **scope**, not mechanism. Which issues a batch implements is settled at
-the execution-plan approval and recorded nowhere durable, so an invocation with no user
-reachable advances the work an approved plan already produced — review gates on the drafts,
-the merge gate, the reports — and **dispatches no new implementer**, naming instead whatever
-is waiting on an approval. Since that bound is artifact evidence rather than plan
-membership, an unattended run drains the group the last session dispatched and then stalls
-on the next one, even though the user approved it; a batch is advanced without ever being
-widened, and finishing one still takes a session with a user in it. That, and the rest of
-what re-derivation cannot recover, is in batch-reentry.md's Known limits.
+the execution-plan approval, and for an integration-mode batch over a parent issue that
+approval is **recorded on the parent issue** ([references/batch.md](references/batch.md)
+B1-5): an invocation with no user reachable dispatches the issues that record enumerates —
+carrying the batch across group boundaries — and no others. Where no trusted record exists,
+the bound falls back to artifact evidence: the run advances only the work an approved plan
+already produced — review gates on the drafts, the merge gate, the reports — and
+**dispatches no new implementer**, naming whatever waits on an approval. Either way a batch
+is advanced without ever being widened: an issue linked into the parent after the approval
+is outside the record, and the milestone PR is still a human's to review and merge. That,
+the record's trust rule, and the rest of what re-derivation cannot recover are in
+batch-reentry.md's Known limits.
 
 *Context position readout* is Batch-only, and it is the one capability whose fallback changes
 what the run can decide rather than how it does something. With a readout, a long batch can
 end itself on a group boundary before it runs short; without one, the position line still
 reports the run's depth and the stop is the user's call. Either way the batch is built so that
-stopping — or being compacted — loses no *delivered* work: what it can cost is a re-approval
-and a re-run of an issue that left no artifact
+stopping — or being compacted — loses no *delivered* work: what it can cost is a re-run of an
+issue that left no artifact, plus the plan approval, which a compaction sends back through
+batch-reentry.md R8 §1's two paths like any resume
 ([references/context-budget.md](references/context-budget.md)).
 
 *Model selection* is used in **both** modes, for different things. Reviewers use it
@@ -247,7 +251,10 @@ since nothing else persists — and then starts the batch, resumes it, or stops 
 Existing PRs, branches, and worktrees are never recreated; a body-recorded gate verdict
 never substitutes for re-running the gate; a batch another session appears to be working
 on is not dispatched at all; and dispatching an implementer needs an approved plan every
-session, so an unattended resume advances existing PRs rather than starting new work.
+session — taken from the user where one is present, and otherwise read from the approval
+record the approving session wrote on the parent issue, whose author must hold repository
+write access. With no trusted record, an unattended resume advances existing PRs rather
+than starting new work.
 
 **Summary:**
 
@@ -262,7 +269,10 @@ session, so an unattended resume advances existing PRs rather than starting new 
    plan — see batch.md B1-3). The plan shows the ordering edges integration mode
    would add for same-file collisions inside a group (batch.md B1-2), so the
    whole schedule is settled in that one approval; the integration branch is
-   created or reused right after it (batch.md B1-4).
+   created or reused right after it (batch.md B1-4), and an integration-mode
+   approval over a parent issue is then recorded on that issue — the issues
+   considered and the subset approved — so a later session with no user can
+   implement what this approval covered (batch.md B1-5).
 2. **Execution loop** — for each group, implement its issues, each in its own
    git worktree, executing [references/workflow.md](references/workflow.md) in
    the **Orchestrated** context (see that file's Invocation Contexts). Where
@@ -291,7 +301,12 @@ session, so an unattended resume advances existing PRs rather than starting new 
    once more with the terminal-state declaration (batch.md B3): the dispatched
    issue set, a final status for each of its members, and the assertion that no
    implementer is still running — only the orchestrator can supply that, and a
-   partial declaration counts as none. Then present a status table
+   partial declaration counts as none. A session with no user withholds the
+   declaration entirely while any issue in the batch source is neither finished
+   nor named by the approval record it acted on
+   ([references/batch-reentry.md](references/batch-reentry.md) R8 §3), so an
+   issue linked in after the approval leaves the milestone PR a draft rather
+   than being finished over. Then present a status table
    (issue, title, status, PR) covering DONE / DONE_WITH_CONCERNS /
    NEEDS_CONTEXT / BLOCKED / SKIPPED, plus MERGED / DEFERRED / NOT_ATTEMPTED /
    REVERTED in integration mode, where the deferred and reverted PRs are the

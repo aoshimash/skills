@@ -7,8 +7,9 @@ post-PR decision harvesting (harvesting.md), 41–54 evaluate Batch mode's
 integration mode (batch.md Merge Modes, B1-4, B2-4), 55–66 evaluate
 multi-session re-entry (batch.md B0, batch-reentry.md), 67–76 evaluate
 content-based implementer model selection (batch.md B2-1, model-selection.md),
-and 77–81 evaluate the batch orchestrator's context budget (batch.md,
-context-budget.md).
+77–79 evaluate the recorded approval plan that licenses an unattended
+dispatch (batch.md B1-5, batch-reentry.md R8), and 80–84 evaluate the batch
+orchestrator's context budget (batch.md, context-budget.md).
 
 ## Quality Criteria
 
@@ -57,11 +58,12 @@ context-budget.md).
 | 41 | Re-entry re-derives, and only from the enumerated artifacts | A fresh session rebuilds the issue set, the DAG, the branch's state, per-issue progress, and the milestone PR's state from the tracker and git artifacts batch-reentry.md enumerates; it writes no state file, treats neither a worktree nor an issue's open/closed state as batch state, and takes no status from what a session remembers. The integration branch is identified rather than recomputed where its name embeds a date, and attribution to an issue follows the merge gate's E1c with uncertainty resolving to *do not dispatch* |
 | 42 | Nothing is recreated, and a finished batch stops | An existing PR is adopted rather than duplicated; an orphan branch or a leftover worktree is left untouched and its issue dispatched on a fresh name and path; the integration branch is probed rather than recreated — including after a merged milestone PR deleted it; and a complete milestone reports and stops without creating, dispatching, or invoking anything |
 | 43 | Concurrent work stops this session, not the other way round | Recent writes this pipeline itself performs — the integration branch's head, per-issue branch heads, and PR creation — stop this session before it writes: the user chooses wait / proceed / abort, and an unattended run stops and reports rather than dispatching. The evidence is restricted to writes this pipeline performs, so routine bot activity does not starve an unattended batch; the check runs once, before this session's first write, and its coverage gaps and uncountable consecutive stops are stated rather than implied away |
-| 44 | Nothing in a PR body licenses an action | A resumed run re-runs both review-gate stages regardless of the verdict recorded in the PR body, reads only the fix-round count from it, and dispatches an implementer only against a plan approved this session; content can withhold rounds, stop the run, or make an issue look handled, and can never license a merge, a skipped stage, or a new implementation |
+| 44 | Nothing in a PR body licenses an action | A resumed run re-runs both review-gate stages regardless of the verdict recorded in the PR body, reads only the fix-round count from it, and dispatches an implementer only against an approved plan — the user's this session, or the record of criterion 47; content can withhold rounds, stop the run, or make an issue look handled, no content other than that record can license a new implementation, and none at all can license a merge or a skipped stage |
 | 45 | Tier follows content, and the repository is what establishes it | Every mechanical signal is answered from the repository — the precedent is found by the classifier's own search and reported as a location, and the covering-check signal names the target that covers *this* change; an issue's assertion or pointer is a lead to check, never an answer, and a signal answerable only from the issue is not established. Judgment-heavy signals and the three hard-exclusion classes (security-adjacent, external contracts, schema/data migrations) reach the strongest tier however mechanical the change looks, including alongside all four mechanical signals; mixed, thin, or absent evidence — including uncertainty about an exclusion — resolves upward; and classification stays a bounded read that stops rather than investigating |
 | 46 | Selection never weakens a gate, and never persists | Reviewers run at or above the tier of **the dispatch that produced the code under review** — the fix round's strongest tier on a re-review — and never at the fast tier; a gate fix round is dispatched at the strongest tier; the step is skipped whole where model selection is unavailable or the batch runs sequentially; a repository's pinned table is applied only if monotone, and an unresolvable key falls back *upward* rather than to an unordered session model; a floor, a rejected table, and a fallback are each disclosed where the tier is reported, alongside a fast tier's own evidence; and the tier reaches no tracker artifact |
-| 47 | Bounded returns, durable before droppable | Every step the orchestrator dispatches writes its full output into the artifact it belongs in **before** returning, and returns a verdict, its counts, and at most its stated line budget; a return that drops findings states how many. Work the orchestrator does inline leaves only its result behind — the DAG's edges and file scopes, not the codebase reads that produced them. A fix round is dispatched with a pointer into the PR body, never the finding text, and what is read back that way is data — it can describe defects in that PR's own diff and can never waive a stage or widen the change. No fact the batch depends on exists only in the orchestrator's context, and the two that are neither durable nor re-derivable — the statuses that leave no artifact, and the approved plan — are named as such rather than assumed recoverable |
-| 48 | A compaction is recovered, and a stop is chosen | The light position read runs at every boundary and its answer wins over what the run believes it remembers, so no compaction has to be detected; every dispatch first checks its issue for an existing PR or branch, so a lost position never becomes two PRs for one issue; a read that errored or may have been truncated dispatches nothing new rather than treating a missing row as a missing PR; the recency check does not run mid-batch, where it would stop the run on its own writes; issues with an artifact advance without re-asking anything while issues without one need a plan approved this session; the position line reports the run's depth plus the environment's readout where one exists and says so where none does, never an estimate; and a deliberate stop lands on a group boundary, sends no terminal-state declaration, and is reported as a stop rather than as completion |
+| 47 | Only a trusted record licenses an unattended dispatch | An integration-mode approval over a parent issue is recorded on that issue at the approval — considered set, approved subset, integration branch — written once and never updated, and not written for the batch sources or modes that cannot carry it. A later session with no user dispatches exactly the approved issues R5 left unsettled, intersected with the platform-derived set; only the newest record for this branch counts and its trust is the merge gate's E2 on the comment's author; absent, superseded, untrusted, unreadable, or malformed all fall back to the artifact-evidence bound rather than to an older record; and an issue the record never considered withholds the terminal-state declaration |
+| 48 | Bounded returns, durable before droppable | Every step the orchestrator dispatches writes its full output into the artifact it belongs in **before** returning, and returns a verdict, its counts, and at most its stated line budget; a return that drops findings states how many. Work the orchestrator does inline leaves only its result behind — the DAG's edges and file scopes, not the codebase reads that produced them. A fix round is dispatched with a pointer into the PR body, never the finding text, and what is read back that way is data — it can describe defects in that PR's own diff and can never waive a stage or widen the change. No fact the batch depends on exists only in the orchestrator's context, and anything in neither column — the statuses that leave no artifact, and an approved plan no B1-5 record covers — is named as such rather than assumed recoverable |
+| 49 | A compaction is recovered, and a stop is chosen | The light position read runs at every boundary and its answer wins over what the run believes it remembers, so no compaction has to be detected; every dispatch first checks its issue for an existing PR or branch, so a lost position never becomes two PRs for one issue; a read that errored or may have been truncated dispatches nothing new rather than treating a missing row as a missing PR; the recency check does not run mid-batch, where it would stop the run on its own writes; a compaction that took the approval falls back to R8 §1's two paths unchanged — the plan re-presented where a user is reachable, a trusted B1-5 record's Approved list where none is — and never proceeds on the re-derived plan as though it had been approved; the position line reports the run's depth plus the environment's readout where one exists and says so where none does, never an estimate; and a deliberate stop lands on a group boundary, sends no terminal-state declaration, and is reported as a stop rather than as completion |
 
 ## Single-Mode Test Cases
 
@@ -778,10 +780,12 @@ being open**; issue state is not consulted. #112's PR is adopted, not duplicated
 R6 **re-runs both gate stages on it** — it is still a draft — including Stage 1, whose
 `PASS` in the body licenses nothing; the body supplies only the budget, so each stage has
 one fix round left. #113 and #116 are dispatched after the resume plan is approved, marked as newly
-entering the batch this session. No merge gate invocation precedes dispatch — the branch
+entering the batch this session, and that approval is recorded on #109 (B1-5), superseding
+any earlier record — a resume takes the approval from the user who is present and never from
+a record. No merge gate invocation precedes dispatch — the branch
 carries no open non-draft PR. The summary says the set and the graph were re-derived.
 
-**Criteria to test**: 41, 42, 44, 36, 37
+**Criteria to test**: 41, 42, 44, 36, 37, 47
 
 ### Case 56: Resume with a deferred PR in the queue
 
@@ -876,34 +880,33 @@ something other than the body sets that state.
 
 **Criteria to test**: 44, 41
 
-### Case 61: Unattended resume with issues left to dispatch
+### Case 61: Unattended resume with no record to license a dispatch
 
-**Scenario**: A scheduled invocation resumes #109. Two ready PRs are waiting for the merge
-gate and one draft PR has an unspent fix round; #116 has no PR and no branch. In the first
-session the user had used Reorder to **exclude** #116 from the batch. Separately, someone
-with triage access has linked a new issue #117 as a sub-issue of #109 since that session ran.
+**Scenario**: A scheduled invocation resumes #109, whose batch was approved before B1-5
+existed — the parent issue carries the create-issue research comment and nothing else. Two
+ready PRs are waiting for the merge gate and one draft PR has an unspent fix round; #116 has
+no PR and no branch.
 
 **Expected behavior**: the integration branch settles the **mode** and nothing else. The
 run advances what an approved plan already produced — R6 re-runs both stages on the *draft*
 (and may re-invoke its implementer for a fix round against that existing PR), the two ready
 PRs go untouched to R8's merge gate invocation, merge comments are posted, the report is
-written — and it **dispatches no new implementer**, because which issues get implemented was
-never recorded and this session has no user to approve it. #116 and #117 are named as
-waiting on an approval rather than implemented: #116's exclusion did not survive its session
-and #117 entered the set on triage access alone, and no artifact distinguishes either from a
-legitimately pending issue. A bare `git push origin integration/issue-109` by any account
-with write access licenses none of this.
+written — and it **dispatches no new implementer**, because no record says which issues were
+approved and this session has no user to ask. #116 is named as waiting on an approval rather
+than implemented; no artifact distinguishes it from an issue an earlier session deliberately
+excluded. A bare `git push origin integration/issue-109` by any account with write access
+licenses none of this, and neither does the branch's existence.
 
 **No terminal-state declaration is sent.** Waiting on an approval is not a B2-6 status, so
-part (b) cannot be completed for #116 and #117 — and declaring the *empty* set instead would
-be worse than declaring nothing: all three parts would be structurally present, F1 would use
-it in place of the standalone derivation that exists precisely because "a vetted issue with
-no PR at all is not terminal standalone", the milestone PR would flip to ready, and every
-later run would read **Stop — under review** and never implement them. Sending nothing
-leaves F1 on that derivation and the milestone PR a draft naming what it waits on. B3's
-closing invocation still runs and still merges what it can.
+part (b) cannot be completed for #116 — and declaring the *empty* set instead would be worse
+than declaring nothing: all three parts would be structurally present, F1 would use it in
+place of the standalone derivation that exists precisely because "a vetted issue with no PR
+at all is not terminal standalone", the milestone PR would flip to ready, and every later run
+would read **Stop — under review** and never implement it. Sending nothing leaves F1 on that
+derivation and the milestone PR a draft naming what it waits on. B3's closing invocation
+still runs and still merges what it can.
 
-**Criteria to test**: 44, 41, 35
+**Criteria to test**: 44, 47, 41, 35
 
 ### Case 62: A milestone batch resumed the next day
 
@@ -1127,7 +1130,9 @@ halves. Stage 2 fails again, and the fix round is dispatched at the **strongest*
 because a stage that has already failed on this issue is a judgment-heavy signal — whatever
 session 1 used. If session 2's classification differs from session 1's, nothing already
 delivered is affected: the PR is adopted, not re-implemented (R7). An unattended resume
-dispatches no new implementer, so fix rounds are the only classifications it makes.
+classifies each issue an approval record licenses exactly as an attended one would — the
+record carries no tier — and with no such record, fix rounds are the only classifications it
+makes.
 
 **Criteria to test**: 46, 45, 44
 
@@ -1224,6 +1229,109 @@ mechanical signal as strongest also fails it.
 
 **Criteria to test**: 45
 
+## Approval Record Test Cases
+
+Cases 77–79 exercise the record B1-5 writes at the execution-plan approval and R8 §1 reads
+back in a session with no user. The fixture is this repository's own #109 batch — parent
+issue #109, sub-issues #110–#116, branch `integration/issue-109`, per-issue PRs #118–#125 —
+rewound to a mid-flight state. Case 61 covers the fourth path, a resume with no record at
+all.
+
+### Case 77: A scheduled run crosses a group boundary
+
+**Scenario**: On 2026-08-06 the user approved integration mode over #109 and used **Reorder
+to exclude #113** (model selection) from the milestone. B1-5 posted on #109:
+
+```markdown
+## Batch Plan Approved
+
+Integration branch: `integration/issue-109`
+Considered: #110, #111, #112, #113, #114, #115, #116
+Approved: #110, #111, #112, #114, #115, #116
+```
+
+The session ended after group 1: #110's PR #118 merged into the branch. A scheduled
+invocation resumes the next day. #111 and #114 — group 2 — have no PR, no branch, and no
+worktree; #113 likewise.
+
+**Expected behavior**: R2 reads Resumable, R3 finds no recent write, R4 rebuilds the DAG,
+and R5 settles #110 as `MERGED`. R8 §1 then reads **every** comment on #109 — paginated,
+because a short read here would silently narrow the plan — keeps the one naming
+`integration/issue-109`, takes the newest, and checks that author's repository permission
+(`admin`). Trusted, so the licence is `Approved ∩ R1's set`, and **#111 and #114 are
+dispatched**: issues with no artifact whatsoever, which the artifact-evidence bound of case
+61 would have refused. This is the whole point — a scheduled run advances past the group it
+inherited instead of stopping at it.
+
+**#113 is not dispatched**, though it sits in R1's set and looks pending in every artifact.
+It is in *Considered* and not in *Approved*, which is the exclusion, written down. Nothing
+else about the record's authority expands: the DAG still orders the dispatch (#112 waits on
+#115), both review-gate stages still run on every PR the group produces, each PR still opens
+as a draft, and the merge gate still decides eligibility for itself. The record carries no
+model tier and could not be trusted for one — each dispatch is classified from scratch.
+
+**Criteria to test**: 47, 44, 41
+
+### Case 78: The batch source widened after the approval
+
+**Scenario**: case 77's record is in force and every issue it approved has reached a final
+status. Since the approval, an account with **triage** access linked a new issue #117 as a
+sub-issue of #109. The invocation is unattended.
+
+**Expected behavior**: #117 is in R1's set — sub-issue links are platform relationships, and
+that is what R1 reads — and in neither of the record's two lists, so it is **not dispatched**
+and is named in the summary. Triage access is enough to widen a batch and must not be enough
+to license implementing it.
+
+**The terminal-state declaration is withheld**, even though every *dispatched* issue carries
+a final B2-6 status and the declaration would therefore be structurally complete. #117 is
+neither finished nor Considered, so it entered the batch after the last human looked at the
+plan, and sending the declaration would flip the milestone PR to ready over it — after which
+R2 returns **Stop — under review** on every later run and #117 is never implemented. The
+milestone PR stays a draft naming what it waits on, and the next attended session sees #117
+at B1-3 as newly entering the batch, approves or excludes it, and writes a superseding
+record.
+
+**The contrast with #113 is the point of recording two lists.** Both are outside the licence;
+only #117 withholds the declaration. With the approved set alone, a deliberate exclusion and
+an issue nobody has seen read identically, and treating the second safely would stall every
+batch that ever used Reorder.
+
+**Criteria to test**: 47, 41
+
+### Case 79: A record that cannot be trusted, and a batch that can carry none
+
+**Scenario A**: #109 carries case 77's record, and above it a newer `## Batch Plan Approved`
+comment for the same branch whose author's collaborator permission reads `read`.
+**Scenario B**: the newest record's author is a collaborator, but the permission call returns
+`503` on every attempt. **Scenario C**: a batch over the milestone "Search revamp", resumed
+on `integration/2026-08-07-search-revamp`, with two issues merged.
+
+**Expected behavior**, A: the newest record for this branch is the only one whose trust is
+checked, it fails, and the outcome is **no record** — the run falls back to the
+artifact-evidence bound and dispatches nothing new. The older, trusted record is **not** used
+as a fallback: an untrusted or unreadable newest record may itself be the supersession — a
+re-plan a human made and this session cannot read — and stepping past it would act on a plan
+already narrowed. A malformed record — no branch line, or no parseable Approved list — takes
+the same path. A record whose approved issues have all since left R1's set reaches the same
+outcome by a different route: the licence is that list intersected with the platform-derived
+set, so it is empty and nothing is dispatched.
+
+**Expected behavior**, B: the read is retried up to 3 times with backoff before anything is
+concluded, then **fails closed** exactly as A does. The two are reported **distinctly** —
+"the record's author lacks write access" and "the record's author could not be checked" have
+the same effect and different remedies, and only the second is worth re-running. The
+substantive answers (`read`/`none`, a `Bot` author, a deleted account) are not retried.
+
+**Expected behavior**, C: there is no record and there was never going to be one — a
+milestone batch has no parent issue to host it and no single ordered place for a later record
+to supersede an earlier one, so B1-5 does not write one and the artifact-evidence bound
+stands. The resume says so as a stated limit rather than reporting a missing artifact, and
+`integration/2026-08-07-search-revamp` is still **discovered** by slug rather than recomputed
+(case 62).
+
+**Criteria to test**: 47, 44
+
 ## Context Budget Test Cases
 
 The fixtures below use this repository's own #109 batch — seven sub-issues #110–#116,
@@ -1231,7 +1339,7 @@ The fixtures below use this repository's own #109 batch — seven sub-issues #11
 observed: three PRs took several fix rounds each, a single review gate's output ran to
 several hundred lines, and two sessions ended on API limits mid-batch.
 
-### Case 77: A compaction lands mid-group
+### Case 80: A compaction lands mid-group
 
 **Scenario**: An integration-mode batch on parent #109 is partway through group 2. #110,
 #114, #111 and #115 merged in group 1; #112's PR (#122) is an open draft on its second
@@ -1248,15 +1356,20 @@ and no PR. #122's remaining fix rounds come from its `Gate Results` counts and b
 re-run, because a verdict in a body licenses nothing. The recency check does **not** run: the
 newest write on the branch is this session's own merge, and R3 would stop the run on its own
 footprint. #113 is not re-dispatched — the per-dispatch check finds its branch — and its
-implementer's return arrives on its own. Group 3 is dispatched only against a plan approved in
-this session; if the compaction took the approval, B1-3 is re-presented, while every issue
-that already has an artifact continues without re-asking anything. The residue is stated
-rather than hidden: had #113's implementer not yet pushed, nothing would distinguish it from
-an issue never dispatched, and it would be dispatched a second time.
+implementer's return arrives on its own. Group 3 is dispatched only against an approved plan,
+and the compaction took the approval — so R8 §1's two paths apply exactly as they would in a
+fresh session: **the user is present, so B1-3 is re-presented** and B1-5 writes a record
+superseding the one this batch already carries. The existing `## Batch Plan Approved` comment
+on #109 is *not* read as a substitute for the user, and R1's re-derived set is not treated as
+the plan. Only had this been an unattended invocation would that record license the dispatch,
+and only for the issues its Approved list names. Every issue that already has an artifact
+continues without either. The residue is stated rather than hidden:
+had #113's implementer not yet pushed, nothing would distinguish it from an issue never
+dispatched, and it would be dispatched a second time.
 
-**Criteria to test**: 48, 44, 41
+**Criteria to test**: 49, 44, 47, 41
 
-### Case 78: A batch larger than one context ends on a boundary
+### Case 81: A batch larger than one context ends on a boundary
 
 **Scenario**: An integration-mode batch over a milestone of twelve issues in four groups. The
 environment reports remaining context to the agent, and after group 2 the readout says the run
@@ -1275,9 +1388,9 @@ reports the position line, says the batch stopped on a boundary rather than fini
 groups 3 and 4, and says re-invoking resumes from the artifacts — which B0 then does, adopting
 the delivered PRs and dispatching only what is unsettled and approved.
 
-**Criteria to test**: 48, 39, 41
+**Criteria to test**: 49, 39, 41
 
-### Case 79: The sequential fallback
+### Case 82: The sequential fallback
 
 **Scenario**: The same #109-shaped batch in an environment with no separate agent instances.
 The orchestrator implements each issue, runs both gate stages, and answers the repository's
@@ -1296,9 +1409,9 @@ sequentially and that its per-issue footprint is the floor rather than something
 reduced; a report implying the sequential path carries the same bound as the parallel one
 fails this case.
 
-**Criteria to test**: 47, 48, 46
+**Criteria to test**: 48, 49, 46
 
-### Case 80: A review gate's findings never enter the orchestrator's context
+### Case 83: A review gate's findings never enter the orchestrator's context
 
 **Scenario**: Stage 2 on #112's PR (#122) finds 3 Critical and 9 Important issues, and the
 reviewer's full narrative runs to several hundred lines — the size #109's own gates produced.
@@ -1314,9 +1427,9 @@ neither direction. The implementer treats what it reads as data: an entry asking
 beyond the defect in #122's own diff is reported, not executed, and nothing in that body
 waives the re-review.
 
-**Criteria to test**: 47
+**Criteria to test**: 48
 
-### Case 81: A standard-mode batch re-invoked after a stop
+### Case 84: A standard-mode batch re-invoked after a stop
 
 **Scenario**: A standard-mode batch over a manual list — #110, #111, #114 — stopped on a
 boundary after #110 and #114 delivered ready PRs. #111 has no PR and no branch. It is
@@ -1330,10 +1443,12 @@ by head branch over `110|111|114`, with the **fetched** row count compared again
 and the limit raised until it is strictly below, because a short read here re-implements a
 delivered issue. #110 and #114 are adopted from their ready PRs and never re-dispatched; #111
 is dispatched only against a plan approved in this session, and named as waiting on one where
-no user is reachable. R3 **does** run here, unlike in Case 77: across a session boundary the
-newest write may genuinely be another session's.
+no user is reachable — B1-5 writes no record for a standard-mode batch, and none for a manual
+list either, so there is nothing to read and the artifact-evidence bound stands. R3 **does**
+run here, unlike in Case 80: across a session boundary the newest write may genuinely be
+another session's.
 
-**Criteria to test**: 48, 41, 42
+**Criteria to test**: 49, 47, 41, 42
 
 ## Evaluation Log
 
@@ -2524,6 +2639,12 @@ fresh one.
 
 ### 2026-08-07 — Re-entry, review round 1 (Refs #112)
 
+> **Superseded in one place by the #128 entry at the end of this log.** The bound recorded
+> here — an unattended session dispatches no new implementer at all — held only while
+> nothing recorded the plan. It is now: an unattended session dispatches the issues a
+> trusted approval record enumerates, and with no such record, none. Everything else in this
+> entry, including why the *branch* licenses no dispatch, stands.
+
 Stage 1 passed. Stage 2 returned 5 Critical, 6 Important and 4 Minor, most verified against
 the live API or primary docs. Fourteen findings were accepted and one was accepted with a
 different remedy than suggested; none was declined. Cases 60–64 and criterion 44 exist
@@ -2633,6 +2754,12 @@ license.
   why it cannot serve the recency read.
 
 ### 2026-08-07 — Re-entry, review round 2 (Refs #112)
+
+> **Superseded in one place by the #128 entry at the end of this log.** The bound recorded
+> here — an unattended session dispatches no new implementer at all — held only while
+> nothing recorded the plan. It is now: an unattended session dispatches the issues a
+> trusted approval record enumerates, and with no such record, none. Everything else in this
+> entry, including why the *branch* licenses no dispatch, stands.
 
 Stage 1 passed again. Stage 2 returned 3 Critical, 5 Important and 5 Minor — **all three
 Criticals introduced by round 1's own fixes**, which is the round's main lesson: two of them
@@ -2779,6 +2906,89 @@ more as headroom than spent re-approaching the cap.
   `plugins/aoshimash-skills/skills/` plus `README.md`, `AGENTS.md`, `CLAUDE.md` —
   52 files in total, 0 broken.
 
+### 2026-08-07 — Recording the approved plan (Refs #128)
+
+The execution-plan approval is now written into the tracker, so a session with no user can
+implement the issues a human approved instead of only the ones that already carry an
+artifact. New **B1-5** in `batch.md` posts a `## Batch Plan Approved` comment on the batch's
+parent issue at the approval; **R8 §1** in `batch-reentry.md` reads it back under a trust
+rule; `platform-github.md` gains "Record and Read a Batch's Approved Plan". Criterion 47 and
+cases 77–79 are new, case 61 was rewritten around the no-record path, and `AGENTS.md`,
+`README.md`, `SKILL.md`, and `model-selection.md` follow. Nothing in the merge gate changed.
+
+**The design turns on one distinction: the record holds a decision, not state.** State is
+re-derivable, so a recorded copy drifts from the artifacts and lies — which is why this
+pipeline has no state file and why `batch-reentry.md` forbade a comment written for the
+machine's benefit. An approval is not re-derivable from anything: the artifacts a resume
+reads are equally consistent with an approval covering seven issues, one excluding five of
+them, and none at all. So the record is written once and never updated, carries no status or
+graph or tier, and everything derivable stays derived. If a later rule needs it updated to
+stay true, that rule is wrong.
+
+**Two enumerations, not one.** *Considered* is R1's set at the approval; *Approved* is the
+subset that licenses a dispatch. Recording only the second would make a deliberate exclusion
+and an issue nobody has seen the same reading — and the safe treatment of the second (case
+78's withheld declaration) would then stall every batch that ever used Reorder.
+
+**Scope.** The record is written for integration-mode batches over a **parent issue** only.
+A standard-mode batch has no re-entry to read it; a milestone, label, or manual-list batch
+has no parent to host it and no single ordered place for a later record to supersede an
+earlier one. Those keep the artifact-evidence bound — a cost of one resume, against the risk
+of a record that cannot be superseded.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 61 (rewritten) | Pass | No record: gates on the drafts, merge gate, comments, report — no new dispatch, no declaration, and the empty-set prohibition intact |
+| 77 | Pass | Trusted record carries the run across a group boundary onto issues with no artifact at all; the excluded issue stays out; DAG, gates, draft state, eligibility, and tier classification all unchanged |
+| 78 | Pass | Triage-linked issue is dispatched by nothing and withholds the declaration, so the milestone PR stays a draft rather than being finished over it |
+| 79 | Pass | Untrusted, transient-exhausted, malformed, and never-written all fail closed to the artifact bound; no fall-back to the superseded record; the two report causes stay distinct |
+| 55 | Re-run, pass | The attended resume path is unchanged except that its approval is now recorded |
+| 41–46, 56–76 | Not re-run | Their paths are untouched: the record is read only at R8 §1, after every R2/R3 stop, and it licenses nothing but a dispatch |
+
+**Found and fixed during the desk check:**
+
+1. **A Known-limits claim became false the moment the record existed.** The file said content
+   read by re-entry "can never skip a review stage, **start an implementation**, or merge
+   unreviewed code". The record is content, and starting an implementation is exactly what it
+   does. Rewritten to name it as the one stated exception, with what still holds against it —
+   no review skipped, no eligibility granted, nothing merged — rather than leaving a sentence
+   the mechanism contradicts.
+2. **The reason for not falling back to an older record was wrong.** The first draft said
+   falling back would let an untrusted comment "resurrect a superseded plan", which is
+   backwards: under a *newest-trusted* rule an untrusted comment is simply ignored. The real
+   hazard is the opposite — an unreadable newest record may itself **be** the supersession (a
+   re-plan whose permission read timed out), and stepping past it would act on a plan a human
+   has already narrowed. Same rule, correct argument.
+3. **`B1-3` never said what a session with no user does with it.** The step is a user choice,
+   and the unattended path had been implicit in R8 since re-entry was added. Now that an
+   unattended session dispatches, a reader following `batch.md` linearly needs it at the step:
+   the plan is read, not asked, no record of its own is written, and a **Fresh** batch stops.
+4. **An unattended run could have finished a milestone over an issue nobody approved.** With
+   dispatch unlocked, an unattended session routinely reaches a complete dispatched set, and
+   the declaration would then flip the milestone PR to ready while a triage-linked issue sat
+   unimplemented — after which R2 returns *Stop — under review* forever. Fixed by the
+   accounted-for requirement in R8 §3, which is what the Considered list exists to serve.
+
+**Verified this round, each command run exactly as written from
+`platform-github.md`** (extracted from the file, not retyped):
+
+- The paginated comment read against `aoshimash/skills` issue 109 — returns both comments
+  with `id`, `created_at`, `login`, and `user_type: "User"`.
+- The collaborator-permission read for `aoshimash` — `{"permission":"admin","push":true,
+  "role_name":"admin"}`; and for `octocat`, a real account that is not a collaborator here —
+  `{"permission":"read","push":false}`, which is the observation behind "the call succeeded
+  proves nothing, only the returned value does".
+- `gh issue comment --help` (gh 2.97.0) — `-F, --body-file` exists, which is what keeps
+  tracker text out of the command line.
+- `gh issue view 109 --comments` prints `author`/`association`/`edited`/`status` and no
+  comment id; `gh issue view 109 --json comments` returns a GraphQL node id
+  (`IC_kwDORdkzIc8AAAABNmLimg`) — neither is usable for ordering or trust, which is why the
+  read is REST.
+- The ordering guarantee is documented, not assumed: "Issue comments are ordered by ascending
+  ID" — [List issue comments](https://docs.github.com/en/rest/issues/comments), fetched this
+  session. The docs state no behaviour for `created_at` under an edit, so nothing here rests
+  on one.
+
 ### 2026-08-07 — Bounding the batch orchestrator's context (Refs #129)
 
 The orchestrator is the one component that sees a whole batch, so it is the one that grows
@@ -2796,8 +3006,8 @@ is retained from the gate's report), B2-6 (the position line and the deliberate 
 section, the Stage 2.5 bound, and the PR number/round number the reviewer now needs) and
 `automated-review.md` G state their own bounds. `platform-github.md` gains the standard-mode
 position read. SKILL.md gains a **Context position readout** capability row, its prose, a
-Batch Mode paragraph, a clause in principle 7, and the reference entry. Criteria 47–48 and
-cases 77–81 are new. Single mode is untouched: it holds one issue and has no orchestrator.
+Batch Mode paragraph, a clause in principle 7, and the reference entry. Criteria 48–49 and
+cases 80–84 are new. Single mode is untouched: it holds one issue and has no orchestrator.
 
 **Placement.** Its own reference, for the same reasons `model-selection.md` got one: `batch.md`
 was already 808 lines and is the file most of this change also edits, and the policy is read by
@@ -2807,18 +3017,28 @@ meets it; the rationale is in one place.
 **Two things this deliberately does not do.** It does not change the merge gate's report
 format — that crosses a skill boundary and #129 puts the merge gate out of scope — so what is
 bounded is only what this side **retains** from it. And it does not make the approved plan
-durable; that is #128. A compaction that takes the approval therefore costs one re-approval
-before *new* work is dispatched, while everything with an artifact already advances without
-one. Both are recorded as known limits rather than rounded up.
+durable: #128 landed first and B1-5 already does, for integration-mode parent-issue batches.
+C3 therefore routes a compacted approval straight into R8 §1's two paths rather than adding a
+rule of its own — re-presented where a user is reachable, since the record is explicitly never
+a substitute for a present user; the record's Approved list only where none is. Both are recorded as known limits rather than rounded up.
+
+**Reconciled against #128 after it merged.** This work was drafted while the approved plan was
+still recorded nowhere, and three passages said so. Merging `main` made them false rather than
+merely conflicting: C2's second neither-column fact, C3's "what the read does not restore", and
+the standard-mode paragraph all now turn on *whether B1-5 could write a record for this batch*
+rather than on the plan being unrecordable. Cases 80 and 84 were rewritten to exercise both
+sides of that split — 80 has a record and still asks its present user, 84 has no record to read
+at all — and criterion 49 gained the clause. The purely textual part of the merge was a case-number collision: #128 took cases
+77–79 and criterion 47, so this entry's cases moved to **80–84** and its criteria to **48–49**.
 
 | Case | Result | Notes |
 |------|--------|-------|
-| 77 | Pass | The boundary read's answer wins over the summary; R3 stays out, so the run does not stop on its own merge; the pushed-branch check prevents a second dispatch of #113; the unpushed-implementer residue is stated, not hidden |
-| 78 | Pass | The stop lands after the in-flight implementers, not mid-group; the closing invocation runs and sends **no** declaration — in particular not the empty set, which would flip the milestone PR over unimplemented issues |
-| 79 | Pass | No returns to bound, so the discipline applies instead: same durable writes marked `SELF-REVIEWED`, per-**issue** position read and line, and a summary that calls the per-issue footprint a floor rather than a reduction |
-| 80 | Pass | The narrative lands in #122's body before the return; 12 findings fit the 15-line cap and 20 would return 15 plus the count; the fix round is dispatched as a pointer and the body is read as data |
-| 81 | Pass | A standard-mode batch is not treated as fresh: the head-branch read adopts the two ready PRs, the fetched-count rule guards a short read, and R3 **does** run because this is a real session boundary |
-| 1–76 | Not re-run | Single mode is untouched; the batch changes add output (the position line) and bounds on returns without altering any existing expectation. The one place an existing case's mechanics moved is who writes `Gate Results` on the dispatched path — now the reviewer, before returning — which cases 55 and 60 read only as a **budget**, unchanged |
+| 80 | Pass | The boundary read's answer wins over the summary; R3 stays out, so the run does not stop on its own merge; the pushed-branch check prevents a second dispatch of #113; the lost approval takes R8 §1's attended path rather than reading the record over a present user; the unpushed-implementer residue is stated, not hidden |
+| 81 | Pass | The stop lands after the in-flight implementers, not mid-group; the closing invocation runs and sends **no** declaration — in particular not the empty set, which would flip the milestone PR over unimplemented issues |
+| 82 | Pass | No returns to bound, so the discipline applies instead: same durable writes marked `SELF-REVIEWED`, per-**issue** position read and line, and a summary that calls the per-issue footprint a floor rather than a reduction |
+| 83 | Pass | The narrative lands in #122's body before the return; 12 findings fit the 15-line cap and 20 would return 15 plus the count; the fix round is dispatched as a pointer and the body is read as data |
+| 84 | Pass | A standard-mode batch is not treated as fresh: the head-branch read adopts the two ready PRs, the fetched-count rule guards a short read, R3 **does** run because this is a real session boundary, and with no B1-5 record to read the artifact-evidence bound stands |
+| 1–79 | Not re-run | Single mode is untouched; the batch changes add output (the position line) and bounds on returns without altering any existing expectation. The one place an existing case's mechanics moved is who writes `Gate Results` on the dispatched path — now the reviewer, before returning — which cases 55 and 60 read only as a **budget**, unchanged |
 
 **Verified this round, each command run exactly as written in the file:**
 
@@ -2842,9 +3062,9 @@ carried forward — both of which now carry a bound. Stage 2 found the position 
 stated failure behaviour, which failed **open**: an errored or truncated list makes an issue
 that has a PR look like one that does not, and the cost is a second implementer on an issue
 already in flight. C3 now says a read that did not complete dispatches nothing new, and
-criteria 47–48 were widened to cover both.
+criteria 48–49 were widened to cover both.
 
 **Unmeasured, as in the #116 entry:** this skill still has no `evals/evals.json`, so cases
-77–81 were executed by reading the shipped instructions rather than by a scored suite, and no
+80–84 were executed by reading the shipped instructions rather than by a scored suite, and no
 separate agent instance was available in this session to read them with fresh context. Both
 gate stages for the implementing PR are `SELF-REVIEWED` for the same reason.

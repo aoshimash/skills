@@ -393,6 +393,63 @@ returned against the limit you passed: equal means the list may have been trunca
 re-read with a higher limit before concluding anything from it. A coverage check built on a
 truncated list fails open — it under-reports the human queue.
 
+## Record and Read a Batch's Approved Plan
+
+Used by [batch.md](batch.md) B1-5 to record what the user approved for an integration-mode
+batch over a parent issue, and by [batch-reentry.md](batch-reentry.md) R8 §1 to read it back
+in a session that has no user.
+
+**Write it** — one comment on the parent issue, posted after B1-4 and before the first
+dispatch. Write the body to a file rather than interpolating issue text into the command:
+
+```bash
+gh issue comment <parent-number> --body-file <body-file>
+```
+
+**Read every comment on the parent issue.** This read decides which issues an unattended
+session may implement, so a short read silently narrows the plan — paginate it, and take it
+from REST rather than from either `gh issue view` form. Run against this repository on
+2026-08-07, `gh issue view 109 --comments` printed `author`, `association`, `edited` and
+`status` and **no comment id**, and `gh issue view 109 --json comments` returned a GraphQL
+node id (`IC_kwDORdkzIc8AAAABNmLimg`) rather than the ordered numeric one, under a single
+query with no pagination flag. Neither carries the author's permission either way:
+
+```bash
+gh api --paginate -X GET repos/{owner}/{repo}/issues/<parent-number>/comments \
+  -f per_page=100 \
+  --jq '.[] | {id, created_at, login: .user.login, user_type: .user.type, body}'
+```
+
+`--paginate` follows every page, so no truncation rule applies to this read. `user.type` is
+the authoritative bot flag (`"Bot"` / `"User"`) — the same field the automated-reviewer
+detection uses. Neither timestamp is a trust signal; the author check below is.
+
+**The endpoint's own ordering is what identifies the newest record.** GitHub's REST
+documentation states that "Issue comments are ordered by ascending ID"
+([List issue comments](https://docs.github.com/en/rest/issues/comments), read 2026-08-07),
+so the **last** match in the paginated response is the latest one — no sorting on
+`created_at`, whose behaviour under an edit the documentation does not state.
+
+Keep the comments whose body carries the `## Batch Plan Approved` heading **and** names this
+batch's integration branch, take the last of them, and check that one author's permission —
+never an older record's:
+
+```bash
+gh api repos/{owner}/{repo}/collaborators/<login>/permission \
+  --jq '{permission, role_name, push: .user.permissions.push}'
+```
+
+`admin` or `write` (equivalently `.user.permissions.push == true`) is trusted. `read` /
+`none`, a `Bot` author, and a deleted account are substantive answers that disqualify. The
+endpoint reports **effective** permission and returns `200` for any real GitHub account,
+including one that is not a collaborator at all — a public repository reports `read` for such
+a user — so "the call succeeded" proves nothing and only the returned value does. On an
+error, apply the merge gate's E2 retry rule
+([eligibility.md](../../merge-issue-prs/references/eligibility.md)): retry a transient
+failure up to 3 times with backoff, treat a substantive one as an answer, and fail closed
+either way — an untrusted record licenses nothing, and re-entry falls back to the
+artifact-evidence bound.
+
 ## Re-derive a Batch's State (re-entry)
 
 Used by [batch-reentry.md](batch-reentry.md) to rebuild a batch's state in a session that
