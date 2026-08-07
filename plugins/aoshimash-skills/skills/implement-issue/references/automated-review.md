@@ -172,6 +172,14 @@ human reviewer can adjudicate them directly.
 - **Recap** (workflow.md 3-8): which automated reviewers were handled and how
   many rounds were used.
 
+**In the Orchestrated context those two recorded lines are also the whole return.**
+The orchestrator runs this step once per PR for the length of the batch, so what it
+keeps is the `Gate Results` line and the remaining-finding count — not the comment
+thread, which stays on the PR where the human reviewer reads it anyway
+([context-budget.md](context-budget.md) C1). Run the step as a separate agent
+instance where the environment supports one and that bound is structural; run it
+inline otherwise and hold to it by discipline.
+
 Then the flip (workflow.md 3-5). Anything a reviewer posts after it — including
 everything from reviewers that only run once the PR is ready — belongs to the
 human review cycle: route it through the respond-to-pr-review skill, not

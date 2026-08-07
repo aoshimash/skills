@@ -23,7 +23,23 @@ A review is strongest when run by a **separate agent instance** (see Environment
 
 **What "the implementer's" means, per mode.** In **Batch mode** it is the capability tier of **the dispatch that produced the code under review** ([model-selection.md](model-selection.md)) — the tier the orchestrator classified the issue into at B2-1 for a first review, and the **strongest** tier when re-reviewing after a fix round, since fix rounds are dispatched there. Reviewers run at that tier or above, and an implementer dispatched at the **fast** tier does not get fast-tier reviewers: the cheapest tier is available for implementing work whose shape the repository already carries, not for judging whether the result is right. On a roster whose tiers resolve to distinct models, a downgraded implementer is therefore reviewed relatively more strongly; where two tiers resolve to the same model, the comparison is inert between them and nothing was saved either. In **Single mode** the implementer is the session itself, on the model the user chose, and the rule reads against that model as before — model selection is still in use here, for the reviewer. The tier is chosen per session and recorded nowhere, so both halves of the comparison come from the same session's classification — including on a resumed batch, which re-runs the gates on a still-draft PR and re-classifies for them.
 
-**Fallback when no separate agent instance is available.** Run the stage's checklist yourself and produce the stage's real verdict exactly as defined below (Stage 1: PASS/FAIL with the issue list; Stage 2: severity-tagged issue counts and PASS/NEEDS_FIXES). Then mark that verdict `SELF-REVIEWED (no independent reviewer available)`. The marker **rides on** the real result — it does not replace it — so the On-Failure fix routing (max 2 rounds, then DONE_WITH_CONCERNS in Batch / record-and-stay-draft in Single) applies unchanged. Record the marker next to the gate outcome in the PR/MR body so a human can see the independent-review guarantee did not hold.
+**Reviewer return (Batch mode).** A dispatched reviewer **writes its full output into the PR
+body before it returns** — the `Gate Results` line carrying its verdict and round count, and
+one `Risk Areas` entry per remaining finding — and returns only:
+
+- the verdict line, plus the unmet-criterion count (Stage 1) or the per-severity counts
+  (Stage 2);
+- **at most 15 finding lines**, one per finding, as `file:line — defect — type`;
+- where there were more, the count of the rest and the note that they are in the PR body.
+
+That is the bound [context-budget.md](context-budget.md) C1 sets on this step, and it is what
+lets a fix round be dispatched with a *pointer* (`PR #203, Risk Areas, Stage 2 round 1`)
+rather than the finding text: the findings travel reviewer → PR body → implementer, and the
+orchestrator — which needs the verdict and the counts, not the prose — never holds them. The
+bound is on the return, not on the review: the reviewer still reads the whole diff. In Single
+mode there is no orchestrator to protect and the main agent holds the findings directly.
+
+**Fallback when no separate agent instance is available.** Run the stage's checklist yourself and produce the stage's real verdict exactly as defined below (Stage 1: PASS/FAIL with the issue list; Stage 2: severity-tagged issue counts and PASS/NEEDS_FIXES). Then mark that verdict `SELF-REVIEWED (no independent reviewer available)`. The marker **rides on** the real result — it does not replace it — so the On-Failure fix routing (max 2 rounds, then DONE_WITH_CONCERNS in Batch / record-and-stay-draft in Single) applies unchanged. Record the marker next to the gate outcome in the PR/MR body so a human can see the independent-review guarantee did not hold. The durable writes above happen identically on this path — same `Gate Results` line, same round count, same `Risk Areas` entries — but there is no return to bound, because the findings are already in the reviewing agent's own context ([context-budget.md](context-budget.md) C4).
 
 ## Stage 1: Spec Compliance Review
 
@@ -33,6 +49,7 @@ Review with:
 
 - The issue body (the "spec"), plus the parent issue's body when the issue has one (its Design Decisions and Background apply to the sub-issue)
 - The PR diff (`git diff origin/<default-branch>...<branch-name>`)
+- The PR/MR number and this stage's round number — a dispatched reviewer writes its own `Gate Results` line and `Risk Areas` entries before returning (see Reviewer return), and cannot do either without them
 - Instructions below
 
 **Batch mode**: the orchestrator runs a dedicated reviewer with the above context — a separate agent instance where available, otherwise self-review with the `SELF-REVIEWED` marker (see Reviewer Dispatch above). **Single mode**: the main agent runs the review the same way — a separate fresh-context instance where available, direct self-review with the marker otherwise.
@@ -84,6 +101,7 @@ Review with:
 
 - The PR diff
 - Project conventions (path to the repository's agent instructions, e.g. CLAUDE.md or AGENTS.md)
+- The PR/MR number and this stage's round number, for the same reason as Stage 1
 - Instructions below
 
 **Batch mode**: the orchestrator runs a dedicated reviewer — a separate agent instance where available, otherwise self-review with the `SELF-REVIEWED` marker (see Reviewer Dispatch above). **Single mode**: the main agent runs the review the same way — a separate fresh-context instance where available, direct self-review with the marker otherwise.
@@ -150,7 +168,10 @@ Classify a violation as `rule-violation-instance` (rather than a one-off bug) wh
    ```
    git diff origin/<default-branch>...<branch> | grep -n <pattern>
    ```
-2. Collect all matches across in-flight branches.
+2. Collect all matches across in-flight branches — **one line per in-flight PR scanned**
+   (`PR #<n> — <file:line>`, or that it had no match), which is the bound
+   [context-budget.md](context-budget.md) C1 sets on this stage. The diffs themselves are not
+   carried forward; a PR that needs a fix pass is re-read by the agent that applies it.
 3. Present findings to the user via a user choice (see Environment Adaptation):
    > "Pattern violation `<pattern>` found in N other in-flight PR(s): <list>. What would you like to do?"
    > Options: Apply fix to all / Select which PRs / Skip propagation
