@@ -5,14 +5,15 @@ guidance to coding agents (and humans) working with code here.
 
 ## Overview
 
-This is a Claude Code Plugin Marketplace repository. It contains a plugin (`aoshimash-skills`) that bundles Agent Skills, distributed as a Claude Code plugin.
+This repository contains Agent Skills for Codex, Claude Code, and other agents implementing the Agent Skills spec. Codex can install the individual skill directories; Claude Code can install the bundled `aoshimash-skills` plugin through this repository's marketplace. Product-bound skills declare their requirements in `compatibility` frontmatter. See README.md for installation and usage.
 
 ## Architecture
 
-- `.claude-plugin/marketplace.json` — Marketplace manifest (lists available plugins)
-- `plugins/aoshimash-skills/.claude-plugin/plugin.json` — Plugin manifest
+- `AGENTS.md` — Canonical shared repository guidance; `CLAUDE.md` imports it for Claude Code
+- `.claude-plugin/marketplace.json` — Claude Code marketplace manifest (lists available plugins)
+- `plugins/aoshimash-skills/.claude-plugin/plugin.json` — Claude Code plugin manifest
 - `plugins/aoshimash-skills/skills/<skill-name>/` — Individual skills, each with a `SKILL.md` and optional `references/`, `scripts/`, `assets/`
-- `plugins/aoshimash-skills/rules/agent-rules.md` — Shared conventions corpus, deliberately outside every skill. A running skill resolves to a version-pinned copy rather than the git checkout, so this file is addressed as a repository path and fetched over the GitHub API at runtime. Its "Contract" and "Format" sections are authoritative for the rule format and the managed-block delimiters
+- `plugins/aoshimash-skills/rules/agent-rules.md` — Shared conventions corpus, deliberately outside every skill. A running skill may use an installed copy rather than the git checkout, so this file is addressed as a repository path and fetched over the GitHub API at runtime. Its "Contract" and "Format" sections are authoritative for the rule format and the managed-block delimiters
 
 ## Skill Development
 
