@@ -4,13 +4,13 @@
     "name": "Shuji Aoshima"
   },
   "metadata": {
-    "description": "Personal Claude Code skills collection",
+    "description": "Personal Agent Skills collection for Codex, Claude Code, and other compatible agents",
     "version": "3.4.2"
   },
   "plugins": [
     {
       "name": "aoshimash-skills",
-      "description": "Collection of personal Claude Code skills by Shuji Aoshima",
+      "description": "Collection of personal Agent Skills by Shuji Aoshima",
       "source": "./plugins/aoshimash-skills",
       "version": "3.4.2",
       "author": {
