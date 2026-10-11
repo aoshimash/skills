@@ -2,14 +2,14 @@
 
 ## Purpose
 
-Every PR/MR goes through two review stages before being marked as done — whether it came from Single mode (one issue, Direct context) or Batch mode (many issues, Orchestrated context). Together with CI and the automated review response ([automated-review.md](automated-review.md)), these gates control the draft → ready flip: a PR/MR leaves draft status only after both stages pass (see workflow.md 3-5). This mirrors superpowers' two-stage review pattern:
+Every PR goes through two review stages before being marked as done — whether it came from Single mode (one issue, Direct context) or Batch mode (many issues, Orchestrated context). Together with CI and the automated review response ([automated-review.md](automated-review.md)), these gates control the draft → ready flip: a PR leaves draft status only after both stages pass (see workflow.md 3-5). This mirrors superpowers' two-stage review pattern:
 
 1. **Spec compliance** — Does the implementation match what the issue asked for?
 2. **Code quality** — Is the code well-written, safe, and maintainable?
 
 These are separate concerns. Spec compliance prevents over-building and under-building. Code quality catches bugs and style issues. Combining them into one review loses signal.
 
-**Not the same as the repository's automated reviewers.** These two stages are internal to the run — their findings exist only in this session, which is why unresolved ones keep the PR/MR a draft. Reviewers the repository itself configures (bot/AI) are handled separately in workflow.md 3-4 ([automated-review.md](automated-review.md)), after these gates and CI pass; their leftovers are already visible on the PR thread with replies beside them, so they are recorded rather than blocking.
+**Not the same as the repository's automated reviewers.** These two stages are internal to the run — their findings exist only in this session, which is why unresolved ones keep the PR a draft. Reviewers the repository itself configures (bot/AI) are handled separately in workflow.md 3-4 ([automated-review.md](automated-review.md)), after these gates and CI pass; their leftovers are already visible on the PR thread with replies beside them, so they are recorded rather than blocking.
 
 **Single mode note**: with only one issue in flight there is no orchestrator — the main agent is responsible for both stages: run each as a separate fresh-context agent instance where the environment supports one (see Reviewer Dispatch), otherwise review directly with the `SELF-REVIEWED` marker. Stage 2.5 (pattern propagation) never runs in Single mode — there are no other in-flight PRs to scan.
 
@@ -39,7 +39,7 @@ orchestrator — which needs the verdict and the counts, not the prose — never
 bound is on the return, not on the review: the reviewer still reads the whole diff. In Single
 mode there is no orchestrator to protect and the main agent holds the findings directly.
 
-**Fallback when no separate agent instance is available.** Run the stage's checklist yourself and produce the stage's real verdict exactly as defined below (Stage 1: PASS/FAIL with the issue list; Stage 2: severity-tagged issue counts and PASS/NEEDS_FIXES). Then mark that verdict `SELF-REVIEWED (no independent reviewer available)`. The marker **rides on** the real result — it does not replace it — so the On-Failure fix routing (max 2 rounds, then DONE_WITH_CONCERNS in Batch / record-and-stay-draft in Single) applies unchanged. Record the marker next to the gate outcome in the PR/MR body so a human can see the independent-review guarantee did not hold. The durable writes above happen identically on this path — same `Gate Results` line, same round count, same `Risk Areas` entries — but there is no return to bound, because the findings are already in the reviewing agent's own context ([context-budget.md](context-budget.md) C4).
+**Fallback when no separate agent instance is available.** Run the stage's checklist yourself and produce the stage's real verdict exactly as defined below (Stage 1: PASS/FAIL with the issue list; Stage 2: severity-tagged issue counts and PASS/NEEDS_FIXES). Then mark that verdict `SELF-REVIEWED (no independent reviewer available)`. The marker **rides on** the real result — it does not replace it — so the On-Failure fix routing (max 2 rounds, then DONE_WITH_CONCERNS in Batch / record-and-stay-draft in Single) applies unchanged. Record the marker next to the gate outcome in the PR body so a human can see the independent-review guarantee did not hold. The durable writes above happen identically on this path — same `Gate Results` line, same round count, same `Risk Areas` entries — but there is no return to bound, because the findings are already in the reviewing agent's own context ([context-budget.md](context-budget.md) C4).
 
 ## Stage 1: Spec Compliance Review
 
@@ -49,7 +49,7 @@ Review with:
 
 - The issue body (the "spec"), plus the parent issue's body when the issue has one (its Design Decisions and Background apply to the sub-issue)
 - The PR diff (`git diff origin/<default-branch>...<branch-name>`)
-- The PR/MR number and this stage's round number — a dispatched reviewer writes its own `Gate Results` line and `Risk Areas` entries before returning (see Reviewer return), and cannot do either without them
+- The PR number and this stage's round number — a dispatched reviewer writes its own `Gate Results` line and `Risk Areas` entries before returning (see Reviewer return), and cannot do either without them
 - Instructions below
 
 **Batch mode**: the orchestrator runs a dedicated reviewer with the above context — a separate agent instance where available, otherwise self-review with the `SELF-REVIEWED` marker (see Reviewer Dispatch above). **Single mode**: the main agent runs the review the same way — a separate fresh-context instance where available, direct self-review with the marker otherwise.
@@ -91,7 +91,7 @@ If spec compliance fails:
 2. Re-run spec compliance review.
 3. Max 2 fix rounds. If still failing:
    - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS` and include the review output in the batch summary. **In batch integration mode, an issue that has dependents does not stop here** — a draft PR never merges, so its dependents cascade to `SKIPPED`; see [batch.md](batch.md) B2-3, which turns that case into an explicit choice before the status is recorded.
-   - **Single mode**: record the remaining findings in the PR body (Risk Areas and Gate Results), leave the PR/MR a **draft**, and surface the findings in the recap's review-focus areas. Do not ask the user mid-run — the draft state plus the recorded findings put the decision where it belongs, at PR review.
+   - **Single mode**: record the remaining findings in the PR body (Risk Areas and Gate Results), leave the PR a **draft**, and surface the findings in the recap's review-focus areas. Do not ask the user mid-run — the draft state plus the recorded findings put the decision where it belongs, at PR review.
 
 ## Stage 2: Code Quality Review
 
@@ -101,7 +101,7 @@ Review with:
 
 - The PR diff
 - Project conventions (path to the repository's agent instructions, e.g. CLAUDE.md or AGENTS.md)
-- The PR/MR number and this stage's round number, for the same reason as Stage 1
+- The PR number and this stage's round number, for the same reason as Stage 1
 - Instructions below
 
 **Batch mode**: the orchestrator runs a dedicated reviewer — a separate agent instance where available, otherwise self-review with the `SELF-REVIEWED` marker (see Reviewer Dispatch above). **Single mode**: the main agent runs the review the same way — a separate fresh-context instance where available, direct self-review with the marker otherwise.
@@ -148,7 +148,7 @@ If code quality review finds Critical or Important issues:
 2. Re-run code quality review.
 3. Max 2 fix rounds. If Critical issues remain:
    - **Batch mode**: mark the issue as `DONE_WITH_CONCERNS`. **In batch integration mode, an issue with dependents goes through [batch.md](batch.md) B2-3 first** — the cascade its unfinished PR would cause is decided explicitly rather than absorbed silently.
-   - **Single mode**: record the remaining Critical findings in the PR body (Risk Areas and Gate Results), leave the PR/MR a **draft**, and surface them in the recap's review-focus areas.
+   - **Single mode**: record the remaining Critical findings in the PR body (Risk Areas and Gate Results), leave the PR a **draft**, and surface them in the recap's review-focus areas.
 
 ## Stage 2.5: Pattern Propagation (Batch Mode Only)
 

@@ -129,7 +129,7 @@ The following slash-command examples are for Claude Code; the workflow descripti
 
 **Key properties:**
 
-- **Issue tracker is the interface** — The skills connect through the issue tracker (GitHub, GitLab, Backlog) and, for the merge gate, the repository's git state. No skill-specific files persist after completion; every run re-derives what it needs.
+- **Issue tracker is the interface** — The skills connect through the issue tracker (GitHub or Backlog; code and PRs are always on GitHub) and, for the merge gate, the repository's git state. No skill-specific files persist after completion; every run re-derives what it needs.
 - **Works with humans and AI** — Issues created by `create-issue` are readable and implementable by anyone. Issues written by hand work with `implement-issue`. A good issue is the same for both readers: it explains why and what — never how.
 - **Splitting is always proposed, never automatic** — `create-issue` defaults to a single issue; a parent + sub-issue (or nested grandchild) hierarchy is only created after the user confirms a Split Proposal.
 - **Annotation cycle** — in the Design Flow, plans are refined through inline notes in a local markdown file. The file is deleted after issues are created.
@@ -191,7 +191,7 @@ superpowers also contributed a staged workflow with hard approval gates, and bot
 
 | Skill | Description |
 |-------|-------------|
-| [create-issue](plugins/aoshimash-skills/skills/create-issue/) | Create well-structured issues on any platform (GitHub, GitLab, Backlog) with codebase analysis — from a quick single issue (one batched question round, one approval) to a designed issue hierarchy (one annotated plan file → parent + sub-issues, research kept as an issue comment) |
+| [create-issue](plugins/aoshimash-skills/skills/create-issue/) | Create well-structured issues on GitHub or Backlog with codebase analysis — from a quick single issue (one batched question round, one approval) to a designed issue hierarchy (one annotated plan file → parent + sub-issues, research kept as an issue comment) |
 | [implement-issue](plugins/aoshimash-skills/skills/implement-issue/) | Read issues, implement autonomously, and open review-first draft PRs — two-stage review, pre-push security review, automated-reviewer response, flip to ready, then post-PR decision harvesting; batch mode (dependency graph, worktrees, parallel agents on content-based model tiers) for parent issues / milestones / labels / lists, with an optional integration mode that bases every PR on one integration branch, hands the ready ones to `merge-issue-prs`, and resumes across sessions from the tracker and git |
 | [go](plugins/aoshimash-skills/skills/go/) | Finish a change at a consistent verification bar — derive what the change claims to make true, exercise those claims end to end in the project's own environment, run only the checks no project automation already covers, remove verification residue, and end with an explicit `VERIFIED` / `PARTIALLY VERIFIED` / `NOT VERIFIED` report; never silent success |
 | [analyze-sessions](plugins/aoshimash-skills/skills/analyze-sessions/) | **Claude Code only.** Analyze Claude Code session history to detect recurring patterns and propose improvements to skills and settings.json |

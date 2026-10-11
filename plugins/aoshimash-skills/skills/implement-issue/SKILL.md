@@ -1,9 +1,9 @@
 ---
 name: implement-issue
 description: >
-  Read platform issues (GitHub/GitLab/Backlog), analyze the codebase,
-  implement autonomously, and open review-first pull/merge requests: draft
-  PR with decisions logged in the body, two-stage review (spec compliance,
+  Read issues (GitHub or Backlog), analyze the codebase, implement
+  autonomously, and open review-first GitHub pull requests: draft PR with
+  decisions logged in the body, two-stage review (spec compliance,
   then code quality), a pre-push security review, an automatic response to
   the repository's bot/AI reviewers, and a flip to ready-for-review once
   gates, CI, and those reviewers are done. Implements one issue end to end
@@ -21,7 +21,7 @@ description: >
 # Implement Issue
 
 Read an issue (or a set of issues), implement autonomously, and deliver
-review-first PR(s)/MR(s). **Single mode** (one issue) is the default and runs
+review-first PR(s). **Single mode** (one issue) is the default and runs
 end to end without routine user interaction: decisions are resolved from the
 issue, its parent, repository agent instructions, or user-level configuration
 — and logged in the PR instead of asked. **Batch mode** (many issues,
@@ -143,10 +143,10 @@ nothing; its implementer is the session itself, on the model the user chose.
 
 1. Detect the **issue tracker** platform (check the project's agent
    instructions for an `## Issue Tracker` section → git remote → ask the user
-   only if neither identifies it). The issue tracker and code hosting platform
-   may differ (e.g. Backlog issues + GitHub PRs). Read the platform guide:
+   only if neither identifies it). The issue tracker is GitHub or Backlog; code
+   and PRs are always on GitHub (Backlog issues + GitHub PRs is the mixed
+   case). Read the platform guide:
    - GitHub: [references/platform-github.md](references/platform-github.md)
-   - GitLab: [references/platform-gitlab.md](references/platform-gitlab.md)
    - Backlog: [references/platform-backlog.md](references/platform-backlog.md)
 2. Obtain the issue identifier(s). If none are provided, list open issues from
    the platform (see the platform guide's issue-listing section) and ask the
@@ -327,6 +327,5 @@ than starting new work.
 - [references/automated-review.md](references/automated-review.md) — Responding to repository-configured automated (bot/AI) reviewers before the draft → ready flip
 - [references/harvesting.md](references/harvesting.md) — Post-PR promotion of generalizable decisions into repository agent instructions or user-level configuration
 - [references/platform-github.md](references/platform-github.md) — GitHub CLI commands
-- [references/platform-gitlab.md](references/platform-gitlab.md) — GitLab CLI commands
 - [references/platform-backlog.md](references/platform-backlog.md) — Backlog CLI commands (bee)
 - [references/eval-cases.md](references/eval-cases.md) — Evaluation test cases

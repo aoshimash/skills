@@ -3,7 +3,7 @@
 Workflow.md step **3-7**, the last step before the recap: scan the decisions
 this run made, and offer the ones that generalize beyond the issue for promotion
 into a durable store — the repository's agent instructions (as a **separate**
-PR/MR) or the user's own agent configuration.
+PR) or the user's own agent configuration.
 
 This closes the never-ask-twice loop from the write side. An autonomous run makes
 many small decisions; most are issue-local, but some are really rules ("in this
@@ -16,7 +16,7 @@ exist; **zero** interaction when none do. Nothing is promoted without that
 confirmation: repository rules and user configuration are durable state that
 every later run obeys, so writing them is the user's call, not the run's.
 
-**Precondition.** The step runs only when the PR/MR reached **ready for review**
+**Precondition.** The step runs only when the PR reached **ready for review**
 (workflow.md 3-5). A run that ends with the PR still a draft — unresolved gates
 or CI — or with no PR at all skips harvesting and says so in one recap line: the
 user's attention belongs on the blocked PR, and the decisions are re-derivable
@@ -32,7 +32,7 @@ confirmation.
 
 Three inputs, all already written down — this step reads, it does not re-derive:
 
-1. **Self-decided** — the PR/MR body's `Decisions & Deviations` section
+1. **Self-decided** — the PR body's `Decisions & Deviations` section
    (workflow.md 3-1), which by then also holds the automated reviewer findings
    resolved in 3-4.
 2. **User-answered** — the answers to the batched question of 1-3. Already
@@ -81,7 +81,7 @@ now in the write direction:
 
 | Scope of the candidate | Store | Mechanism |
 |---|---|---|
-| A convention for this repository | The repository's agent instructions file | Separate PR/MR (**E**) |
+| A convention for this repository | The repository's agent instructions file | Separate PR (**E**) |
 | A personal preference across repositories | The user's agent configuration (user-level) | Append (**F**) |
 | This issue only | Issue body / PR body — already there | Not a candidate |
 
@@ -109,7 +109,7 @@ The option set is per candidate, not fixed: C has already decided which routes
 are legitimate for it, and only those are offered (a candidate with no user-level
 store available is offered repository scope or Skip, with the downgrade stated).
 
-State the PR/MR URL and its ready state in the text accompanying the
+State the PR URL and its ready state in the text accompanying the
 confirmation. The user should not be asked to rule on durable rules before being
 told how the run itself came out; the full recap follows in 3-8.
 
@@ -123,9 +123,9 @@ told how the run itself came out; the full recap follows in 3-8.
   no follow-up issue, and is not offered again later in the same run. The
   declined set is session state only.
 
-## E. Repository-Scoped Promotion (separate PR/MR)
+## E. Repository-Scoped Promotion (separate PR)
 
-**Never mix this into the implementation PR/MR.** That PR is scoped to its
+**Never mix this into the implementation PR.** That PR is scoped to its
 issue, it has already passed its gates, and a reviewer of a code change should
 not be handed a rules change to adjudicate. Isolation is structural, not
 careful editing: branch from the default branch in a second worktree, so the
@@ -164,7 +164,7 @@ shared-corpus route (this plugin's `collect-agent-rules` skill) as the durable
 home for the rule.
 
 Then commit — `docs: record <rule(s)> in the agent instructions`, with a `Refs
-#<issue-number>` line per contributing issue — push, and create the PR/MR **as a
+#<issue-number>` line per contributing issue — push, and create the PR **as a
 draft** like every PR this skill opens: title under 70 characters with no
 Conventional Commit prefix, body stating each rule, the decision that produced
 it, and `Relates to #<issue-number>` for every contributing issue, never
@@ -200,7 +200,7 @@ git worktree remove ".worktrees/<branch-name>"
 `root` is re-derived rather than reused: these are separate command invocations,
 so a variable set in the earlier block is not in scope here.
 
-The implementation PR/MR is not edited to mention this one — its
+The implementation PR is not edited to mention this one — its
 `Decisions & Deviations` already records the decision itself, and the recap
 carries the link.
 
@@ -220,7 +220,7 @@ record the user gets, which is why it quotes rather than summarizes.
 The recap (workflow.md 3-8) gains a **Promotions** section listing, per
 candidate:
 
-- **Promoted to the repository** — the rule and the promotion PR/MR URL (plus
+- **Promoted to the repository** — the rule and the promotion PR URL (plus
   its state, if it stayed a draft).
 - **Promoted to user configuration** — the rule, the file path, and the exact
   appended text.

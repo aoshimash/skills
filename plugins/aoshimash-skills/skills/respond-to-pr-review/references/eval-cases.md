@@ -149,25 +149,18 @@
 
 ---
 
-## Case 8: GitLab MR review
+## Case 8: Non-GitHub remote
 
-**Setup**: GitLab project with open MR. MR has:
-1. Inline discussion thread: "This query will cause N+1 — use eager loading."
-2. General MR note: "Can you add a test for the edge case where the list is empty?"
+**Setup**: The current repository's only remote is `git@gitlab.com:acme/app.git`,
+and its agent instructions have no `## Code Hosting` section.
 
 **Expected behavior**:
-- Phase 0: Platform detected as GitLab, `references/platform-gitlab.md` loaded
-- Phase 1: Notes fetched via `glab api`, classified into inline (resolvable) and general
-- Phase 2-4: Normal flow (group, decide, implement)
-- Phase 5: Verification runs normally
-- Phase 7: Replies posted via GitLab notes API, inline thread resolved
+- Phase 0: The skill reports that the repository is not on GitHub and stops
+- No `gh` command runs, and no other platform's commands are guessed at
 
 **Verification**:
-- [ ] Platform correctly detected as GitLab
-- [ ] `glab` CLI used for all API interactions (not `gh`)
-- [ ] Inline reply posted to the correct discussion thread
-- [ ] General reply posted as a new MR note
-- [ ] Thread resolution attempted after reply
+- [ ] Stops in Phase 0 with a message naming the non-GitHub remote
+- [ ] No API calls and no replies posted
 
 ---
 
@@ -237,3 +230,11 @@ run for real on jq 1.8.2 against sample notes/discussions/approvals payloads.
 The likely origin of the defect is
 `gh api`, which *does* provide `--jq` — the GitHub guide's `--jq` usages are
 correct and were left unchanged.
+
+### 2026-10-11 — Remove GitLab support
+
+The skill is now GitHub-only: `platform-gitlab.md` and the GitLab branches in
+Phase 0 and `workflow.md` 1-2 were removed. Case 8 (GitLab MR review) was
+replaced with "Non-GitHub remote", which checks that the skill stops in Phase 0.
+Desk-check: **Pass** — Phase 0 step 1 stops before any command runs. Entries
+above that mention GitLab are historical.
