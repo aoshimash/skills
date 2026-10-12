@@ -1,15 +1,15 @@
 ---
 name: create-issue
 description: >
-  Create well-structured issues on any platform (GitHub, GitLab, Backlog) with
-  codebase analysis — from a single quick issue to a fully designed issue
-  hierarchy (parent + sub-issues with dependencies). Everything unknown is
-  gathered in one batched question round; design work is carried by a single
-  consolidated plan file refined through inline annotation; nothing is
-  published without an explicit approval. Use when the user wants to create an
-  issue, file a bug report, request a feature, create a technical task, or
-  design a feature and break it down into implementable issues. Triggers on
-  phrases like "create an issue", "file a bug", "open an issue", "issueを作って",
+  Create well-structured issues on GitHub or Backlog with codebase analysis —
+  from a single quick issue to a fully designed issue hierarchy (parent +
+  sub-issues with dependencies). Everything unknown is gathered in one
+  batched question round; design work is carried by a single consolidated
+  plan file refined through inline annotation; nothing is published without
+  an explicit approval. Use when the user wants to create an issue, file a
+  bug report, request a feature, create a technical task, or design a feature
+  and break it down into implementable issues. Triggers on phrases like
+  "create an issue", "file a bug", "open an issue", "issueを作って",
   "issue作成", "バグ報告", "機能要望", "課題を作成", "design sprint", "スプリント設計",
   "機能を設計して issue に分解", "plan and create issues", "design and decompose",
   "この機能を設計して".
@@ -96,13 +96,11 @@ below use capability terms; map them to your environment as follows.
 1. Determine the issue tracking platform in this order:
    1. **Project agent instructions** (e.g. `AGENTS.md` / `CLAUDE.md`): an
       `## Issue Tracker` section with `platform`, `project`, `base_url` fields
-   2. **Git remote URL**: infer from origin (github.com → GitHub, gitlab.com →
-      GitLab)
+   2. **Git remote URL**: a github.com origin → GitHub
    3. **Ask**: if undetectable, include the question in the batched round and
       suggest recording the answer in the project's agent instructions
 2. Load the corresponding platform guide from `references/`:
    - GitHub → [references/platform-github.md](references/platform-github.md)
-   - GitLab → [references/platform-gitlab.md](references/platform-gitlab.md)
    - Backlog → [references/platform-backlog.md](references/platform-backlog.md)
    - Other → output Markdown for the user to paste manually
 3. Check whether the repository defines its own issue templates or forms (see
@@ -365,6 +363,5 @@ SKILL.md based on the results.
 - [references/annotation-cycle.md](references/annotation-cycle.md) — Design Flow annotation cycle and final approval
 - [references/issue-creation.md](references/issue-creation.md) — Design Flow issue creation, research comment, and cleanup
 - [references/platform-github.md](references/platform-github.md) — GitHub CLI commands (issues, sub-issues, dependencies, comments, templates)
-- [references/platform-gitlab.md](references/platform-gitlab.md) — GitLab CLI commands (issues, links, comments, templates)
 - [references/platform-backlog.md](references/platform-backlog.md) — Backlog CLI commands (bee) (issues, parent-child, comments)
 - [references/eval-cases.md](references/eval-cases.md) — Evaluation test cases

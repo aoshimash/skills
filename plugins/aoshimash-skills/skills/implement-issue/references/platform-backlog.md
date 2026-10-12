@@ -91,7 +91,7 @@ git push -u origin <branch-name>
 
 ## Create Pull Request
 
-Backlog PRs are created through the code hosting platform (GitHub/GitLab), not through Backlog itself. Detect the code hosting platform from the git remote URL and use that platform's guide — including its draft creation, automated-reviewer, ready-for-review flip, and PR-body read commands. Automated reviewers are a code-hosting concern; Backlog has no part in workflow.md 3-4. Nor in the repository-scoped promotion of workflow.md 3-7, whose PR also belongs to the code hosting platform.
+PRs for Backlog issues are created on GitHub, not through Backlog itself. Use [platform-github.md](platform-github.md) — including its draft creation, automated-reviewer, ready-for-review flip, and PR-body read commands. Automated reviewers are a code-hosting concern; Backlog has no part in workflow.md 3-4. Nor in the repository-scoped promotion of workflow.md 3-7, whose PR is also on GitHub.
 
 ## Update Issue Status
 
@@ -127,5 +127,5 @@ Add to the project's agent instructions (e.g. CLAUDE.md, AGENTS.md):
 ## Notes
 
 - Backlog uses project keys (e.g., `PROJ-123`) as issue identifiers, not just numbers.
-- Backlog is an issue tracker only — it does not host git repositories. Code hosting is always a separate platform (GitHub, GitLab, etc.), detected from the git remote URL.
+- Backlog is used as an issue tracker only. Code and PRs are always on GitHub.
 - Use `--json` flag on any command for structured JSON output.

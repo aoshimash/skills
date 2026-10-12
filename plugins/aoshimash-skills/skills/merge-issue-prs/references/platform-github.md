@@ -1,9 +1,9 @@
 # GitHub CLI / API Commands
 
 GitHub-only. All commands use the `gh` CLI; replace `{owner}`, `{repo}`, `{pr}`,
-`{issue}`, `{parent}`, and `{integration_branch}` as needed. A GitLab or Backlog guide, if
-one is ever added, sits beside this file — [eligibility.md](eligibility.md) is written in
-platform-neutral terms so it does not have to change.
+`{issue}`, `{parent}`, and `{integration_branch}` as needed. A guide for another
+platform, if one is ever added, sits beside this file — [eligibility.md](eligibility.md)
+is written in platform-neutral terms so it does not have to change.
 
 ## Prerequisites
 

@@ -1,7 +1,7 @@
 # Workflow Detail
 
 The canonical implementation pipeline: understand the issue, resolve decisions,
-implement, verify, and deliver a review-first draft PR/MR that is flipped to
+implement, verify, and deliver a review-first draft PR that is flipped to
 ready once the machines are done. The pipeline is **autonomous**: it runs from
 invocation to report without routine user interaction. Decisions are resolved
 from the decision stores or by repository convention and **logged, not asked**.
@@ -27,7 +27,7 @@ The same pipeline runs in one of two contexts:
 |---|---|---|
 | Undecidable decision / missing critical field (1-1, 1-3) | One batched question; answers written back to the issue | Stop, report `NEEDS_CONTEXT` |
 | Working environment (2-1) | Worktree by default; reuse one already prepared for this run | Always the worktree the orchestrator created |
-| PR/MR base branch (3-1) | The default branch | The base branch the dispatch names — the integration branch under batch integration mode (batch.md B2-2) |
+| PR base branch (3-1) | The default branch | The base branch the dispatch names — the integration branch under batch integration mode (batch.md B2-2) |
 | Checks still failing after 3 attempts (2-4) | Record the failure in the PR body, continue; the PR stays draft | Stop, report `BLOCKED` |
 | Unresolved Critical/High security finding (2-6) | Stop before pushing, report to the user | Stop before pushing, report `BLOCKED` |
 | Review gates (3-2) | Main agent is responsible for both stages (dispatch per review-gates.md) | Skipped here — the orchestrator runs them after the implementer reports |
@@ -221,13 +221,13 @@ Refs #<issue-number>
 Subject under 72 characters; use `Closes #N` only in the PR body, never the
 commit.
 
-## Phase 3: Pull/Merge Request
+## Phase 3: Pull Request
 
-### 3-1. Push and Create a Draft PR/MR
+### 3-1. Push and Create a Draft PR
 
-Detect the code hosting platform from the git remote (it may differ from the
-issue tracker — e.g. Backlog issues + GitHub PRs), push the branch, and create
-the PR/MR **as a draft** (see the platform guide; title under 70 characters,
+Code and PRs are always on GitHub, even when the issue tracker is Backlog.
+Push the branch and create the PR **as a draft** (see
+[platform-github.md](platform-github.md); title under 70 characters,
 no Conventional Commit prefix). Draft status is the "machines still working"
 signal: it is removed only in 3-5.
 
@@ -238,7 +238,7 @@ puts the PR outside the merge gate's candidate set entirely. The closing referen
 in the body either way; on a non-default base the platform ignores it (see the platform
 guide's "Link PR to Issue"), and it is still what attributes the PR to its issue.
 
-**PR/MR body — ordered for the reviewer.** Human judgment concentrated at the
+**PR body — ordered for the reviewer.** Human judgment concentrated at the
 PR is the trade for autonomous execution, so the body leads with what needs
 judgment and ends with what doesn't:
 
@@ -268,7 +268,7 @@ subtle changes; "None" if none>
 Closes #<issue-number>
 ```
 
-**Repository PR/MR templates take precedence.** When the repository defines a
+**Repository PR templates take precedence.** When the repository defines a
 template, the template is the skeleton: fill its sections, map the content
 above into semantically matching sections, and append whatever has no match as
 clearly delimited sections after the template body. Review-first ordering
@@ -288,7 +288,7 @@ the 3-7 harvesting.
 
 ### 3-3. Monitor CI
 
-Watch the PR/MR checks (see the platform guide). On failure: investigate, push
+Watch the PR checks (see the platform guide). On failure: investigate, push
 a fix commit if fixable (max 1 fix round), re-watch. If not fixable or CI is
 not configured, record it under Risk Areas and in Gate Results.
 
@@ -319,7 +319,7 @@ flip (batch.md B2-3).
 ### 3-5. Flip Draft to Ready
 
 Only when **both** review-gate stages pass, CI is green, **and** the automated
-review response of 3-4 has completed, mark the PR/MR ready for review (see the
+review response of 3-4 has completed, mark the PR ready for review (see the
 platform guide). If a gate or CI never passes within its fix rounds, the PR
 **stays a draft** with the unresolved state recorded in Gate Results / Risk
 Areas — a draft with honest concerns beats a "ready" PR that isn't. Automated
@@ -332,7 +332,7 @@ and the automated review response (see batch.md B2-3).
 ### 3-6. Comment on the Issue
 
 If the issue tracker supports comments (e.g. Backlog, or cross-platform setups
-where the PR is not auto-linked), post the PR/MR link on the issue.
+where the PR is not auto-linked), post the PR link on the issue.
 
 **Orchestrated, batch integration mode**: post it. A closing keyword in a PR that targets
 a non-default branch creates no link (see the platform guide's "Link PR to Issue"), so the
@@ -349,14 +349,14 @@ holds to:
 
 - **Silent by default.** Most runs produce no candidates, and the step then
   produces nothing at all — no question, no recap section.
-- **Gated on a delivered PR.** It runs only when the PR/MR reached ready for
+- **Gated on a delivered PR.** It runs only when the PR reached ready for
   review; a run that ends with a draft skips it with one recap line.
 - **Exactly one batched confirmation**, covering every offered candidate, with
   the exact rule text and destination path in the question. Nothing is written
   to a durable store without it, and a decline is written nowhere.
-- **Repository scope means a separate PR/MR**, branched from the default branch
+- **Repository scope means a separate PR**, branched from the default branch
   in its own worktree, touching only the agent instructions file. The
-  implementation PR/MR is never the vehicle for a rules change.
+  implementation PR is never the vehicle for a rules change.
 - **User scope means an append** to the user's own agent configuration, reported
   verbatim in the recap.
 
@@ -373,7 +373,7 @@ batch (batch.md B3-1).
 - **Issue write-backs**: every write performed against the issue (Design
   Decisions appended, status changes, comments).
 - **Promotions** (3-7): each promoted rule and where it went — the promotion
-  PR/MR URL, or the user-level file path with the exact appended text — plus
+  PR URL, or the user-level file path with the exact appended text — plus
   candidates skipped, already recorded, or not offered. Omitted entirely when
   there were no candidates.
 - **Review focus**: the few places a human reviewer should look first.
@@ -381,7 +381,7 @@ batch (batch.md B3-1).
   Stage 1, Stage 2, CI, and automated review (which reviewers were handled, how
   many rounds, what remains — or that none were configured).
 
-**Orchestrated — one status line** to the orchestrator, plus the PR/MR URL or
+**Orchestrated — one status line** to the orchestrator, plus the PR URL or
 failure details. **The return is bounded at one status token, one URL, and at
 most 10 further lines** ([context-budget.md](context-budget.md) C1) — the
 orchestrator accumulates one of these per issue for the whole batch, while

@@ -219,15 +219,10 @@ scratch.
 
 **Criteria to test**: 2
 
-### Case 15: GitLab project
+### Case 15: Retired — GitLab support removed
 
-**Scenario**: "implement issue #7" in a GitLab-hosted project.
-
-**Expected behavior**: platform detected from the remote; draft MR created
-with `glab mr create --draft`; ready flip with `glab mr update --ready`;
-write-backs via `glab issue update --description`.
-
-**Criteria to test**: 6, 11, 14
+GitLab support was removed; the case number is kept so references to later
+cases stay valid. See the "Remove GitLab support" log entry.
 
 ## Batch Mode Test Cases
 
@@ -3068,3 +3063,21 @@ criteria 48–49 were widened to cover both.
 80–84 were executed by reading the shipped instructions rather than by a scored suite, and no
 separate agent instance was available in this session to read them with fresh context. Both
 gate stages for the implementing PR are `SELF-REVIEWED` for the same reason.
+
+### 2026-10-11 — Remove GitLab support
+
+GitLab is no longer used. Code and PRs are always on GitHub; only the issue
+tracker varies (GitHub or Backlog). Removed `platform-gitlab.md`, the GitLab
+branch of Phase 0 and of the dependency read in `batch.md` B1, and the "MR"
+wording across the references. `platform-backlog.md` now points PR work at
+`platform-github.md` directly instead of detecting a code host. Case 15
+(GitLab project) is retired in place so later case numbers do not shift.
+Earlier log entries that mention GitLab are historical.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 13 | Pass (desk-check) | Phase 0 → `platform-backlog.md` → "Create Pull Request" → `platform-github.md`; no branch left that could resolve to a non-GitHub host |
+| 15 | Retired | — |
+
+Desk-checked by reading the shipped instructions; no separate agent instance
+was used, so this is `SELF-REVIEWED`.

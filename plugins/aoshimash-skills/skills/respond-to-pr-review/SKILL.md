@@ -1,21 +1,21 @@
 ---
 name: respond-to-pr-review
 description: >
-  Process PR/MR review comments one by one — explain each comment, confirm the
+  Process PR review comments one by one — explain each comment, confirm the
   response with the user, implement changes, verify fixes match reviewer intent,
   and post reply comments to close the loop. Groups similar/duplicate comments
-  from multiple reviewers or bots. Supports GitHub and GitLab.
+  from multiple reviewers or bots. GitHub only.
   Use when the user says "PRコメントに対応して", "レビューコメントに返信して",
   "respond to PR review", "handle PR comments", "PRレビュー対応",
-  "review comments に答えて", "PRのレビューに返答", "MRのレビューに対応",
-  or wants to systematically work through review feedback on a pull request
-  or merge request. Invoke this skill even if the user just says "PRコメント対応"
+  "review comments に答えて", "PRのレビューに返答",
+  or wants to systematically work through review feedback on a pull request.
+  Invoke this skill even if the user just says "PRコメント対応"
   without further detail.
 ---
 
 # Respond to PR Review
 
-Process PR/MR review comments interactively: explain each one, confirm what to do, implement changes, verify fixes match intent, and close the loop with reply comments.
+Process PR review comments interactively: explain each one, confirm what to do, implement changes, verify fixes match intent, and close the loop with reply comments.
 
 ## Core Principles
 
@@ -41,13 +41,10 @@ below use capability terms; map them to your environment as follows.
 
 ### Phase 0: Identify the PR
 
-1. Detect platform:
-   - Check CLAUDE.md for `## Code Hosting` config
-   - If not configured, detect from `git remote -v`: `github.com` → GitHub, `gitlab.com` → GitLab
-   - If ambiguous, ask the user to choose (user choice — see [Environment Adaptation](#environment-adaptation))
-2. Load platform guide: [references/platform-github.md](references/platform-github.md) or [references/platform-gitlab.md](references/platform-gitlab.md)
-3. Get PR/MR info for current branch
-4. If no PR/MR found, ask user for number or URL
+1. Load the platform guide: [references/platform-github.md](references/platform-github.md)
+2. Confirm the repository is hosted on GitHub, using the guide's detection order (a `## Code Hosting` section in the agent instructions, then a `github.com` remote in `git remote -v`). If it is not, say so and stop — this skill is GitHub-only.
+3. Get PR info for current branch
+4. If no PR found, ask user for number or URL
 5. **Hard Gate:** "Working on PR #N: [title]" → Confirm / Change
 
 ### Phase 1: Fetch and Classify Comments
@@ -108,7 +105,7 @@ See [references/verification.md](references/verification.md) for detailed proced
 
 For each "Create Issue" decision:
 - Create issue with title derived from the comment
-- Body links back to the PR/MR comment
+- Body links back to the PR comment
 - Record issue URL for the reply
 
 ### Phase 7: Draft and Post Replies
@@ -146,5 +143,4 @@ Draft a reply for every group that requires a response.
 - [references/workflow.md](references/workflow.md) — Phase 1-3 detailed procedures
 - [references/verification.md](references/verification.md) — Phase 5 Verification Gate procedure
 - [references/platform-github.md](references/platform-github.md) — GitHub CLI/API commands
-- [references/platform-gitlab.md](references/platform-gitlab.md) — GitLab CLI/API commands
 - [references/eval-cases.md](references/eval-cases.md) — Evaluation test cases

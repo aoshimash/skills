@@ -7,7 +7,7 @@
 ## Detect Platform
 
 Check in order:
-1. CLAUDE.md `## Code Hosting` section with `platform: github`
+1. The project's agent instructions (e.g. CLAUDE.md, AGENTS.md): a `## Code Hosting` section with `platform: github`
 2. Git remote URL contains `github.com`
 
 ## Fetch PR Info

@@ -135,7 +135,6 @@ once its grandchildren exist.
 
 - **GitHub**: sub-issue links — each child to its parent, each grandchild to
   its child (see platform guide).
-- **GitLab**: parent-child relationship or related issues.
 - **Backlog**: the parent issue field.
 
 Also establish dependency links between siblings where specified, and read the

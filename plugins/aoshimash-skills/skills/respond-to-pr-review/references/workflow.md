@@ -10,9 +10,9 @@ Fetch three categories of comments using the platform guide:
 
 1. **Inline code review comments** — attached to specific lines in the diff
 2. **Review body comments** — top-level text submitted with APPROVE / REQUEST_CHANGES / COMMENT reviews
-3. **General PR/MR comments** — the conversation thread on the PR/MR
+3. **General PR comments** — the conversation thread on the PR
 
-Refer to the loaded platform guide (`references/platform-github.md` or `references/platform-gitlab.md`) for the exact API commands.
+Refer to the platform guide (`references/platform-github.md`) for the exact API commands.
 
 ### 1-2: Filter non-actionable comments
 
@@ -21,8 +21,8 @@ Remove comments that do not require a response:
 | Filter | How to detect |
 |---|---|
 | Outdated inline comments | The line they pointed at no longer exists in the current diff. Check platform-specific outdated detection. |
-| Existing replies | Only process root comments / thread starters. Filter by `in_reply_to_id` (GitHub) or thread structure (GitLab). |
-| Informational bot comments | `user.type == "Bot"` (GitHub) or `author.bot == true` (GitLab) AND body contains no question, suggestion, or requested action. Examples: CI summaries, coverage badges, auto-generated changelogs. |
+| Existing replies | Only process root comments / thread starters. Filter by `in_reply_to_id`. |
+| Informational bot comments | `user.type == "Bot"` AND body contains no question, suggestion, or requested action. Examples: CI summaries, coverage badges, auto-generated changelogs. |
 | Pure praise | Body matches patterns like "LGTM", "Looks good", "👍", "Great work" with no question or suggestion attached. |
 
 Use judgment: a question, a suggestion, a potential issue, or a nitpick all need a response.

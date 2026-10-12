@@ -36,7 +36,7 @@ where to point the next step.
 
 | Step | Writes, before returning | Returns | Bound |
 |---|---|---|---|
-| Implementer (B2-2, [workflow.md](workflow.md) 3-8) | the PR body it created; for a `BLOCKED` stop before any push, nothing — the worktree is kept (B2-7) | status token, PR/MR URL, failure or decision detail | **1 status token + 1 URL + at most 10 further lines** |
+| Implementer (B2-2, [workflow.md](workflow.md) 3-8) | the PR body it created; for a `BLOCKED` stop before any push, nothing — the worktree is kept (B2-7) | status token, PR URL, failure or decision detail | **1 status token + 1 URL + at most 10 further lines** |
 | Stage 1 spec compliance ([review-gates.md](review-gates.md)) | its full output into the PR body — the `Gate Results` line with its round count, and one `Risk Areas` entry per unmet criterion | verdict, unmet-criterion count, one line per finding | **verdict line + at most 15 finding lines** |
 | Stage 2 code quality (same) | same, per remaining Critical/Important finding | verdict, per-severity counts, one line per Critical/Important finding (`file:line — defect — type`) | **verdict line + at most 15 finding lines** |
 | Stage 2.5 propagation scan (same) | nothing until a fix is applied | the matching PRs | **one line per in-flight PR scanned** |

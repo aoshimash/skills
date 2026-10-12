@@ -3,7 +3,7 @@
 Workflow.md step **3-4**, the last machine step before the draft → ready flip:
 detect the repository's own automated reviewers, wait — bounded — for their
 findings, address them automatically (fix, push, reply) for a bounded number of
-rounds, and record whatever is left in the PR/MR body.
+rounds, and record whatever is left in the PR body.
 
 Human review starts when the machines are done. Otherwise the reviewer reads a
 moving target and re-reads diffs that a bot was about to change.
@@ -35,12 +35,12 @@ Detection is a few reads, never a poll. Check, in order:
 1. **Declared** — the repository's agent instructions (e.g. CLAUDE.md,
    AGENTS.md) may list them under `## Automated Reviewers`. A declaration is
    authoritative: use it as the reviewer set and skip the remaining signals.
-2. **Repository automation** — CI/pipeline definitions triggered by PR/MR
+2. **Repository automation** — CI/pipeline definitions triggered by PR
    events that run a reviewer step. Read each one's trigger config: a reviewer
    that only fires on the ready-for-review transition cannot post while the PR
    is a draft — record it as **deferred** and do not wait for it.
 3. **Reviewer apps and bot accounts** — bot accounts requested as reviewers on
-   this PR/MR, bot-authored reviews on the repository's recent PRs/MRs, or a
+   this PR, bot-authored reviews on the repository's recent PRs, or a
    reviewer's own config file committed at the repository root.
 
 The declaration in signal 1 is the repository-scoped decision store for this
@@ -67,7 +67,7 @@ signal 3 is weaker evidence of *configuration*, not of authorship.
 
 Prefer a completion signal over a timer:
 
-- **Reviewer that runs as a check on the PR/MR** — it is finished when its check
+- **Reviewer that runs as a check on the PR** — it is finished when its check
   finishes. The CI watch of workflow.md 3-3 already provides that signal; no
   extra waiting is needed, just read what the reviewer posted afterwards.
 - **Reviewer with no check run** — poll for new comments by that author, with a
@@ -83,7 +83,7 @@ avoid.
 
 ## C. Collect Findings
 
-Fetch the PR/MR's reviews, inline review comments, and conversation comments
+Fetch the PR's reviews, inline review comments, and conversation comments
 (platform guide), then keep only what needs a response:
 
 | Drop | Why |

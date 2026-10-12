@@ -308,6 +308,7 @@ Record results here after each evaluation run.
 | 2026-07-16 | — | — | — | Unified design philosophy: reader-agnostic issues, no perishable implementation detail; Sub-Issue template rewritten; pitfall recording made mandatory. | — |
 | 2026-07-26 | — | — | — | Platform reference corrections verified against `gh` 2.96.0 and the Backlog/GitLab CLI docs (no behavior change). | — |
 | 2026-07-26 | — | — | — | Documented the shapes of the `gh` relationship JSON fields and demoted the REST calls to fallbacks. | — |
+| 2026-10-11 | 9, 16 | 2, 4, 5, 11, 14, 15 (desk-check) | — | Removed GitLab support (`platform-gitlab.md`, the gitlab.com remote inference, the GitLab hierarchy link). Backlog cases unaffected: Step 1 still reaches `platform-backlog.md` through the agent-instructions `## Issue Tracker` section. Earlier rows mentioning GitLab are historical. | No |
 
 The rows above evaluate the **pre-rewrite**, one-question-at-a-time skill and
 are historical. Case numbers in them refer to the old case list.
