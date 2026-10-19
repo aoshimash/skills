@@ -35,7 +35,7 @@ Phrases that **should** invoke `merge-renovate-prs` (a backlog of Renovate PRs t
 
 Each maps to an entry in `evals/evals.json` with objective expectations.
 
-The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 pin interactive mode** (their prompts explicitly ask to confirm each step) and exercise the approval-gate discipline. **Cases 5–9 exercise autonomous mode**: zero gates, precondition verification, defer-don't-block, auto-revert, repo-type-adapted verification, and human-supplied verification checks.
+The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 pin interactive mode** (their prompts explicitly ask to confirm each step) and exercise the approval-gate discipline. **Cases 5–9 exercise autonomous mode**: zero gates, precondition verification, defer-don't-block, auto-revert, repo-type-adapted verification, and human-supplied verification checks. **Cases 10–11** (added 2026-10-19) cover the release-age gate and grouping proposals; both fixtures are taken from real aoshimash/homelab-k8s PRs (#374, #345) with their actual tables, commits, and dates.
 
 ### Case 1: Manual-apply routing (`manual-apply-routing`) — interactive
 
@@ -136,6 +136,26 @@ The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 
 - Probes that planned checks are executable before merging.
 - Never invents its own sufficiency claims.
 
+### Case 10: Cooldown without a registry timestamp (`cooldown-without-registry-timestamp`) — autonomous
+
+**Setup** (from homelab-k8s#374): `minimumReleaseAge: 3 days`, with `timestamp-optional` for digests and ghcr.io. A grouped "container images" PR holds a Home Assistant GHCR digest bump and a paperless-ngx 3.3.0 → 3.3.2 bump; its commits are a renovate[bot] commit and a later `update-branch` merge commit by a human. A second PR (aqua) was aged by Renovate.
+
+**Expected behavior**:
+- Takes the threshold from the config, and checks the GHCR members even though `timestamp-optional` lets Renovate skip them.
+- Ages paperless-ngx from its upstream release date (~21h); ages the digest member from the lower bound — the **Renovate-authored** commit, not the human merge commit.
+- The grouped PR is as young as its youngest member → **cooldown wait**: not merged, not in the human queue, reported with an "earliest" eligible date.
+- Posts one cooldown-wait marker comment (first lower-bound wait); the aqua PR proceeds normally.
+
+### Case 11: Grouping split proposal (`grouping-split-proposal`) — autonomous wrap-up
+
+**Setup** (from homelab-k8s#345 / #348): a grouped "container images" PR mixing the actions-runner-controller charts with app images was held once for ARC, then merged and auto-reverted because of ARC — rolling back the healthy app updates too. The config's grouping rules and their comments are given.
+
+**Expected behavior**:
+- Reports the revert, its cause, and the stop-the-line.
+- Proposes taking ARC out of the "container images" group, citing this run's evidence, with a concrete `packageRules` entry placed after the docker rule (later rules win).
+- Addresses the config comment's rationale and states the cost of the split.
+- Offers the config change without making it; proposes nothing for members that caused no problem.
+
 ## Evaluation Log
 
 > Note: the 2026-06-21 results below predate the 2026-07-23 autonomous redesign; they were run against the interactive-only version of the skill (Cases 1–4). Cases 5–9 have not been benchmarked yet.
@@ -174,7 +194,21 @@ triggering number as noisy, not as evidence the description is weak. Raw artifac
 `/tmp/review-dependency-prs-workspace/iteration-1/` (`benchmark.json`, `review.html`) and
 `/tmp/review-dependency-prs-workspace/optimizer-results/`.
 
+### 2026-10-19 — Release-age gate and grouping proposals (Cases 10–11)
+
+One run per arm (with-skill / baseline that reads no skill files), Opus 5.5 executors in fresh contexts, paper exercises with the facts in the prompt. **Graded by the authoring session against `expectations`, not by independent graders** — treat as SELF-REVIEWED.
+
+| Case | with-skill | baseline | Notes |
+|------|-----------|----------|-------|
+| Case 10 — cooldown-without-registry-timestamp | 8/8 | 5/8 | Baseline found the ~21h paperless age itself, but left the GHCR digest's age "unknown" (no lower bound), treated the human `update-branch` merge commit as a reason to hand #374 to a human, gave the paperless-only eligible date, and posted no cross-run record. Discriminating. |
+| Case 11 — grouping-split-proposal (v1 prompt) | 8/8 | 7/8 | v1 prompt asked for "the report and any improvement proposals", which cued the baseline. Prompt cut to "Write the Phase 3 wrap-up." and re-run. |
+| Case 11 — grouping-split-proposal (v2 prompt) | 8/8 | 7/8 | Baseline still proposed the ARC split with run evidence, correct rule placement, and the config rationale; missed only the split's cost. **Weakly discriminating:** an unaided model already does root-cause → config proposal well when the facts are this explicit. What the skill adds is consistency (evidence-only, cost stated, rationale addressed, offer-not-act) rather than the insight itself. A sharper fixture would hide the cause in a longer run log with several groups. |
+
+Both with-skill Case 11 runs also proposed splitting Home Assistant out, citing the run's evidence (sole member needing a pre-merge backup, rolled back by an unrelated failure) — within the "members need different handling" signal, not speculation.
+
 | Date | Case | Result | Notes |
 |------|------|--------|-------|
 | 2026-06-21 | Trigger evals | 50% test (noisy) | Original description retained; optimizer found nothing better on held-out. |
 | 2026-06-21 | Case 1–4 | with 1.00 / base 0.66 | with-skill beats baseline on 1–3; Case 4 non-discriminating (see above). |
+| 2026-10-19 | Case 10 | with 8/8 / base 5/8 | Release-age gate; self-graded. |
+| 2026-10-19 | Case 11 | with 8/8 / base 7/8 | Grouping proposal; weakly discriminating, self-graded. |

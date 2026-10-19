@@ -3,11 +3,13 @@ name: merge-renovate-prs
 description: >
   Review and merge Renovate dependency PRs one at a time — discover repo
   conventions, verify that monitoring and a revert path exist, triage open
-  Renovate PRs, read primary-source release notes, then run each PR through a
-  uniform set: LLM pre-check → merge → post-merge verification → automatic
-  revert on failure. Autonomous by default (no approval gates once
-  preconditions hold); an interactive per-PR-approval mode remains for when the
-  user wants to confirm each step or preconditions are not met. Strictly
+  Renovate PRs, hold any whose release is younger than the repo's configured
+  cooldown (including ones Renovate could not age), read primary-source
+  release notes, then run each PR through a uniform set: LLM pre-check →
+  merge → post-merge verification → automatic revert on failure. Autonomous
+  by default (no approval gates once preconditions hold); an interactive
+  per-PR-approval mode remains for when the user wants to confirm each step
+  or preconditions are not met. Strictly
   serial: one change in flight at a time. Renovate only (not Dependabot);
   GitHub only. Use when the user says "review dependency PRs", "merge the
   Renovate PRs", "process dependency updates", "依存更新PRを処理して",
@@ -20,7 +22,7 @@ description: >
 
 # Review Dependency PRs
 
-Process Renovate PRs with discipline. Every PR goes through the same set: LLM pre-check (release notes, diff, CI) → merge → post-merge three-state verification → automatic revert if verification fails — **strictly serially**, one change in flight at a time.
+Process Renovate PRs with discipline. Every PR goes through the same set: LLM pre-check (release notes, diff, CI) → merge → post-merge three-state verification → automatic revert if verification fails — **strictly serially**, one change in flight at a time. A PR enters that set only once its newest update is older than the cooldown the repo configured in Renovate, which this skill enforces even where Renovate could not measure it. At wrap-up, what the run revealed about Renovate's grouping comes back as evidence-backed config proposals.
 
 **Scope: Renovate only, GitHub only.** Limiting to one bot keeps detection and config-reading simple and predictable. PRs from other dependency bots (e.g. Dependabot) are out of scope — leave them untouched and note them in the report; if the user asks to process them, say the skill covers Renovate only.
 
@@ -62,7 +64,7 @@ Establish how this repo ships code, and whether autonomous mode is safe here, be
 **Summary:**
 
 1. Read `AGENTS.md` / `CLAUDE.md` / `README` / `docs/` and CI config to learn the **deploy mechanism** (GitOps Flux/Argo vs. CI pipeline vs. manual), the **merge method** (merge / squash / rebase), and any **upgrade runbooks** or known "merge ≠ apply" cases (e.g. a `talosctl upgrade-k8s` step, a console-only Terraform runtime bump).
-2. Read the Renovate config — `renovate.json5` or `.github/renovate.json` — to learn configured `branchPrefix`, labels, and bot identity. This feeds detection in Phase 1.
+2. Read the Renovate config — `renovate.json5` or `.github/renovate.json` — to learn configured `branchPrefix`, labels, and bot identity (feeds detection in Phase 1), the **cooldown** (`minimumReleaseAge`, per `packageRules`), and the **grouping rules** with the reasons their comments give.
 3. Detect **start-of-run drift**: PRs already merged but not yet applied to the live environment. Autonomous: exclude PRs touching the drifted component from this run (defer to the human queue); interactive: ask whether to resolve the drift first.
 4. **Assemble the verification plan & verify autonomous preconditions** (autonomous mode only): build the per-target functioning checks from **human-authored sources** — the user's request, then repo runbooks/docs, then the repo-type baseline. A high-blast-radius target with no human-defined checks: ask once at run start (user choice), or defer in an unattended launch — a knowledge gate, not an approval gate. Then verify by probing: (a) **observability** — the planned checks are actually readable (cluster/controller status, or post-merge CI on the default branch); (b) **revert path** — merging a revert PR actually restores the running system under this repo's deploy mechanism. If either fails, **fall back to interactive mode and say why**.
 
@@ -74,8 +76,9 @@ Find the Renovate PRs, understand how they relate, and propose an order. See [re
 
 1. Detect Renovate PRs via **composite signals** (author + branch prefix + PR-body signature + labels), refined against the Renovate config from Phase 0. Assume multiple Renovate instances (Cloud + self-hosted) may coexist; dedupe. Other bots' PRs (e.g. Dependabot) are out of scope — note them in the report, do not process them.
 2. Detect inter-PR **conflicts** (same file/line — e.g. a digest-bump PR superseded by a major-bump PR) and **compatibility/ordering** constraints (e.g. a Kubernetes ↔ CNI support matrix; a CRD before its controller).
-3. Propose a processing order, **low → high blast radius**.
-4. **Autonomous:** report the plan (set, order, constraints, and the per-target verification plan with its sources) and proceed immediately — no gate. Ambiguous candidates are excluded and listed in the report rather than blocking the run. **Interactive:** Hard Gate — present the plan → Approve / Reorder / Scope down / Abort; ambiguous candidates are confirmed with the user.
+3. **Release-age gate** — enforce the configured `minimumReleaseAge` for every member of every PR, including updates Renovate could not age because the datasource gives no timestamp (e.g. GHCR, raised with `timestamp-optional`). Age = the larger of the sanity-checked upstream release date and the lower bound from Renovate's own newest commit; a grouped PR is as young as its youngest member. Too young → **cooldown wait**: not merged, not sent to the human queue, reported with its eligible date. See [references/release-age.md](references/release-age.md).
+4. Propose a processing order, **low → high blast radius**.
+5. **Autonomous:** report the plan (set, order, constraints, and the per-target verification plan with its sources) and proceed immediately — no gate. Ambiguous candidates are excluded and listed in the report rather than blocking the run. **Interactive:** Hard Gate — present the plan → Approve / Reorder / Scope down / Abort; ambiguous candidates are confirmed with the user.
 
 ### Phase 2: Per-PR loop (STRICTLY SERIAL — one change in flight)
 
@@ -95,7 +98,7 @@ For each PR, in order, run the full sequence below before starting the next. See
    - Autonomous **defer conditions** — any of these sends the PR to the human queue *unmerged*, and the loop continues: contains C-class work; no verified revert/rollback path for an irreversible change; CI red; manual conflict resolution needed; risk the pre-check cannot resolve. **A verified rollback path is a merge precondition.**
    - Autonomous **downtime handling:** disruptive changes (node reboots, single-replica restarts, DB failover) are *not* a gate — but they get extended settle/verification time and are flagged prominently in the report.
    - Interactive: present risk + required work + rollback plan; explicit approval before merge; prominent downtime confirmation for disruptive changes.
-7. **Approve, then merge** — submit a GitHub review approval (`gh pr review {pr} --approve`) before `gh pr merge`, so branch-protection rules requiring an approved review are satisfied. Resolve conflicting sibling PRs (close superseded ones). See [references/platform-github.md](references/platform-github.md).
+7. **Approve, then merge** — if Renovate pushed since triage, re-run the release-age gate first. Then submit a GitHub review approval (`gh pr review {pr} --approve`) before `gh pr merge`, so branch-protection rules requiring an approved review are satisfied. Resolve conflicting sibling PRs (close superseded ones). See [references/platform-github.md](references/platform-github.md).
 8. **main divergence:** a clean `gh pr update-branch` → do it without asking; manual conflict resolution needed → autonomous: defer; interactive: ask the user.
 9. **Run the pre/post work** per its A/B/C class (C never reaches this step in autonomous mode).
 10. **Document on the PR:** manual steps, and a closing "applied & verified" (or "reverted") comment — only when real steps/risk/revert exist, in English.
@@ -107,12 +110,14 @@ For each PR, in order, run the full sequence below before starting the next. See
 
 ### Phase 3: Wrap-up
 
-1. Report what was **merged & verified / reverted (with cause) / deferred to the human queue (with reasons) / followed up**.
-2. Surface (do not auto-fix) any **doc drift** or **repeatedly-manual** packages noticed during the run. For a package that needed the same manual apply again, **propose** adding a Renovate `prBodyNotes` entry so the note appears automatically on every future PR for it.
+1. Report what was **merged & verified / reverted (with cause) / waiting on the cooldown (with eligible date) / deferred to the human queue (with reasons) / followed up**.
+2. Surface (do not auto-fix) any **doc drift** or **repeatedly-manual** packages noticed during the run. For a package that needed the same manual apply again, **propose** adding a Renovate `prBodyNotes` entry so the note appears automatically on every future PR for it. A PR held by the lower bound for a **second consecutive run** gets a proposal to reconfigure its slow-to-age member.
+3. **Grouping proposals** — when the run shows a Renovate group should be split (one member blocked or reverted the rest, members need different handling, an ordering edge inside the group, a member that never ages) or separate PRs should be combined (lockstep updates, one upstream release split across PRs), **propose** the `packageRules` change with the run's evidence, the config's own stated rationale addressed, and the cost. Evidence from this run or the group's recorded history only — never speculation. See workflow.md 3-3.
 
 ## References
 
 - [references/workflow.md](references/workflow.md) — Phase 0–3 detailed procedure: mode selection, precondition verification, serial loop, go/defer decisions, A/B/C routing, main-divergence, PR documentation.
+- [references/release-age.md](references/release-age.md) — Release-age gate: cooldown value resolution, upstream release dates with sanity check, Renovate-commit lower bound, cooldown wait, repeated-wait record, known limits.
 - [references/detection.md](references/detection.md) — Composite Renovate-PR detection: signals, config cross-check, multi-instance dedupe, ambiguity handling.
 - [references/verification.md](references/verification.md) — Three-state verification per repo type, downtime classification, rollback-readiness as a merge precondition, residue-vs-failure, auto-revert and escalation.
 - [references/platform-github.md](references/platform-github.md) — `gh` commands for listing/filtering/reading/merging/commenting; CI status as a gate; creating a revert PR.

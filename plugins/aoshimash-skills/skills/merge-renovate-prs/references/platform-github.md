@@ -7,6 +7,7 @@ GitHub-only for v1. All commands use the `gh` CLI; replace `{owner}`, `{repo}`, 
 - [Prerequisites](#prerequisites)
 - [List and filter Renovate PRs](#list-and-filter-renovate-prs)
 - [Read a PR: diff, files, body, branch, labels](#read-a-pr-diff-files-body-branch-labels)
+- [Release age (the cooldown gate)](#release-age-the-cooldown-gate)
 - [CI status (the merge gate)](#ci-status-the-merge-gate)
 - [Merge (respect the repo merge method)](#merge-respect-the-repo-merge-method)
 - [Create and merge a revert PR (auto-revert)](#create-and-merge-a-revert-pr-auto-revert)
@@ -73,6 +74,10 @@ release directly (primary source):
 gh release view vX.Y.Z -R {upstream_owner}/{upstream_repo}
 gh api repos/{upstream_owner}/{upstream_repo}/releases/tags/vX.Y.Z --jq '.body'
 ```
+
+## Release age (the cooldown gate)
+
+The commands for the release-age gate (workflow.md 1-3) — upstream release dates with their sanity check, the lower bound from Renovate's newest authored commit, and the cooldown-wait marker lookup — live with the procedure in [release-age.md](release-age.md), because each one is only correct together with the rule around it.
 
 ## CI status (the merge gate)
 
