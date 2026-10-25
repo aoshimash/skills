@@ -514,10 +514,44 @@ gh pr merge {pr} --merge --match-head-commit {head_sha_that_passed_the_recheck}
   no `409` to observe:** `gh pr merge` passes the value as `expectedHeadOid` on the GraphQL
   `mergePullRequest` mutation (the input field is present in the live schema) rather than
   calling `PUT /repos/{owner}/{repo}/pulls/{n}/merge`, and GraphQL reports failures in an
-  `errors[]` payload, not as a distinct HTTP status. So do **not** branch on a status code.
-- **Discriminate a failed merge by re-reading the head**, per workflow.md 2-3: if
-  `headRefOid` differs from the recorded SHA the guard fired (re-run 2-1 once); if it is
-  unchanged the refusal was something else. Both outcomes defer, so a misread never merges.
+  `errors[]` payload, not as a distinct HTTP status. So do **not** branch on a status code to
+  tell one refusal from another.
+- **Classify the call's result before reading the PR**, per workflow.md 2-3. With `gh`
+  (behaviour read from source: gh v2.103.2 `pkg/cmd/pr/merge/merge.go` and `http.go`, whose
+  errors `internal/ghcmd/cmd.go` prints as `err.Error()`, and which submit the mutation through go-gh v2.17.0's `Mutate` — `pkg/api/graphql_client.go`,
+  `pkg/api/errors.go` — and cli/shurcooL-graphql v0.0.4 `graphql.go`, which turn the response
+  into the error string) an **explicit refusal** is a non-zero exit whose stderr carries one
+  of:
+  - a line beginning `GraphQL: ` — go-gh's rendering of an `errors[]` payload in a `200`
+    response to the mutation — whose message gives a reason the merge is not allowed. `gh`'s
+    own reads before the mutation render their errors payloads the same way; either reading
+    of such a line is safe here, since a read failing that way means nothing was submitted
+    and an uncertain line is not a refusal. An errors payload is
+    not automatically a refusal: GitHub can also return one alongside partial results when a
+    request exceeds resource limits, and one reporting a timeout, a resource limit, or an
+    internal failure is **not a refusal**;
+  - `is not mergeable:` — printed by `gh` itself from the `mergeStateStatus` it read, before
+    it submits the mutation; nothing was sent.
+
+  Everything else is **not a refusal** and, unless the confirmation read shows the PR merged,
+  is a *merge outcome unconfirmed*: a line beginning `non-200 OK status code:` (shurcooL's
+  rendering of any non-`200` response to the mutation, with the status and body — GitHub may
+  answer a GraphQL request it terminated after 10 seconds with a `502` or `504`, per
+  [GitHub Docs, "Rate limits and query limits for the GraphQL API"](https://docs.github.com/en/graphql/overview/rate-limits-and-query-limits-for-the-graphql-api#timeouts)),
+  a line beginning `HTTP ` (go-gh's rendering of a non-2xx response to one of `gh`'s own
+  reads; an earlier read failing this way means nothing was submitted, but the output does not
+  say which call failed, so it is not a refusal either), a network or TLS error, a killed or
+  hung command, and **exit 0**. `gh` exits 0 without merging when the base branch requires a
+  merge queue — it submits the auto-merge mutation instead (`http.go`), so the PR joins the
+  queue and merges later, outside the loop — so exit 0 with the PR still open is never a
+  deferral either.
+- Through a **connector**, the same rule: only a tool result that carries the platform's
+  refusal reason counts as a refusal, whatever status it came with; a tool error that does not show one — a timeout, a
+  transport failure, a generic failure — is not a refusal.
+- **Then discriminate a refusal by re-reading the head**: if `headRefOid` differs from the
+  recorded SHA the guard fired (re-run 2-1 once); if it is unchanged the refusal was
+  something else. Both outcomes defer, so a misread never merges. A changed head after a call
+  that was **not** a refusal is not the guard firing — it is a *merge outcome unconfirmed*.
 - **Never `--admin`.** It exists to bypass requirements; this gate never does.
 - `--delete-branch` is optional and follows the repository's `delete_branch_on_merge`
   setting; do not delete a branch the loop may still need to revert from.
@@ -530,7 +564,8 @@ recovers it afterwards:
 git fetch origin && git rev-parse origin/{integration_branch}   # {pre_merge_base}
 ```
 
-Confirm from platform state, not from the exit status:
+Confirm from platform state, not from the exit status — after **every** merge call,
+refusal or not; a read that fails is a *merge outcome unconfirmed*:
 
 ```bash
 gh pr view {pr} --json state,mergeCommit,headRefOid \

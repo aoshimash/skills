@@ -247,7 +247,8 @@ branch head, and when this body was last updated. Says "partial" whenever N < M.
 
 | Issue | PR | State | Evidence |
 |---|---|---|---|
-<one row per vetted issue: merged & verified / deferred / reverted / not attempted / no PR,
+<one row per vetted issue: merged & verified / deferred / reverted / escalated — merge outcome
+unconfirmed / not attempted / no PR,
 with the merge commit or the failed condition>
 
 ## Needs Human Attention

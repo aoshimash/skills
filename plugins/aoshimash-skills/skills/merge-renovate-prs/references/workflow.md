@@ -190,6 +190,8 @@ Assemble the same package in both modes:
 4. Integrating `main` needs **manual conflict resolution** (see 2-6).
 5. The pre-check surfaces a risk the agent **cannot resolve or bound** — a breaking change whose impact on this repo is genuinely undecidable from the code and docs. Fail closed: defer, do not merge on hope.
 
+One more deferral arises later, at the merge itself: a merge the platform **explicitly** refuses (2-6). A merge call that ends any other way is never a deferral.
+
 **Downtime is not a gate in autonomous mode — but it is not ignored.** Classify disruption per [verification.md](verification.md). A disruptive change (node reboots, single-replica restart, DB failover, CNI restart) proceeds, with: extended settle time before judging health in 2-9, and a **prominent entry in the final report**. If the user's request constrained timing ("only during the maintenance window"), respect it — defer the disruptive PR if the constraint cannot be honored now.
 
 **Interactive — approval gate: never merge without explicit user approval.** Even with a batch-approved plan, the merge itself is the mutating action that needs a yes. **Downtime is first-class:** if the change is disruptive, do not fold it into a routine approval — surface a prominent, explicit confirmation that spells out blast radius and expected downtime, and ask about maintenance-window timing. This holds even if the plan was batch-approved in Phase 1: batch approval covered *order*, not *"yes, take production down now"*.
@@ -205,7 +207,21 @@ gh pr review {pr} --approve --body "Dependency update reviewed: release notes re
 gh pr merge {pr} --<method>
 ```
 
-If the merge call fails through the platform access method and its outcome cannot be confirmed from platform state, it is a *merge outcome unconfirmed*: stop the line and escalate (SKILL.md "Platform Access") — never defer it as unmerged on the strength of a git read.
+**Only an explicit refusal means "not merged."** A merge call that timed out, lost its connection, or got a gateway error may still complete on the server after the client gave up — the platform's own documentation says it terminates a request that runs too long and the client may receive a `502` or `504`, and does not say the work was undone. A confirmation read taken just afterwards can therefore show the PR open while the merge is still landing on the **default branch**; deferring on that read and moving to the next PR would put two changes in flight on production's branch, one of them never verified. So classify the call's own result first:
+
+- **Explicit refusal** — the platform answered the merge request with an error payload whose message gives a reason the merge is not allowed (a required check or review, protection, a disallowed method, a conflict), or the access method itself read the PR as unmergeable and declined to submit the merge. [platform-github.md](platform-github.md) "Merge" maps both to what the CLI prints.
+- **Anything else is not a refusal** — a timeout, a transport or connection error, an HTTP status error of any code (through the CLI; a connector's tool results are read as platform-github.md "Merge" says), a command that was killed or hung, an error payload reporting a timeout, an internal failure or exhausted resources, a success exit, and any output the agent cannot place in the first bullet. An uncertain case is "not a refusal": a refusal misread this way costs a stopped line, never an unverified merge.
+
+Then read the PR's state and merge commit (V-1, [verification.md](verification.md)) after **every** merge call, refusal or not, and conclude from both:
+
+| Merge call | PR read | Conclusion |
+|---|---|---|
+| any result | merged | **merged** → continue with 2-7 and verification |
+| explicit refusal | not merged | refused → autonomous: **defer** with the refusal reason; interactive: surface it |
+| not a refusal | not merged — open or closed | **merge outcome unconfirmed**: stop the line and escalate (SKILL.md "Platform Access") |
+| any result | the read itself fails | **merge outcome unconfirmed** |
+
+Never defer a *not a refusal* call as unmerged on the strength of an open PR or an unmoved branch read.
 
 If the repo enforces CODEOWNERS or team-based required reviewers that an agent cannot satisfy, never bypass the check. Autonomous: defer the PR (reason: required review the agent cannot provide). Interactive: surface it and ask the user to approve.
 
@@ -259,7 +275,8 @@ Present what happened across the run:
 - **Merged & verified** — the PRs that completed all three states.
 - **Reverted** — auto-reverted PRs (autonomous), each with the failure cause, the revert PR link, and the recovery state.
 - **Cooldown wait** — PRs not yet old enough under the configured `minimumReleaseAge`, each with the member that set its age, the source (upstream release date or the lower bound from Renovate's commit), and the date it becomes eligible ("earliest" for a lower-bound date). These need no human action; the next run picks them up.
-- **Deferred / human queue** — PRs held, each with its reason (C-class step, CI red, no rollback path, manual conflicts, undecidable risk, drift-blocked, ambiguous candidate) and what a human needs to do.
+- **Deferred / human queue** — PRs held, each with its reason (C-class step, CI red, no rollback path, manual conflicts, undecidable risk, drift-blocked, ambiguous candidate, merge explicitly refused by the platform) and what a human needs to do.
+- **Merge outcome unconfirmed** — the PR whose merge call ended without an explicit refusal and did not read as merged (2-6), with the call's result, the PR read, and the default branch's head: why the line stopped, and that a human must establish whether the merge landed before the next run.
 - **Disruptive changes executed** — flagged prominently with what downtime occurred.
 - **Follow-ups** — anything that needs a human later.
 - **Platform access** — the method the run used (SKILL.md "Platform Access"), and any operation whose failure under it deferred a PR, stopped the line, or escalated.

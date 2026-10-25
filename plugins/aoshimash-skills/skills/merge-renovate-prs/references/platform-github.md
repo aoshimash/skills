@@ -141,6 +141,49 @@ the method. Add `--delete-branch` only if the repo convention deletes merged bra
 Never use `--admin` to bypass a failing required check; a red check is a signal,
 not an obstacle.
 
+**Classify the call's result, then confirm from platform state** (workflow.md 2-6).
+`gh pr merge` submits the GraphQL `mergePullRequest` mutation; with `gh` (behaviour
+read from source: gh v2.103.2 `pkg/cmd/pr/merge/merge.go` and `http.go`, whose errors
+`internal/ghcmd/cmd.go` prints as `err.Error()`, and which submit
+the mutation through go-gh v2.17.0's `Mutate` — `pkg/api/graphql_client.go`,
+`pkg/api/errors.go` — and cli/shurcooL-graphql v0.0.4 `graphql.go`, which turn the
+response into the error string) an **explicit refusal** is a non-zero exit whose stderr
+carries one of:
+
+- a line beginning `GraphQL: ` — go-gh's rendering of an `errors[]` payload in a `200`
+  response to the mutation — whose message gives a reason the merge is not allowed.
+  `gh`'s own reads before the mutation render their errors payloads the same way;
+  either reading of such a line is safe, since a read failing that way means nothing
+  was submitted and an uncertain line is not a refusal. An errors payload
+  is not automatically a refusal: GitHub can also return one alongside partial results
+  when a request exceeds resource limits, and one reporting a timeout, a resource limit,
+  or an internal failure is **not a refusal**;
+- `is not mergeable:` — printed by `gh` itself from the `mergeStateStatus` it read,
+  before it submits the mutation; nothing was sent.
+
+Everything else is **not a refusal**: a line beginning `non-200 OK status code:`
+(shurcooL's rendering of any non-`200` response to the mutation, with the status and
+body — GitHub may answer a GraphQL request it terminated after 10 seconds with a `502`
+or `504`, per
+[GitHub Docs, "Rate limits and query limits for the GraphQL API"](https://docs.github.com/en/graphql/overview/rate-limits-and-query-limits-for-the-graphql-api#timeouts)),
+a line beginning `HTTP ` (go-gh's rendering of a non-2xx response to one of `gh`'s own
+reads; the output does not say which call failed), a network or TLS error, a killed or
+hung command, and **exit 0**. `gh` exits 0 without merging when the base branch requires
+a merge queue — it submits the auto-merge mutation instead (`http.go`), so the PR joins
+the queue and merges later, outside the one-in-flight loop.
+Through a **connector**, the same rule: only a tool result that carries the platform's
+refusal reason counts as a refusal, whatever status it came with; a tool error that does not show one is not.
+
+After **every** merge call, refusal or not, read the PR (a read that fails is a
+*merge outcome unconfirmed*):
+
+```bash
+gh pr view {pr} --json state,mergeCommit --jq '{state, merge_commit: .mergeCommit.oid}'
+```
+
+`MERGED` confirms the merge. Anything else confirms nothing unless the call was an
+explicit refusal; after a call that was not, it is a *merge outcome unconfirmed*.
+
 ## Create and merge a revert PR (auto-revert)
 
 Used by the autonomous auto-revert procedure (verification.md). Identify the
