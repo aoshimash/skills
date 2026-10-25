@@ -131,7 +131,7 @@ For each PR, in order, run the full sequence below before starting the next. See
 
 ### Phase 3: Wrap-up
 
-1. Report what was **merged & verified / reverted (with cause) / waiting on the cooldown (with eligible date) / deferred to the human queue (with reasons) / followed up**, and the **platform access method** the run used.
+1. Report what was **merged & verified / reverted (with cause) / waiting on the cooldown (with eligible date) / deferred to the human queue (with reasons) / merge outcome unconfirmed (the PR and why the line stopped) / followed up**, and the **platform access method** the run used.
 2. Surface (do not auto-fix) any **doc drift** or **repeatedly-manual** packages noticed during the run. For a package that needed the same manual apply again, **propose** adding a Renovate `prBodyNotes` entry so the note appears automatically on every future PR for it. A PR held by the lower bound for a **second consecutive run** gets a proposal to reconfigure its slow-to-age member.
 3. **Grouping proposals** — when the run shows a Renovate group should be split (one member blocked or reverted the rest, members need different handling, an ordering edge inside the group, a member that never ages) or separate PRs should be combined (lockstep updates, one upstream release split across PRs), **propose** the `packageRules` change with the run's evidence, the config's own stated rationale addressed, and the cost. Evidence from this run or the group's recorded history only — never speculation. See workflow.md 3-3.
 

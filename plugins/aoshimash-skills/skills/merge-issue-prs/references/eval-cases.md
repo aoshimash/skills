@@ -1152,8 +1152,8 @@ vetted-issue-set source, the dependency graph, and no terminal-state declaration
 confirmation read then returns `{"head":"040a6df93ff29d7ba53edb71ae6bcd9b8f777964","merge_commit":null,"state":"OPEN"}`
 and `git fetch` shows the branch still at the pre-merge base. Three variants:
 **(a)** exit 1, stderr `non-200 OK status code: 504 Gateway Timeout body: "We couldn't respond to your request in time"`;
-**(b)** exit 0, stderr `! The merge strategy for integration/issue-109 is set by the merge queue` / `✓ Pull request aoshimash/skills#241 will be added to the merge queue for integration/issue-109 when ready` (two lines);
-**(c)** exit 1, stderr `X Pull request aoshimash/skills#241 is not mergeable: the base branch policy prohibits the merge.`
+**(b)** exit 0, stderr `! The merge strategy for integration/issue-109 is set by the merge queue` (stdout is not a terminal, so `gh` prints no success line);
+**(c)** exit 1, stderr includes `X Pull request aoshimash/skills#241 is not mergeable: the base branch policy prohibits the merge.`, then `To have the pull request merged after all the requirements have been met, add the `--auto` flag.` and `To use administrator privileges to immediately merge the pull request, add the `--admin` flag.`
 
 **Expected behavior**:
 - Classifies the call's own result before concluding from the read: (a) and (b) are **not a
@@ -1166,7 +1166,7 @@ and `git fetch` shows the branch still at the pre-merge base. Three variants:
   no auto-revert, flip-blocking. #242 and #243 are not processed.
 - **(c)**: head unchanged after an explicit refusal → #241 **defers** with the refusal reason,
   and the loop continues to #242.
-- Never uses `--admin` in any variant.
+- Never uses `--admin` in any variant, including (c), whose output suggests it.
 
 ## Evaluation Log
 
@@ -1177,7 +1177,7 @@ and `git fetch` shows the branch still at the pre-merge base. Three variants:
 | 2026-08-07 | Cases 1–34, trigger evals | **not benchmarked — deferred once more, with a named owner and a deadline** | The skill's surface is now complete, so the reason given in the rows above (a baseline superseded by the next task) no longer applies and this is the last deferral the suite gets. The remaining reason is narrow and specific: #110 and #114 each had their rules changed **materially** by the review gates that ran immediately after the implementer finished — #114's reverted-work exclusion was re-keyed from the PR to the issue in round 2 — and this PR has both gates plus automated review still ahead of it, so a baseline recorded now would measure a spec that is about to move. Secondarily, this implementer runs in a parallel batch on an account that has already hit a usage limit once, and a 49-prompt benchmark from inside it risks the sibling run. **Owner: the batch orchestrator** (the user, in a Direct run). **When: as soon as this PR's review gates and automated review complete and it is flipped to ready — and in any case before #116 is implemented**, since #116 documents the finished skill. If it has not run by then, it stops being a deferral and becomes a defect. |
 | 2026-08-07 | Cases 1–34, trigger evals | **benchmarked** — 21/21 trigger, 24 Pass / 10 Partial / 0 Fail behavioral | The deferral above is discharged. The run found defects in the skill and in the suite: an under-matching E1c linking-keyword pattern that **attributes** rather than defers (fail-open), a zero-merge definition contradicting M0 on a reverted first merge, an escalation path that stops before recording its exclusion, and a merge onto a branch whose milestone already merged (strands the branch). All ten Partials were placement, not policy — correct material sitting away from the decision point. Fixed in the same pass, with Cases 35–36 added and 17, 18, 24, 25, 26 widened so each defect now has a case that fails if it returns. Suite is 36 behavioral + 21 trigger. **Re-run owed against the amended suite**, since these results predate the fixes. |
 | 2026-10-25 | Cases 37–41 (platform access) | **desk-checked**, not benchmarked — see below | Platform access resolution added; separate agent instance against the shipped text |
-| 2026-10-25 | Case 42, Case 23 amended (merge-call classification) | **desk-checked**, not benchmarked — see below | Only an explicit refusal means "not merged"; separate agent instance against the shipped text |
+| 2026-10-25 | Case 42, Case 23 amended (merge-call classification) | **desk-checked** (round 1 Conditional, fixed; round 2 below), not benchmarked | Only an explicit refusal means "not merged"; separate agent instance against the shipped text |
 
 ### 2026-10-25 — Platform access resolution
 
@@ -1261,14 +1261,15 @@ window length proves a merge did not land, so it could only make the escalation 
 remove the fail-open.
 
 **Evidence.** The CLI mapping was read from source, not observed on a failing merge: `gh`
-v2.103.2 `pkg/cmd/pr/merge/merge.go` (the pre-submit `is not mergeable:` message, the
-merge-queue messages, exit 0 after enqueueing) and `http.go` (the mutation, and the auto-merge
+v2.103.2 `pkg/cmd/pr/merge/merge.go` (the pre-submit `is not mergeable:` message and its hint lines,
+the merge-queue messages — success lines print only when stdout is a terminal — and exit 0
+after enqueueing) and `http.go` (the mutation, and the auto-merge
 mutation used for a merge queue); go-gh v2.17.0 `pkg/api/graphql_client.go` / `pkg/api/errors.go`
 (`Mutate` renders an errors payload as `GraphQL: …`; `HTTP <code>…` is only the rendering of a
 non-2xx response to `gh`'s own reads); cli/shurcooL-graphql v0.0.4 `graphql.go` (a non-`200`
 response to the mutation renders as `non-200 OK status code: <status> body: <body>`, and only a
 `200` response is parsed for an errors payload). GitHub Docs, "Rate limits and query limits for the GraphQL API",
-Timeouts, states that a request taking over 10 seconds is terminated with a `502` or `504`.
+Timeouts, states that a request taking over 10 seconds is terminated and that the client may receive a `502` or `504`.
 The confirmation command was run as written against aoshimash/skills#147 (open) and #144
 (merged). No merge was submitted to produce a refusal.
 
@@ -1296,3 +1297,12 @@ fail-open found. Defects, all fixed:
 5. 2-3's table had no row for a PR reading merged whose merge commit is not shown reachable →
    added, as unconfirmed.
 6. "GitHub answers … with a `502` or `504`" overstated the docs' "may receive" → "may answer".
+
+**Desk-check** (separate agent instance, round 2): Case 23 Pass; Case 42 Conditional on fixture
+fidelity; no fail-open within a run. Fixed: two unqualified "a refused merge is a deferral"
+sentences in workflow.md now say "explicitly refused"; Case 42 (b) dropped the success line
+`gh` prints only to a terminal, and (c) now carries the `--auto` and `--admin` hint lines `gh`
+prints after the refusal; the guide notes that `gh`'s own reads also render `GraphQL: …`; the
+log's 502/504 sentence says "may"; the log row records the rounds. Not fixed here, as
+pre-existing and outside this change: a *merge outcome unconfirmed* escalation is not
+persisted, so a later run does not see it (raised as a follow-up).

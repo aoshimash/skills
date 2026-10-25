@@ -150,7 +150,10 @@ response into the error string) an **explicit refusal** is a non-zero exit whose
 carries one of:
 
 - a line beginning `GraphQL: ` — go-gh's rendering of an `errors[]` payload in a `200`
-  response to the mutation — whose message gives a reason the merge is not allowed. An errors payload
+  response to the mutation — whose message gives a reason the merge is not allowed.
+  `gh`'s own reads before the mutation render their errors payloads the same way;
+  either reading of such a line is safe, since a read failing that way means nothing
+  was submitted and an uncertain line is not a refusal. An errors payload
   is not automatically a refusal: GitHub can also return one alongside partial results
   when a request exceeds resource limits, and one reporting a timeout, a resource limit,
   or an internal failure is **not a refusal**;

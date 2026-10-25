@@ -96,7 +96,7 @@ cannot be established with certainty, that is a **revert failure** — escalate 
 revert partially. merge-renovate-prs states the same rule for the same reason.
 
 Never `--admin`, never a required-check bypass, in any circumstance. A merge the platform
-refuses is a deferral, not something to force.
+explicitly refuses (2-3) is a deferral, not something to force.
 
 ### P3: an executable revert path
 
@@ -286,7 +286,8 @@ settle red, or do not settle in time, **defers**. Never merge on a pre-sync resu
   refusal". A changed head **without** an explicit refusal is not read as the guard firing:
   what an in-flight merge does when its head moves underneath it is not observable from
   here.
-- **Never `--admin`, never a required-check bypass.** A refused merge is a **deferral**.
+- **Never `--admin`, never a required-check bypass.** An explicitly refused merge is a
+  **deferral**.
 - **Record the integration branch's head immediately before merging.** This is the
   *pre-merge base*, and under the rebase method it is the only thing that makes the revert
   enumerable: the landed commits are exactly `pre-merge base .. merge commit`. It has to be
