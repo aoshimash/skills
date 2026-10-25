@@ -261,6 +261,53 @@ implementer's dispatch ([batch.md](batch.md) B2-2) — never the default branch:
 gh pr create --draft --base integration/issue-<parent-number> --title "<title>" --body-file <body-file>
 ```
 
+## Stacked PRs (standard mode)
+
+Used by [stacked-prs.md](stacked-prs.md). A stacked dependent is cut from its dependency's
+head branch and targets it:
+
+```bash
+git fetch origin
+git worktree add .worktrees/<branch-name> -b <branch-name> origin/<dependency-head-branch>
+gh pr create --draft --base <dependency-head-branch> --title "<title>" --body-file <body-file>
+```
+
+**CI precondition (S4).** List the workflow files on the default branch, then read each one's
+`on:` block for `pull_request` / `pull_request_target` triggers and their `branches` /
+`branches-ignore` filters:
+
+```bash
+gh api repos/{owner}/{repo}/contents/.github/workflows --jq '.[].path'
+gh api repos/{owner}/{repo}/contents/<path> -H 'Accept: application/vnd.github.raw'
+```
+
+A `404` on the directory read means the repository has no workflows directory — no Actions CI
+to lose. Any other error is S4's "cannot be established".
+
+**Restack (S6).** Whether a stacked PR already contains its base branch's head, and the
+moves that bring it up to date in a fresh, detached worktree — never a rebase or force-push:
+
+```bash
+git fetch origin
+git merge-base --is-ancestor origin/<base-branch> origin/<branch-name> && echo up-to-date
+gh pr edit <number> --base <new-base>      # only once the base PR merged: <new-base> is that PR's baseRefName
+git worktree add --detach .worktrees/restack-<number>-<timestamp> origin/<branch-name>
+git -C .worktrees/restack-<number>-<timestamp> merge --no-edit origin/<base-or-new-base>   # on conflict: merge --abort, push nothing
+git -C .worktrees/restack-<number>-<timestamp> push origin HEAD:<branch-name>
+git worktree remove .worktrees/restack-<number>-<timestamp>
+```
+
+The PR whose head is the base branch, and its state, come from the standard-mode position read
+below — its `headRefName`, `baseRefName` and `state` columns. Human activity on the stacked PR
+is read from all three comment surfaces, each paginated in full, with authors judged as in
+automated-review.md:
+
+```bash
+gh api --paginate repos/{owner}/{repo}/issues/<number>/comments --jq '.[] | "\(.user.login) \(.user.type)"'
+gh api --paginate repos/{owner}/{repo}/pulls/<number>/reviews   --jq '.[] | "\(.user.login) \(.user.type)"'
+gh api --paginate repos/{owner}/{repo}/pulls/<number>/comments  --jq '.[] | "\(.user.login) \(.user.type)"'
+```
+
 ## Update PR Body (gate results)
 
 ```bash
@@ -600,8 +647,8 @@ branches matching this batch's per-issue naming, over the issue set R1 establish
 ## Re-derive a Batch's Position Without an Integration Branch
 
 Used by [context-budget.md](context-budget.md) C3's light position read in **standard mode**,
-where every PR is based on the default branch and the read above has no integration branch to
-key on. The batch's issue numbers are the key instead, matched against head branch names:
+where PRs are based on the default branch — or, stacked, on another PR's branch — and the read
+above has no integration branch to key on. The batch's issue numbers are the key instead, matched against head branch names:
 
 ```bash
 gh pr list --state all --limit 200 \

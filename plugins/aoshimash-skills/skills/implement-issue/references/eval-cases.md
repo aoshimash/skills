@@ -9,9 +9,11 @@ multi-session re-entry (batch.md B0, batch-reentry.md), 67–76 evaluate
 content-based implementer model selection (batch.md B2-1, model-selection.md),
 77–79 evaluate the recorded approval plan that licenses an unattended
 dispatch (batch.md B1-5, batch-reentry.md R8), 80–84 evaluate the batch
-orchestrator's context budget (batch.md, context-budget.md), and 85–90
+orchestrator's context budget (batch.md, context-budget.md), 85–90
 evaluate the no-identifier assigned-issue source and priority ranking
-(SKILL.md Phase 0, batch.md B1-2 step 5 and B1-3, priority-order.md).
+(SKILL.md Phase 0, batch.md B1-2 step 5 and B1-3, priority-order.md), and
+91–97 evaluate standard mode's stacked PRs (batch.md Merge Modes, B2-1, B2-5,
+B2-6, B3, stacked-prs.md).
 
 ## Quality Criteria
 
@@ -69,6 +71,9 @@ evaluate the no-identifier assigned-issue source and priority ranking
 | 50 | No identifier means the user's assigned issues | A request naming no issue and no batch source reads every open issue assigned to the authenticated user in this repository only, with the fetched count checked against the limit; parent issues with open sub-issues are set aside and listed as not dispatched, never expanded into their unassigned children, and so is an issue with an open PR that fails the merge gate's E1a/E1b provenance test (worked by hand), which is neither adopted nor advanced; none / one / two-or-more route to selection / Single mode / Batch mode, and with no user reachable none of the three starts new work; the batch is a manual list named `assigned-<login>` downstream, so nothing crossing to the merge gate changes; an identifier the user gives is never widened into this source, and batch phrasing with no source offers "Assigned to me" among the choices |
 | 51 | Priority ranks inside the DAG, never against it | Each level is ranked by priority label (a repository-declared `priority_labels:` scheme first, the recognised conventions otherwise; Backlog's priority field with Normal separating nothing), then by an order proposed from content with a one-line reason and marked as a proposal, then by issue number; a blocker shows the rank it inherits from its highest dependent; no ranking moves an issue past an edge, and a Reorder ranking change is accepted only inside a level |
 | 52 | The ranking claims only what it does, and widens nothing | The plan and summary do not imply a parallel level is dispatched in priority order beyond its listing, nor that a high-ranked issue skips a level barrier; labels, issue text, and assignments can rank or propose an issue but never add, drop, or license one; an unattended no-identifier invocation dispatches nothing new, and applies a proposed order only to work an approval already covered |
+| 53 | A stack is used exactly where it can carry the dependency | In standard mode a dependent with exactly one unmerged dependency is cut from that dependency's head branch, its PR targets that branch, its body opens with a `## Stack` section naming the base PR, level and merge order, and keeps `Closes #N`; its review gates diff it against its own base, so a dependency's code is never judged as its scope creep; no unmerged dependency means the default branch; two or more means `HELD`, unless a dependency failed, which makes it `SKIPPED`; nothing lands past level 3; two dependents may share a base; satisfaction still means the dependency reached ready; integration mode and Single mode never stack |
+| 54 | Stacking needs CI that runs on a stacked PR, and fails closed | Before stacking is offered, every workflow that runs checks on an open PR is read for a base-branch filter; one that excludes arbitrary branches, CI that cannot be read, or a trigger that cannot be parsed makes stacking unavailable for the batch, with the workflow or reason named in the plan and every PR based on the default branch; a post-merge-only workflow is not counted, and a repository with no PR CI may stack |
+| 55 | Restacking is safe, and `HELD` is not failure | Restacking runs at every group boundary for delivered stacked PRs and when a batch is re-invoked, over every PR carrying a `## Stack` section, bottom-up, in a fresh detached worktree: a moved base is merged in, a merged base PR's own base becomes the new base (unless it already is) and is merged in, a base closed unmerged is reported; there is never a rebase, reset or force-push; a conflicting merge is aborted with nothing pushed; a PR with human activity, or a read that may be incomplete, is reported rather than restacked. `HELD` cascades `HELD`, never `SKIPPED`, is listed with what it waits for, and is dispatched later only under a plan approved in that session |
 
 ## Single-Mode Test Cases
 
@@ -1542,6 +1547,122 @@ nothing — at most it is weighed in a proposal, where #204 needs none because i
 it — and #999 is not added to the batch.
 
 **Criteria to test**: 51, 52
+
+## Stacked PR Test Cases
+
+### Case 91: A linear chain in standard mode
+
+**Scenario**: a standard-mode batch over #101 → #102 → #103 (each blocked by the one before),
+in this repository. Its only PR-triggered check workflow, `claude-code-review.yml`, has no
+branch filter.
+
+**Expected behavior**: S4 finds stacking available. #101's PR (#201) targets `main`. Once #201
+is ready, #102's worktree is cut from `origin/<#201's head branch>` and its PR (#202) is created
+with `--base` that branch, its body opening with `## Stack` — stacked on #201, level 2, merge
+#201 first, retarget before merging — and still carrying `Closes #102`. #103 stacks on #202 at
+level 3. Each PR's gates diff it against its own base — `origin/<#201's branch>...<#202's
+branch>` for #202 — so #201's code is never read as #202's scope creep. The summary shows `#202 (on #201)` and
+`#203 (on #202)` and closes with the merge order #201 → #202 → #203.
+
+**Criteria to test**: 53
+
+### Case 92: A merge point, a fourth level, and what depends on them
+
+**Scenario**: standard mode, stacking available. #105 depends on #103 and #104, both open in
+this batch; a separate chain #301 → #302 → #303 → #304; #306 depends on #305, and #305 on #105.
+
+**Expected behavior**: #105 has two unmerged dependencies, so it is `HELD (waiting for #103 or
+#104 to merge)` and is not dispatched; #305 and #306 are `HELD` with the cause traced to #105 —
+**not** `SKIPPED`, since nothing failed. #304 would land at level 4, so it is `HELD` until #301's
+PR merges. The plan shows all four with what they wait for, and recommends integration mode
+where it is available, because those edges are exactly what standard mode cannot carry. A plan
+that bases #105 on a merge of #103's and #104's branches fails this case. Had #103 ended
+`BLOCKED` instead, #105 would be `SKIPPED (dependency #103 blocked)`, not `HELD`: no merge can
+release it.
+
+**Criteria to test**: 53, 55
+
+### Case 93: The CI precondition on real repositories
+
+**Scenario** (real, as of 2026-10-25): the same chain as Case 91, run in four repositories.
+`aoshimash/rx` — `security-ci.yml`, `api-ci.yml` and `web-ci.yml` all trigger on `pull_request`
+with `branches: [main]`. `aoshimash/nixos-config` — `ci.yml` triggers on `pull_request:` with no
+filter. This repository — `claude-code-review.yml` has no filter, and `bump-version.yml` runs on
+`pull_request` with `branches: [main]` but only `types: [closed]`. `Tech-Residence/isucon-template`
+— the workflows directory does not exist (the contents read returns 404).
+
+**Expected behavior**: in `aoshimash/rx` stacking is unavailable — the plan names
+`security-ci.yml` (or another of the three) and bases every PR on `main`, exactly as before.
+In `aoshimash/nixos-config` and in this repository it is available: `bump-version.yml` is not
+counted, because a closed-only trigger runs no check on an open PR. In
+`Tech-Residence/isucon-template` there is no PR CI to lose, so it is available. A run that stacks
+in `aoshimash/rx` and then flips a stacked PR to ready on zero checks fails this case.
+
+**Criteria to test**: 54
+
+### Case 94: Re-invoking a batch whose stack has moved
+
+**Scenario**: Case 91's batch is re-invoked a week later. A: #201 is open and gained two commits
+from human review. B: #201 was squash-merged and #202 now targets `main` — GitHub retargeted it
+when #201's head branch was deleted. C (modelled on the real `Tech-Residence/isucon-template`
+#6/#7, where the repository deletes head branches on merge yet #6's branch was left in place and
+#7 kept targeting it): #201 merged into `main`, its branch still exists, and #202 still targets
+it. D: #201 was closed without merging.
+
+**Expected behavior**: B0's light position read finds #202 and #203 by their `## Stack`
+sections and works bottom-up, #202 first. A: #201's head is not an ancestor of #202's, so
+`origin/<#201's branch>` is merged into #202's branch in a fresh detached worktree and pushed —
+no rebase, no force-push. B: #202 is still selected although its base is already `main`;
+`origin/main` is merged in, which also clears the squash's duplicate commits. C:
+`gh pr edit 202 --base main` (#201's own base) first, then the same merge — the step that would
+have kept #7 from being merged into a dead branch. D: #202 is not touched and is reported as
+needing a human. #203 is then checked against #202's new head, and the review gates are not
+re-run.
+
+**Criteria to test**: 55
+
+### Case 95: Restack guards
+
+**Scenario**: as Case 94 A, with three variations. (i) #202 carries a human review comment.
+(ii) The merge of #201's branch into #202 conflicts in `src/search/index.ts`. (iii) The re-run is
+unattended, and #105 from Case 92 is still `HELD` though #103 has since merged.
+
+**Expected behavior**: (i) #202 is reported as needing a restack and nothing is pushed — human
+review is never acted on, and the push is not the run's to make. (ii) The merge is aborted,
+nothing is pushed, and the report names the PR and the conflicting path. (iii) Restacking of
+existing PRs runs, since it advances work an approved plan produced, but #105 is **not**
+dispatched — it is now stackable on #104, yet dispatching it is new work, which needs a plan
+approved in that session; it is reported as waiting for one.
+
+**Criteria to test**: 55
+
+### Case 96: Where stacking does not apply
+
+**Scenario**: A: Case 91's chain in **integration mode**. B: "issue #102 を実装して" while #101's PR
+is open. C: standard mode, stacking available, but #101's PR ended `DONE_WITH_CONCERNS` and stayed
+a draft.
+
+**Expected behavior**: A: every worktree and PR is based on the integration branch, and #102 is
+cut only after #101 has merged into it — no PR targets another PR's branch. B: Single mode bases
+#102 on the default branch, as before; stacking is batch-only. C: #101 is not satisfied, so #102
+is `SKIPPED (dependency #101 stayed a draft)` and is never stacked on a draft PR.
+
+**Criteria to test**: 53
+
+### Case 97: A dependency changes after its dependent was cut
+
+**Scenario**: standard mode, Case 91's chain plus an independent #110 in group 2 with #202.
+During #110's Stage 2 review a `rule-violation-instance` is found, Stage 2.5 propagation matches
+it in #201 — already ready, with #202 cut from it — and the user chooses Apply to all, so a fix is
+pushed to #201.
+
+**Expected behavior**: Stage 2.5 scans each PR's diff against that PR's own base. At the next
+group boundary, B2-1's light position read restacks: #201's head is no longer an ancestor of
+#202's, so #201's branch is merged into #202 (and #202's into #203, if #203 was already
+delivered) before group 3 is dispatched. #202's own gates are not re-run. A run that leaves #202
+built on #201's pre-fix code until some later invocation fails this case.
+
+**Criteria to test**: 55, 21
 
 ## Evaluation Log
 
@@ -3256,3 +3377,73 @@ passed 85–90 and found that the hand-worked check named no PR read, which it n
 command reference and Backlog's API documentation, and `platform-backlog.md` says so. The shape
 of `bee --json`'s `priority` field is likewise unread. As in earlier entries, this skill has no
 scored `evals/evals.json`, so cases 85–90 were desk-checked, not run.
+
+### 2026-10-25 — Stacked PRs in standard mode
+
+Standard mode based every PR on the default branch, so a dependent was implemented without
+its dependency's code — the gap B1-3 used to cite when recommending integration mode. A
+dependent with exactly one unmerged dependency is now **stacked**: cut from that dependency's
+head branch, its PR targeting it, its body opening with a `## Stack` section. Merge points and
+anything past level 3 are `HELD` for a later run; stacking is offered only where the
+repository's PR CI runs on a non-default base; stacks are restacked by merge — never rebase or
+force-push — at every group boundary and when the batch is re-invoked. Review gates and
+Stage 2.5 now diff each PR against its own base rather than the default branch, which also
+stops an integration-mode PR's review from showing other issues' merged code. GitHub's native
+stacked PRs (the `gh stack` extension) are deliberately not used; the user chose to take them
+up separately after verifying them.
+
+**Placement.** The policy is in a new `stacked-prs.md`; `batch.md` (already past ~800 lines)
+carries pointers in Merge Modes, B0, B1-3, B2-1, B2-2, B2-5, B2-6 and B3. Nothing crosses to
+the merge gate: integration mode never stacks.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 91 | Pass | Linear chain stacks at levels 1–3; gates diff against each PR's own base |
+| 92 | Pass | Merge point and level 4 are `HELD`, their dependents `HELD` not `SKIPPED`; a failed dependency makes a merge point `SKIPPED` |
+| 93 | Pass | Real workflow files: `aoshimash/rx` (`branches: [main]`) → unavailable; `aoshimash/nixos-config`, this repository (closed-only `bump-version.yml` not counted), and `Tech-Residence/isucon-template` (no workflows directory, 404) → available |
+| 94 | Pass | Bottom-up restack over `## Stack` PRs; C is modelled on the real isucon-template #6/#7 |
+| 95 | Pass | Human activity and conflicts are reported, not pushed; an unattended run restacks but dispatches no `HELD` issue |
+| 96 | Pass | Integration mode and Single mode never stack; a draft dependency cascades `SKIPPED` |
+| 97 | Pass | A Stage 2.5 push to a ready dependency is restacked at the next group boundary |
+| 1–90 | Not re-run | Only the diff base of the review gates changed for existing cases; for default-base PRs it is the same diff |
+
+**Review.** A separate agent instance desk-checked cases 91–96 and the change against
+AGENTS.md. Its first pass failed 91 (the gates diffed against the default branch, so a stacked
+PR's review would see its dependency's code) and 94 (a retargeted PR fell out of the restack
+selection, and no order was set), and found that a Stage 2.5 propagation fix could change a
+dependency after its dependent was cut — contradicting a sentence claiming nothing in the run
+does. It also found that the loop could still dispatch a `HELD` issue, that the restack had no
+worktree to run in, that re-entry's "never retargets" rule and R8 §1 contradicted the restack,
+that a merged base was assumed to have merged into the default branch, and that stale text
+remained in four files. All were fixed; Case 97 was added for the in-run restack. A second pass
+passed 91–97 and found five more items: no restack after the last group, the restack's base
+read from PR body text rather than `baseRefName`, an overclaim that GitHub's automatic deletion
+"did not" retarget (the fixture shows only that the branch was never deleted), an unverified
+human-activity read, and this entry's table having been written before that pass reported. All
+five were fixed; the table above is the second pass's result.
+
+**Real fixture found.** `Tech-Residence/isucon-template` #7 was stacked on #6's branch. #6
+merged into `main` at 07:19 on 2026-09-05; its head branch was not deleted although the
+repository deletes head branches on merge (it still exists); #7 was merged into that branch at
+07:40. Its merge commit is contained in `main` today (compare: ahead 0), so the code arrived by
+a later route — the hazard the `## Stack` section and the restack's retarget exist for.
+
+**Verified this round, each command extracted from the file and run as written:**
+
+- `platform-github.md` S4 workflow listing, against four repositories: the workflow paths above,
+  and a 404 for `Tech-Residence/isucon-template`; the raw-file read returned `security-ci.yml`'s
+  `on:` block with `pull_request: branches: [main]`.
+- The restack sequence against this repository with `origin/claude/issue-priority-parallel-e647bb`
+  as the PR branch and `origin/main` as the base: the ancestor check reported not up to date,
+  the detached worktree was cut, the merge applied cleanly, the push was run with `--dry-run`
+  to a throwaway ref, and the worktree was removed.
+- `gh pr edit --help` and `gh pr create --help` list `-B, --base`.
+- The three paginated human-activity reads, against this repository's PR #107: one comment, by
+  `aoshimash` (`User`), and no reviews or review comments.
+- GitHub's "Merging a pull request" documentation states that deleting a merged PR's head
+  branch retargets open PRs based on it; it says nothing about automatic deletion, and
+  `stacked-prs.md` says so.
+
+**Not verified:** no stacked PR was created and no real `gh pr edit --base` was run — both would
+write to a real repository. As before, there is no scored `evals/evals.json`; cases 91–97 were
+desk-checked.
