@@ -614,7 +614,8 @@ branch, with green CI and no comments. #227 is `MERGED` and carries the revert l
 
 **Setup**: PR #229 passes the pre-merge re-check at head `aaa1111`. Between that check and
 the merge call, the author pushes a new commit, moving the head to `bbb2222`. The merge is
-issued guarded on `aaa1111` and fails.
+issued guarded on `aaa1111` and fails with an explicit refusal: `gh` exits non-zero with a
+`GraphQL: ` errors-payload line saying the head branch was modified.
 
 **Expected behavior**:
 - Recognises the guard fired: the merge was refused rather than merging a head that was
@@ -1142,6 +1143,31 @@ vetted-issue-set source, the dependency graph, and no terminal-state declaration
   from the orchestrator, and its absence is not treated as a defect.
 - The gate's report names the CLI as its method.
 
+### Case 42: A merge call that ends without a refusal (`merge-call-not-a-refusal`)
+
+**Setup**: the run resolved the `gh` CLI. Three eligible candidates on
+`integration/issue-109`, #241, #242, #243; merge method merge. #241 passes 2-1 at head
+`040a6df93ff29d7ba53edb71ae6bcd9b8f777964`, the pre-merge base is recorded, and the gate runs
+`gh pr merge 241 --merge --match-head-commit 040a6df93ff29d7ba53edb71ae6bcd9b8f777964`. In every variant the
+confirmation read then returns `{"head":"040a6df93ff29d7ba53edb71ae6bcd9b8f777964","merge_commit":null,"state":"OPEN"}`
+and `git fetch` shows the branch still at the pre-merge base. Three variants:
+**(a)** exit 1, stderr `HTTP 504: We couldn't respond to your request in time (https://api.github.com/graphql)`;
+**(b)** exit 0, stderr `✓ Pull request aoshimash/skills#241 will be added to the merge queue for integration/issue-109 when ready`;
+**(c)** exit 1, stderr `X Pull request aoshimash/skills#241 is not mergeable: the base branch policy prohibits the merge.`
+
+**Expected behavior**:
+- Classifies the call's own result before concluding from the read: (a) and (b) are **not a
+  refusal** (an HTTP status error; a success exit that left the PR open — here a merge-queue
+  enqueue that merges later), (c) is an **explicit refusal** (`gh` read the PR as
+  unmergeable and submitted nothing).
+- **(a)** and **(b)**: the open, head-unchanged read does **not** make #241 a refusal or a
+  deferral — a timed-out or enqueued merge can still land after the read. Stops the line and
+  escalates as a *merge outcome unconfirmed*, naming #241 and the branch head; no re-attempt,
+  no auto-revert, flip-blocking. #242 and #243 are not processed.
+- **(c)**: head unchanged after an explicit refusal → #241 **defers** with the refusal reason,
+  and the loop continues to #242.
+- Never uses `--admin` in any variant.
+
 ## Evaluation Log
 
 | Date | Case | Result | Notes |
@@ -1151,6 +1177,7 @@ vetted-issue-set source, the dependency graph, and no terminal-state declaration
 | 2026-08-07 | Cases 1–34, trigger evals | **not benchmarked — deferred once more, with a named owner and a deadline** | The skill's surface is now complete, so the reason given in the rows above (a baseline superseded by the next task) no longer applies and this is the last deferral the suite gets. The remaining reason is narrow and specific: #110 and #114 each had their rules changed **materially** by the review gates that ran immediately after the implementer finished — #114's reverted-work exclusion was re-keyed from the PR to the issue in round 2 — and this PR has both gates plus automated review still ahead of it, so a baseline recorded now would measure a spec that is about to move. Secondarily, this implementer runs in a parallel batch on an account that has already hit a usage limit once, and a 49-prompt benchmark from inside it risks the sibling run. **Owner: the batch orchestrator** (the user, in a Direct run). **When: as soon as this PR's review gates and automated review complete and it is flipped to ready — and in any case before #116 is implemented**, since #116 documents the finished skill. If it has not run by then, it stops being a deferral and becomes a defect. |
 | 2026-08-07 | Cases 1–34, trigger evals | **benchmarked** — 21/21 trigger, 24 Pass / 10 Partial / 0 Fail behavioral | The deferral above is discharged. The run found defects in the skill and in the suite: an under-matching E1c linking-keyword pattern that **attributes** rather than defers (fail-open), a zero-merge definition contradicting M0 on a reverted first merge, an escalation path that stops before recording its exclusion, and a merge onto a branch whose milestone already merged (strands the branch). All ten Partials were placement, not policy — correct material sitting away from the decision point. Fixed in the same pass, with Cases 35–36 added and 17, 18, 24, 25, 26 widened so each defect now has a case that fails if it returns. Suite is 36 behavioral + 21 trigger. **Re-run owed against the amended suite**, since these results predate the fixes. |
 | 2026-10-25 | Cases 37–41 (platform access) | **desk-checked**, not benchmarked — see below | Platform access resolution added; separate agent instance against the shipped text |
+| 2026-10-25 | Case 42, Case 23 amended (merge-call classification) | **desk-checked**, not benchmarked — see below | Only an explicit refusal means "not merged"; separate agent instance against the shipped text |
 
 ### 2026-10-25 — Platform access resolution
 
@@ -1201,3 +1228,52 @@ defects, all fixed:
 7. (merge-renovate-prs) see that skill's log.
 
 **Known limit.** Only the CLI path is verified; no connector path was exercised.
+
+### 2026-10-25 — Only an explicit refusal means "not merged" (Case 42)
+
+**Defect (pre-existing, fail-open).** 2-3 re-read the head after **any** failed merge and
+deferred when it was unchanged. A merge call that timed out and a confirmation read showing
+the PR open with its head unchanged therefore became a deferral, and the loop moved on — while
+the timed-out merge could still land on the server, putting two merges in flight and leaving
+one unverified. Found by the desk-check of the platform-access change, which added the
+*merge outcome unconfirmed* escalation only for a confirmation read that itself fails.
+
+**Change.** 2-3 now classifies the merge call's own result first: an **explicit refusal** (an
+errors payload giving a reason the merge is not allowed, or the access method declining to
+submit because it read the PR as unmergeable) versus **anything else** — a timeout, a
+transport or HTTP status error of any code, a killed command, a payload reporting a timeout or
+an internal failure, and a success exit. A table then concludes from the call and the
+confirmation read together; "not merged" needs an explicit refusal, and every other
+not-merged read is a *merge outcome unconfirmed*. The head re-read still discriminates among
+refusals and still never reads error text for that; error text decides only whether there was
+a refusal at all, and an uncertain case resolves to "not a refusal". A changed head after a
+call that was not a refusal is not read as the guard firing. 2-5's refusal and unconfirmed
+rows, SKILL.md "Platform Access", and platform-github.md "Merge (2-3)" carry the same rule;
+Case 23's setup now states that its failure is a refusal payload, which it previously left
+open.
+
+**Placement.** The rule sits in 2-3 (platform-neutral) with the CLI mapping in
+platform-github.md, next to the guard it complements. workflow.md stays well under the
+~800-line split threshold.
+
+**Alternative not taken.** A bounded settle re-read was considered and rejected as the fix: no
+window length proves a merge did not land, so it could only make the escalation rarer, not
+remove the fail-open.
+
+**Evidence.** The CLI mapping was read from source, not observed on a failing merge: `gh`
+v2.103.2 `pkg/cmd/pr/merge/merge.go` (the pre-submit `is not mergeable:` message, and exit 0
+after an auto-merge/merge-queue mutation) and go-gh v2.17.0 `pkg/api/graphql_client.go` /
+`pkg/api/errors.go` (a non-2xx response renders as `HTTP <code>…`, an errors payload in a 2xx
+response as `GraphQL: …`). GitHub Docs, "Rate limits and query limits for the GraphQL API",
+Timeouts, states that a request taking over 10 seconds is terminated with a `502` or `504`.
+The confirmation command was run as written against aoshimash/skills#147 (open) and #144
+(merged). No merge was submitted to produce a refusal.
+
+**Fixture.** Case 42's read result is the command's actual output for aoshimash/skills#147 on
+2026-10-25, renumbered to #241; the stderr lines are built from the format strings in the
+source above and the documented 504 message, not captured from a live failure.
+
+**Known limit.** Classifying an errors payload as a refusal is a judgment over its message
+text. Misreading a refusal as "not a refusal" stops the line (fail-closed); misreading a
+timeout or internal-error payload as a refusal would defer and fail open, and the only guard
+against that is the instruction to treat an uncertain message as not a refusal.

@@ -141,6 +141,40 @@ the method. Add `--delete-branch` only if the repo convention deletes merged bra
 Never use `--admin` to bypass a failing required check; a red check is a signal,
 not an obstacle.
 
+**Classify the call's result, then confirm from platform state** (workflow.md 2-6).
+`gh pr merge` submits the GraphQL `mergePullRequest` mutation; with `gh` (behaviour
+read from the v2.103.2 source, `pkg/cmd/pr/merge/merge.go`, and from go-gh v2.17.0,
+`pkg/api/graphql_client.go` and `pkg/api/errors.go`, for which response becomes which
+error string) an **explicit refusal** is a non-zero exit whose stderr carries one of:
+
+- a line beginning `GraphQL: ` — go-gh's rendering of an `errors[]` payload in a 2xx
+  response — whose message gives a reason the merge is not allowed. An errors payload
+  is not automatically a refusal: GitHub can also return one alongside partial results
+  when a request exceeds resource limits, and one reporting a timeout, a resource limit,
+  or an internal failure is **not a refusal**;
+- `is not mergeable:` — printed by `gh` itself from the `mergeStateStatus` it read,
+  before it submits the mutation; nothing was sent.
+
+Everything else is **not a refusal**: a line beginning `HTTP ` (go-gh's rendering of a
+non-2xx response, whatever the code — GitHub answers a GraphQL request it terminated
+after 10 seconds with a `502` or `504`, per
+[GitHub Docs, "Rate limits and query limits for the GraphQL API"](https://docs.github.com/en/graphql/overview/rate-limits-and-query-limits-for-the-graphql-api#timeouts)),
+a network or TLS error, a killed or hung command, and **exit 0**. `gh` exits 0 without
+merging when the base branch requires a merge queue — it submits the auto-merge mutation
+instead, so the PR joins the queue and merges later, outside the one-in-flight loop.
+Through a **connector**, the same rule: only a tool result that carries the platform's
+refusal reason counts as a refusal; a tool error that does not show one is not.
+
+After **every** merge call, refusal or not, read the PR (a read that fails is a
+*merge outcome unconfirmed*):
+
+```bash
+gh pr view {pr} --json state,mergeCommit --jq '{state, merge_commit: .mergeCommit.oid}'
+```
+
+`MERGED` confirms the merge. Anything else confirms nothing unless the call was an
+explicit refusal; after a call that was not, it is a *merge outcome unconfirmed*.
+
 ## Create and merge a revert PR (auto-revert)
 
 Used by the autonomous auto-revert procedure (verification.md). Identify the

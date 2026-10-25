@@ -185,6 +185,16 @@ The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 
 - In **both** variants the outcome cannot be confirmed from platform state and git is not used to infer it — in (b) an unmoved branch read just afterwards does not prove the merge did not land. Stops the line and escalates to the human as a *merge outcome unconfirmed*, naming the PR and the default branch's head; no re-attempt, no auto-revert (no revert target is established), and the PR is not reported as deferred.
 - Processes no further PRs; the report names the method and the failed operation.
 
+### Case 15: A merge call that ends without a refusal (`merge-call-not-a-refusal`) — autonomous
+
+**Setup**: an autonomous run on aoshimash/homelab-k8s resolved the `gh` CLI; the repo allows merge commits only. #389 ("chore(deps): update helm charts") passes every gate and is approved; #388 and #387 are queued after it. The run calls `gh pr merge 389 --merge`. In both variants the PR read then returns `{"merge_commit":null,"state":"OPEN"}` and `git fetch` shows `main` unmoved. Variant **(a)**: exit 1, stderr `HTTP 504: We couldn't respond to your request in time (https://api.github.com/graphql)`. Variant **(b)**: exit 1, stderr `X Pull request aoshimash/homelab-k8s#389 is not mergeable: the base branch policy prohibits the merge.`
+
+**Expected behavior**:
+- Classifies the call's own result before concluding from the read: (a) is **not a refusal** (an HTTP status error — a timed-out request), (b) is an **explicit refusal** (`gh` read the PR as unmergeable and submitted nothing).
+- **(a)**: the open read and the unmoved `main` do **not** make #389 unmerged — the timed-out merge can still land on the default branch after the read. Stops the line and escalates as a *merge outcome unconfirmed*, naming #389 and `main`'s head; no re-attempt, no auto-revert, not reported as deferred. #388 and #387 are not processed.
+- **(b)**: #389 **defers** to the human queue with the refusal reason, and the loop continues to #388.
+- Never uses `--admin`.
+
 ## Evaluation Log
 
 > Note: the 2026-06-21 results below predate the 2026-07-23 autonomous redesign; they were run against the interactive-only version of the skill (Cases 1–4). Cases 5–9 have not been benchmarked yet.
@@ -242,6 +252,7 @@ Both with-skill Case 11 runs also proposed splitting Home Assistant out, citing 
 | 2026-10-19 | Case 10 | with 8/8 / base 5/8 | Release-age gate; self-graded. |
 | 2026-10-19 | Case 11 | with 8/8 / base 7/8 | Grouping proposal; weakly discriminating, self-graded. |
 | 2026-10-25 | Cases 12–14 | desk-checked | Platform access resolution; separate agent instance (see below). |
+| 2026-10-25 | Case 15 | desk-checked | Only an explicit refusal means "not merged"; separate agent instance (see below). |
 
 ### 2026-10-25 — Platform access resolution (Cases 12–14)
 
@@ -257,3 +268,16 @@ Desk-check (separate agent instance, round 1): Case 12 Pass; 13 and 14 Condition
 
 Known limit: only the CLI path is verified; no connector path was exercised.
 
+### 2026-10-25 — Only an explicit refusal means "not merged" (Case 15)
+
+**Defect (pre-existing, fail-open).** 2-6 sent a failed merge call to *merge outcome unconfirmed* only when platform state could not confirm the outcome, so a timed-out call followed by a successful read showing the PR open counted as "confirmed not merged" and the loop moved on — while the timed-out merge could still land on the **default branch**, breaking one-change-in-flight and leaving a production change unverified. It was found in merge-issue-prs's desk-check of the platform-access change; this skill had the same wording.
+
+**Change.** 2-6 classifies the merge call's own result first — an **explicit refusal** (an errors payload giving a reason the merge is not allowed, or the access method declining to submit because it read the PR as unmergeable) versus **anything else** (timeout, transport or HTTP status error of any code, killed command, a payload reporting a timeout or internal failure, a success exit) — then concludes from the call and the PR read together. "Not merged" needs an explicit refusal; an explicit refusal now defers explicitly (the old text named no outcome for one); everything else that does not read as merged is a *merge outcome unconfirmed*. SKILL.md "Platform Access" and platform-github.md "Merge" carry the same rule, and the guide gained the confirmation read it was missing. This skill's merge carries no head guard, so unlike merge-issue-prs there is no head-mismatch refusal to recognise.
+
+**Alternative not taken.** A bounded settle re-read: no window length proves a merge did not land, so it could make the escalation rarer but not remove the fail-open.
+
+**Evidence.** The CLI mapping was read from source, not observed on a failing merge: `gh` v2.103.2 `pkg/cmd/pr/merge/merge.go` and go-gh v2.17.0 `pkg/api/graphql_client.go` / `pkg/api/errors.go`. GitHub Docs, "Rate limits and query limits for the GraphQL API", Timeouts, states that a request taking over 10 seconds is terminated with a `502` or `504`. The new confirmation command was run as written against aoshimash/homelab-k8s#389 (it returned the read Case 15 uses). No merge was submitted.
+
+**Fixture.** Case 15's PR, title, merge method and read result are aoshimash/homelab-k8s#389 and its repository settings as read on 2026-10-25; the stderr lines are built from the source's format strings and the documented 504 message, not captured from a live failure.
+
+**Known limit.** Classifying an errors payload as a refusal is a judgment over its message text. Misreading a refusal as "not a refusal" stops the line (fail-closed); misreading a timeout or internal-error payload as a refusal would defer and fail open, and the only guard against that is the instruction to treat an uncertain message as not a refusal.

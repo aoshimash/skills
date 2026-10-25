@@ -228,6 +228,20 @@
         "(b) Does not conclude from the unmoved branch that the merge did not land, and does not report the PR as deferred",
         "Processes no further PRs and names the method and failed operation in the report"
       ]
+    },
+    {
+      "id": 15,
+      "name": "merge-call-not-a-refusal",
+      "prompt": "An autonomous run on aoshimash/homelab-k8s resolved the gh CLI; the repo allows merge commits only. Renovate PR #389 (\"chore(deps): update helm charts\") passes every gate and is approved; #388 and #387 are queued after it. The run calls `gh pr merge 389 --merge`. In both variants the PR read then returns {\"merge_commit\":null,\"state\":\"OPEN\"} and git fetch shows main unmoved. (a) exit 1, stderr `HTTP 504: We couldn't respond to your request in time (https://api.github.com/graphql)`. (b) exit 1, stderr `X Pull request aoshimash/homelab-k8s#389 is not mergeable: the base branch policy prohibits the merge.` What happens in each variant?",
+      "expected_output": "The run classifies the merge call's own result before concluding from the read. (a) is an HTTP status error from a timed-out request, not an explicit refusal; (b) is one: gh read the PR as unmergeable and submitted nothing. In (a) the open read and the unmoved main do not show the merge did not land, since a timed-out merge can still complete on the server and land on the default branch; the run stops the line and escalates as a merge outcome unconfirmed, naming #389 and main's head, with no re-attempt and no auto-revert, does not report #389 as deferred, and processes neither #388 nor #387. In (b) #389 defers to the human queue with the refusal reason and the loop continues to #388. Neither variant uses --admin.",
+      "files": [],
+      "expectations": [
+        "Classifies (a) as not a refusal and (b) as an explicit refusal",
+        "(a) Does not treat the open read or unmoved main as proof the merge did not land; stops the line and escalates as a merge outcome unconfirmed, naming #389 and main's head, with no re-attempt and no auto-revert",
+        "(a) Processes neither #388 nor #387 and does not report #389 as deferred",
+        "(b) Defers #389 with the refusal reason and continues to #388",
+        "Never uses an administrator override"
+      ]
     }
   ]
 }

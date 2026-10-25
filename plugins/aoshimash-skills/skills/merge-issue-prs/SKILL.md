@@ -214,7 +214,10 @@ result is **unknown**, and it resolves the way this skill resolves every gap in 
 - **From the merge call onward** the merge may have landed — a call that timed out can still
   complete on the server after the client gave up — so a method failure is never a deferral.
   If the merge's outcome cannot be confirmed from platform state, do not infer it from git:
-  an unmoved branch read just afterwards proves nothing. **Escalate** as a *merge outcome
+  an unmoved branch read just afterwards proves nothing. Nor does an open PR: platform state
+  can confirm that a merge landed, but only an explicit refusal shows that it did not, so a
+  call that ended any other way and a PR still reading open is unconfirmed too
+  ([references/workflow.md](references/workflow.md) 2-3). **Escalate** as a *merge outcome
   unconfirmed*, naming the PR and the integration branch head git reports (or that git could
   not be read either), and stop the line — no re-attempt, no revert, since no revert target is
   established; it is flip-blocking (milestone-pr.md F3). Once the merge is confirmed, a
@@ -286,7 +289,7 @@ The shape of the decisions:
 
 - **A deferral never stops the line; a post-merge failure always does** — and so does a
   platform-access failure at the merge call, which escalates rather than defers. A conflict on
-  sync, red CI, unknown mergeability, a refused merge, a human comment landing mid-run, or
+  sync, red CI, unknown mergeability, an explicitly refused merge, a human comment landing mid-run, or
   membership of the reverted-issue set all defer that PR unmerged and the loop continues.
 - **Verification is integration-branch CI for the merge commit**, plus any checks the
   repository defines — never the PR's own pre-merge CI. A timeout is treated as a failure.

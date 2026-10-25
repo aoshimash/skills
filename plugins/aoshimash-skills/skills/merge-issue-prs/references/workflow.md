@@ -250,13 +250,41 @@ settle red, or do not settle in time, **defers**. Never merge on a pre-sync resu
   PR that moved in between is refused rather than merged unchecked. The guard travels as
   `expectedHeadOid` on the platform's merge mutation (see
   [platform-github.md](platform-github.md)).
-- **Discriminate a refusal by re-reading the head, not by its error text.** The mutation
-  reports failures in a payload rather than as a distinct HTTP status, so there is no
-  status code to branch on. After any failed merge, re-read the PR's head SHA: **changed**
-  from the recorded value → the guard fired; re-run 2-1 once against the new head, and if
-  it moves again, **defer**. **Unchanged** → the refusal was something else (protection, a
-  required check, a review the agent cannot supply) → **defer**. Both paths defer, so a
-  misread costs a deferral, never a merge.
+- **Only an explicit refusal means "not merged".** A merge call that timed out, lost its
+  connection, or got a gateway error may still complete on the server after the client gave
+  up — the platform's own documentation describes timed-out requests being terminated with a
+  `502` or `504` and does not say the work was undone. A confirmation read taken just
+  afterwards can therefore show the PR open with its head unchanged while the merge is still
+  landing; deferring on that read and moving to the next PR would put two merges in flight
+  and leave one of them unverified. So the call's own result is classified first:
+  - **Explicit refusal** — the platform answered the merge request with an error payload
+    whose message gives a reason the merge is not allowed (the head guard, a required check,
+    protection, a review the agent cannot supply, a conflict), or the access method itself
+    read the PR as unmergeable and declined to submit the merge.
+    [platform-github.md](platform-github.md) "Merge (2-3)" maps both to what the CLI prints.
+  - **Anything else is not a refusal** — a timeout, a transport or connection error, an HTTP
+    status error of any code, a command that was killed or hung, an error payload reporting
+    a timeout, an internal failure or exhausted resources, a success exit, and any output the
+    agent cannot place in the first bullet.
+- **Then take the confirmation read** (state, merge commit, head) and conclude from both:
+
+  | Merge call | Confirmation read | Conclusion |
+  |---|---|---|
+  | any result | merged, and the merge commit is reachable from the integration branch's new head | **merged** → record it (below) and go to 2-4 |
+  | explicit refusal | not merged, head **changed** from the recorded SHA | the guard fired → re-run 2-1 once against the new head; if it moves again, **defer** |
+  | explicit refusal | not merged, head **unchanged** | refused for another reason → **defer** |
+  | not a refusal | not merged — open, closed, head changed or not | **merge outcome unconfirmed** (2-5) |
+  | any result | the read itself fails | **merge outcome unconfirmed** (2-5) |
+
+  **Discriminate among refusals by re-reading the head, not by the error text.** The
+  mutation reports failures in a payload rather than as a distinct HTTP status, so there is
+  no status code to branch on, and both refusal rows defer — a misread between them costs a
+  deferral, never a merge. The error text decides only the earlier, coarser question:
+  whether the platform refused at all. That classification fails closed — a refusal misread
+  as "not a refusal" costs a stopped line, never a merge — so an uncertain case is "not a
+  refusal". A changed head **without** an explicit refusal is not read as the guard firing:
+  what an in-flight merge does when its head moves underneath it is not observable from
+  here.
 - **Never `--admin`, never a required-check bypass.** A refused merge is a **deferral**.
 - **Record the integration branch's head immediately before merging.** This is the
   *pre-merge base*, and under the rebase method it is the only thing that makes the revert
@@ -267,8 +295,9 @@ settle red, or do not settle in time, **defers**. Never merge on a pre-sync resu
   flight invariant is what makes the range exact: nothing else can land inside it.
 - **Confirm the merge from platform state, not from the command's exit status:** the PR
   reports as merged, and its merge commit is reachable from the integration branch's new
-  head. Record the merge commit SHA — it is the verification target, and with the pre-merge
-  base it defines the revert target.
+  head — the table's first row. A success exit with the PR not merged is not a merge and is
+  not a refusal either; it is the *not a refusal* row. Record the merge commit SHA — it is
+  the verification target, and with the pre-merge base it defines the revert target.
 
 ### 2-4: post-merge verification
 
@@ -344,10 +373,10 @@ anyway".
 | Mergeability still unknown when its window closes | 2-2 | **defer** | continues |
 | **Conflict on sync** | 2-2 | **defer**, unresolved and untouched | continues |
 | **CI red** on the post-sync head, or unsettled at window close | 2-1 after sync | **defer** | continues |
-| Platform refuses the merge (head moved twice, required check, protection) | 2-3 | **defer** | continues |
+| Platform **explicitly** refuses the merge (head moved twice, required check, protection) and the PR reads as not merged | 2-3 | **defer** | continues |
 | **Verification timeout** — no run, no completion, or nothing that concluded `success`, within the window | 2-4 | **auto-revert** | **stops** |
 | **Verification failure** — a run concluded non-success, or a repo-defined check failed | 2-4 | **auto-revert** | **stops** |
-| **Merge outcome unconfirmed** — the platform-access method failed from the merge call onward and platform state cannot confirm whether the merge landed (SKILL.md "Platform Access") | 2-3 | **escalate**, naming the PR and the branch head; no re-attempt, no revert | **stops immediately** |
+| **Merge outcome unconfirmed** — the merge call ended **without an explicit refusal** (timeout, transport or HTTP status error, success exit) and the PR does not read as merged, or the confirmation read itself failed (2-3; SKILL.md "Platform Access"). An open, head-unchanged read after such a call is this row, not a refusal | 2-3 | **escalate**, naming the PR and the branch head; no re-attempt, no revert | **stops immediately** |
 | **Revert failure** — the revert cannot be created, pushed, or verified, or (under rebase) the landed commits cannot be enumerated with certainty | revert | **record the exclusion (label, then comment), then escalate to a human** | **stops immediately** |
 
 ## Auto-revert
