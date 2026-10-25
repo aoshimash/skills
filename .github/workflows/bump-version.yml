@@ -10,6 +10,17 @@ permissions:
   pull-requests: read
   id-token: write
 
+# Run one bump at a time, oldest first. Each run reads the current version from
+# the main it checks out at job start, so two runs that overlap both compute the
+# same next version; "git pull --rebase" then drops the second commit as
+# already upstream and that merge's bump is lost. Queued runs do not check out
+# until the previous run has pushed. The group is repository-wide (not keyed on
+# github.ref, which is the PR's merge ref here), and "queue: max" keeps every
+# pending run — the default "single" queue cancels all but the newest.
+concurrency:
+  group: bump-version
+  queue: max
+
 jobs:
   bump-version:
     runs-on: ubuntu-latest
