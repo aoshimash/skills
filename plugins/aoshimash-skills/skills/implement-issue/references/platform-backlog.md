@@ -21,13 +21,38 @@ To get structured JSON:
 bee issue view PROJ-123 --json
 ```
 
-## List Issues
+## List Assigned Issues
 
-To let the user select an issue when no identifier is provided (Phase 0 step 2):
+The source when no identifier is provided (Phase 0 step 2,
+[priority-order.md](priority-order.md) P1). `-a @me` filters to the authenticated user; pass
+`-S` once for every status that is not closed (IDs from `bee status list <project_key>`):
 
 ```bash
-bee issue list -p <project_key> -S <open_status_id> -L 20
+bee issue list -p <project_key> -a @me -S <status_id> [-S <status_id> ...] -L 100 --offset 0 --json
 ```
+
+The flags (`-a @me`, repeatable `-S`, `-L`, `--offset`, `--json`) are taken from the bee
+command reference for `bee issue list` (<https://nulab.github.io/bee/commands/issue/list>) and
+the 100-per-request cap from Backlog's "Get Issue List" API documentation; this command has not
+been run in this skill's own verification.
+
+**Check completeness.** Backlog returns at most 100 issues per request. If a page comes back
+with 100, request the next one with `--offset` increased by 100, and stop at the first page
+with fewer. Each issue's `priority` (`High` / `Normal` / `Low` in Backlog's API) is the rank
+signal of priority-order.md P2, since Backlog has no labels. Unverified in this skill's own
+runs: the shape `bee --json` prints for that field — read it from the output rather than
+assuming a path.
+
+## List Issues
+
+To let the user select an issue when no identifier is provided and nothing is assigned to
+them (Phase 0 step 2):
+
+```bash
+bee issue list -p <project_key> -S <open_status_id> -L 100
+```
+
+Apply the completeness check above — page on with `--offset` while a page returns 100.
 
 Fetch available statuses first:
 ```bash
