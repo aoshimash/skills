@@ -27,12 +27,12 @@ finished" means.
 
 | Divergence point | Standard | Integration |
 |---|---|---|
-| Base branch for worktrees and PRs (B2-1, B2-2) | `origin/<default-branch>` | The batch's integration branch |
+| Base branch for worktrees and PRs (B2-1, B2-2) | `origin/<default-branch>` — or, for a dependent with exactly one unmerged dependency, that dependency's head branch: a **stacked PR** ([stacked-prs.md](stacked-prs.md)) | The batch's integration branch; never stacked |
 | When a worktree is created (B2-1) | Any time before its issue is dispatched | Only after every dependency of that issue has merged into the integration branch |
 | Same-file collisions inside a group (B1-2) | Two PRs a human reconciles | An ordering edge, so the second is cut from a branch that already carries the first |
 | A dependency counts as satisfied when (B2-5) | Its PR reached ready for review | Its PR **merged and was not reverted** (B2-4) |
 | After the ready flip (B2-4) | Nothing — a human merges each PR | The merge gate decides eligibility, merges, verifies, and reverts |
-| Statuses (B2-6) | DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED / SKIPPED | Adds MERGED, DEFERRED, NOT_ATTEMPTED, REVERTED; `DONE` stops being terminal |
+| Statuses (B2-6) | DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED / SKIPPED, plus HELD for an issue a stack cannot carry yet | Adds MERGED, DEFERRED, NOT_ATTEMPTED, REVERTED; `DONE` stops being terminal |
 | Human review | Per PR — N issues cost N reviews | Once, on the integration→main milestone PR the merge gate raises |
 | Issue closure | The PR's `Closes #N` fires on merge | It does not fire — see B2-4 |
 
@@ -92,12 +92,13 @@ batch. The *probe* still runs either way, because a session cannot know which mo
 earlier one chose without looking.
 
 **A standard-mode batch is not stateless, though.** Its per-issue PRs sit on the default
-branch and are found by head branch instead ([context-budget.md](context-budget.md) C3,
+branch — or, stacked, on another PR's branch — and are found by head branch instead ([context-budget.md](context-budget.md) C3,
 standard mode). Run that light position read here, before Phase B1, together with the
 recency check of [batch-reentry.md](batch-reentry.md) R3 restricted to the artifacts this
 mode has — the per-issue branch heads and the PRs' `createdAt`. An issue that already has a
-PR is adopted rather than re-implemented, and dispatching an issue with no artifact needs a
-plan approved in this session: B1-5 writes no record for a standard-mode batch, so the
+PR is adopted rather than re-implemented — and an adopted **stacked** PR is restacked onto its
+base when that base moved or merged ([stacked-prs.md](stacked-prs.md) S6) — and dispatching an
+issue with no artifact needs a plan approved in this session: B1-5 writes no record for a standard-mode batch, so the
 **artifact-evidence bound** applies here in full, and an unattended invocation advances the
 PRs that exist and starts nothing (batch-reentry.md R8 §1). What standard mode does not
 acquire is the outcome table below: with no integration branch and no milestone PR,
@@ -233,11 +234,12 @@ Group 1 (parallel):
   #101 — Add search index [Small] [P2]
 
 Group 2 (parallel, after Group 1):
-  #104 — Add user API [Medium] [proposed: fixes the broken login flow] ← depends on #102
-  #103 — Add search endpoint [Medium] [proposed: new behaviour] ← depends on #101
+  #104 — Add user API [Medium] [proposed: fixes the broken login flow] ← depends on #102, stacked on #102
+  #103 — Add search endpoint [Medium] [proposed: new behaviour] ← depends on #101, stacked on #101
 
 Group 3 (sequential, after Group 2):
   #105 — Integration tests [Medium] ← depends on #103, #104
+         standard mode: HELD — merge point, waits for #103 or #104 to merge
 
 Not dispatched:
   #100 — Search and users (parent: 5 open sub-issues, all in this batch)
@@ -247,6 +249,10 @@ Each issue carries its rank basis — the label, `[proposed: <reason>]`, or the 
 inherits from a dependent — and the one-line notice above the groups appears whenever any
 position is a proposal, so the approval visibly covers it ([priority-order.md](priority-order.md)
 P3). **Not dispatched** lists the parent issues an assigned-issue batch set aside (P1).
+
+For the standard-mode reading, the plan marks each stacked dependent `stacked on #<n>` and
+lists every `HELD` issue with what it waits for; where stacking is unavailable it says why in
+one line, naming the workflow ([stacked-prs.md](stacked-prs.md) S4–S5).
 
 When integration mode is available (see Merge Modes), the plan also names the branch it
 would create, what that changes, and every ordering edge B1-2 step 4 added — those edges
@@ -273,13 +279,16 @@ plan is still open.
 Ask the user to choose (see Environment Adaptation in SKILL.md) — "Proceed with this execution plan?" with options:
 
 - **Approve (standard)** — proceed to Phase B2 with the default branch as every
-  worktree's and PR's base. Each PR stops at ready for review for a human to merge.
+  worktree's and PR's base, except the dependents the plan shows stacked; `HELD` issues
+  are not dispatched. Each PR stops at ready for review for a human to merge.
 - **Approve (integration mode)** — proceed to Phase B2 in integration mode: create the
   integration branch (B1-4), base every worktree and PR on it, and hand each ready PR to
   the merge gate. Offered only when integration mode is available. Recommend this option
-  when the DAG carries at least one dependency edge between batch members: in standard
-  mode those dependents' worktrees are cut from the default branch and therefore do not
-  contain their dependency's code.
+  when the DAG carries a dependency edge between batch members that standard mode cannot
+  stack: a merge point, an issue past the depth limit, or any edge at all when stacking is
+  unavailable ([stacked-prs.md](stacked-prs.md) S1, S2, S4). Those dependents are `HELD` or
+  cut from the default branch without their dependency's code in standard mode, while
+  integration mode carries them in one run.
 - **Reorder** — adjust the plan. Execution order is derived from the DAG, so
   reordering means editing its inputs: collect the user's changes (exclude an
   issue from the batch, add a dependency edge to force one issue after another,
@@ -406,7 +415,7 @@ falls entirely on later unattended sessions, which fall back to the artifact-evi
 
 ## Phase B2: Execution Loop
 
-Repeat until all issues are completed or all remaining issues are blocked.
+Repeat until every issue is completed, blocked, or `HELD`.
 
 **Execution model — parallel or sequential.** When the environment can run separate agent instances in parallel, dispatch a whole group's issues at once and wait for the group to finish before starting the next. When it cannot, implement each group's issues **sequentially in dependency order** in the current context, still using one worktree per issue. The DAG, review gates, and failure cascade are unchanged; only wall-clock parallelism is lost. The steps below are written for the parallel case; in the sequential case, "dispatch"/"run the implementer" means "execute those same instructions yourself, one issue at a time, in group-then-dependency order."
 
@@ -421,6 +430,7 @@ For each issue in the current group:
    git fetch origin
    grep -qxF '.worktrees/' .git/info/exclude 2>/dev/null || echo '.worktrees/' >> .git/info/exclude
    # standard mode:    <base> = origin/<default-branch>
+   #   stacked PR:     <base> = origin/<dependency-head-branch>  (stacked-prs.md S1, S3)
    # integration mode: <base> = origin/<integration-branch>
    git worktree add .worktrees/<branch-name> -b <branch-name> <base>
    ```
@@ -463,9 +473,14 @@ codebase revealed surfaces later as a merge conflict, which the gate defers to a
 rather than resolving. Nothing here prevents that — B1-2's edge and this dispatch scope
 only make it less likely, and the deferral is the backstop.
 
+**Standard mode: decide each issue's base again just before cutting its worktree**
+([stacked-prs.md](stacked-prs.md) S1–S2). An issue whose base would now be a merge point or past
+the depth limit is `HELD` and is not dispatched, whatever the plan showed.
+
 **Run the light position read before dispatching each group**
 ([context-budget.md](context-budget.md) C3), and take its answer over anything this session
-believes it remembers. It costs one issue-set read and one PR list read, it is what makes a
+believes it remembers. In standard mode it also restacks the batch's delivered stacked PRs whose
+base moved since they were cut ([stacked-prs.md](stacked-prs.md) S6). It costs one issue-set read and one PR list read, it is what makes a
 compaction mid-batch recoverable without having to detect one, and its result is what B2-6's
 position line reports.
 
@@ -491,7 +506,11 @@ Run each issue's implementer with an instruction set that includes:
 3. The absolute paths to this skill's [workflow.md](workflow.md) and the relevant `platform-*.md` guide, with the instruction:
    > "Read these files, then execute workflow.md Phases 1–3 in the **Orchestrated context** inside the given worktree. Create the PR as a draft against `<base-branch>` and leave it a draft. Skip the review gates (3-2), the automated review response (3-4), the ready flip (3-5), and decision harvesting (3-7) — the orchestrator does all four; do run CI monitoring (3-3) and the issue comment (3-6). Then return exactly one status line (`DONE` / `DONE_WITH_CONCERNS` / `NEEDS_CONTEXT` / `BLOCKED`) plus the PR URL or failure details, per workflow.md step 3-8 — **at most 10 further lines**, with everything longer left in the PR body or the kept worktree, named rather than reproduced."
 4. The path to the project's agent instructions (e.g. CLAUDE.md, AGENTS.md), when the project has one.
-5. **In integration mode**, three additions the implementer cannot derive on its own:
+5. **For a stacked PR** (standard mode), the dependency's head branch as the **base**, the
+   command that targets it (`gh pr create --draft --base <dependency-head-branch> …`), and the
+   `## Stack` section to put first in the body, filled in ([stacked-prs.md](stacked-prs.md) S3).
+   The implementer must not retarget the PR at the default branch.
+6. **In integration mode**, three additions the implementer cannot derive on its own:
    - The **base branch** by name, and the platform command that targets it (on GitHub,
      `gh pr create --draft --base <integration-branch> …` — see
      [platform-github.md](platform-github.md)). The default branch is not the base, and an
@@ -732,6 +751,10 @@ reverted, or never attempted its merge:
    from a branch that lacks the dependency's code, which is the failure this mode exists
    to remove.
 
+**`HELD` is not an unsatisfied dependency.** An issue held because its base would be a
+merge point or past the stack depth limit failed nothing, so its dependents are `HELD` too,
+not `SKIPPED` ([stacked-prs.md](stacked-prs.md) S5).
+
 A deferral is not a failure of the dependency's own work: its PR is complete and sits in
 the human queue. The cascade is about code missing from the base branch and says nothing
 about the deferred PR's quality — write it that way in the summary.
@@ -740,7 +763,7 @@ about the deferred PR's quality — write it that way in the summary.
 
 After every issue in a group has settled — including the merge gate's verdict, in
 integration mode — record each issue's status, then re-check which issues in later groups
-now have all dependencies satisfied (B2-5) and proceed to the next group.
+now have all dependencies satisfied (B2-5) and are not `HELD`, and proceed to the next group.
 
 | Status | Set by | Meaning | Terminal? |
 |---|---|---|---|
@@ -749,6 +772,7 @@ now have all dependencies satisfied (B2-5) and proceed to the next group.
 | `NEEDS_CONTEXT` | implementer | Stopped before changing anything | Yes |
 | `BLOCKED` | implementer | Checks failed after retries, or an unresolved Critical/High security finding | Yes |
 | `SKIPPED` | orchestrator | A dependency was not satisfied (B2-5) | Yes |
+| `HELD` | orchestrator | Standard mode: not dispatched this run because no stack can carry it yet — a merge point, or past the depth limit ([stacked-prs.md](stacked-prs.md) S5) | For this batch; a later run dispatches it once enough of its dependencies have merged |
 | `MERGED` | merge gate | Merged into the integration branch, verification passed, and not since reverted | Yes |
 | `DEFERRED` | merge gate | Ready, and a condition it failed kept it unmerged — an eligibility deferral, a loop deferral, or human-merge mode | For this batch; the gate re-evaluates all but the permanent ones on a later run |
 | `NOT_ATTEMPTED` | merge gate | Ready and eligible, but the line stopped before the gate reached it | For this batch; the next run picks it up first |
@@ -876,6 +900,13 @@ Batch Complete: N/M issues implemented
 ```
 
 For blocked issues, explain what went wrong and suggest next steps. If the issue tracker supports it, post a summary comment on the parent issue.
+
+**Standard mode with stacks:** restack once more before printing this summary
+([stacked-prs.md](stacked-prs.md) S6), so a push during the last group is not left stale. A
+stacked PR's cell names its base — `#203 (on #201)` — and a
+`HELD` issue reads `⏸ Held (waiting for #103 or #104 to merge)`. Close the summary with each
+stack's merge order, bottom first, since merging out of order lands a PR on its dependency's
+branch instead of the default branch ([stacked-prs.md](stacked-prs.md) S3, Known limits).
 
 **Where model selection was used, give each issue's tier a column in the table** —
 `| Issue | Title | Status | PR | Tier |`, the same way integration mode adds its merge column

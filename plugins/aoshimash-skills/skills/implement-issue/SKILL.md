@@ -235,8 +235,13 @@ the user's assigned issues (a manual list once read). See
 Batch mode runs in one of two **merge modes**, chosen inside the execution-plan
 approval — never as a separate gate, and never in Single mode:
 
-- **Standard** — every worktree and PR is based on the default branch; each PR
-  stops at ready for review and a human merges it.
+- **Standard** — every worktree and PR is based on the default branch, except a
+  dependent with exactly one unmerged dependency, which is **stacked** on that
+  dependency's branch so it builds on its code; each PR stops at ready for
+  review and a human merges it, bottom of a stack first. A merge point (two or
+  more unmerged dependencies) is held for a later run, stacks stop at three
+  levels, and stacking is used only where the repository's CI runs on stacked
+  PRs ([references/stacked-prs.md](references/stacked-prs.md)).
 - **Integration** — the batch creates one integration branch, bases every
   worktree and PR on it, and hands each ready PR to the **merge-issue-prs**
   skill, which owns the whole merge lifecycle. A dependency counts as satisfied
@@ -324,8 +329,9 @@ than starting new work.
    issue linked in after the approval leaves the milestone PR a draft rather
    than being finished over. Then present a status table
    (issue, title, status, PR) covering DONE / DONE_WITH_CONCERNS /
-   NEEDS_CONTEXT / BLOCKED / SKIPPED, plus MERGED / DEFERRED / NOT_ATTEMPTED /
-   REVERTED in integration mode, where the deferred and reverted PRs are the
+   NEEDS_CONTEXT / BLOCKED / SKIPPED, plus HELD (with what it waits for) and
+   each stacked PR's base in standard mode, and MERGED / DEFERRED /
+   NOT_ATTEMPTED / REVERTED in integration mode, where the deferred and reverted PRs are the
    human queue and merged issues stay open until the milestone PR merges;
    explain any blockers, and optionally post a summary comment on the parent
    issue. Then harvest generalizable decisions
@@ -336,6 +342,7 @@ than starting new work.
 
 - [references/workflow.md](references/workflow.md) — Canonical autonomous pipeline (Direct context for Single mode, Orchestrated context for Batch implementers)
 - [references/batch.md](references/batch.md) — Batch mode dependency graph, dispatch, and failure handling
+- [references/stacked-prs.md](references/stacked-prs.md) — Standard mode's stacked PRs: which dependents are stacked, the depth limit, the CI precondition, the `HELD` status, and restacking a re-invoked batch without force-pushing
 - [references/priority-order.md](references/priority-order.md) — The no-identifier source (the user's assigned issues) and priority ranking inside the DAG: label schemes, the content-based proposal, inherited urgency, and what the ranking does not control
 - [references/batch-reentry.md](references/batch-reentry.md) — Resuming an integration-mode batch in a fresh session: the artifacts state is re-derived from, concurrent-session detection, and the idempotency rules
 - [references/context-budget.md](references/context-budget.md) — Keeping the batch orchestrator's own context bounded: what each dispatched step may return, what must be durable before it can leave, the position read that survives a compaction, the sequential fallback, and the deliberate stop
