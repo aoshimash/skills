@@ -1040,6 +1040,108 @@ reverted-issue set. Two variants: **(a)** the milestone PR was **merged** yester
 - Proceeds to cleanup evaluation, but does not delete the branch while #233 is open, and does
   not retarget or close #233 itself.
 
+### Case 37: Unauthenticated connector, authenticated CLI (`platform-access-unauthenticated-connector`)
+
+**Setup** (observed in a real session on 2026-10-25 in this repository): the session lists a
+GitHub connector (`plugin:engineering:github`) among MCP servers that require authentication
+before their tools can be used; `gh auth status` reports the account `aoshimash` logged in. The
+user asks to process the ready pipeline PRs for parent issue #109.
+
+**Expected behavior**:
+- Resolves the access method **once**, at the start of Phase 0 and before step 1's first read:
+  the connector is not available, so the `gh` CLI.
+- Asks nothing about access and does not ask the user to authenticate the connector.
+- Every platform operation in the run goes through the CLI; local git runs as written.
+- The Phase 4 report names the method (`gh` CLI).
+
+### Case 38: A real connector that fails the coverage test (`platform-access-connector-fails-coverage`)
+
+The regression test for the **strict** coverage test. Its fixture is a real connector:
+`github/github-mcp-server` as documented in its README at commit `f385262` (read on
+2026-10-25).
+
+**Setup**: that server is connected and authenticated in the session; `gh` is authenticated as
+well. Its documented tools, as far as this run is concerned: `issue_read` (`get`,
+`get_comments`, `get_sub_issues`, …) and `pull_request_read` (`get`, `get_status` —
+"combined commit status" —, `get_check_runs`, `get_comments`, `get_review_comments`,
+`get_reviews`, …), each taking `page` / `perPage`, with a cursor only for
+`get_review_comments`; `list_repository_collaborators`; `merge_pull_request` with
+`merge_method` and `expectedHeadSha`; `update_pull_request_branch` with `expectedHeadSha` and
+no rebase option; `update_pull_request` with `draft`. The README also documents a **lockdown
+mode** that filters out content from users lacking push access in `get_comments`,
+`get_review_comments`, `get_reviews` and `get_sub_issues` — opt-in, and applying to public
+repositories only, which aoshimash/skills is. Two variants: **(a)** the user asks to
+process the ready PRs for parent #109; **(b)** the same, as a scheduled run with no user
+reachable, and `gh` is **not** installed.
+
+**Expected behavior**:
+- Judges coverage against the **whole** run, not human-merge mode's subset.
+- Finds at least these operations uncovered, each for its stated reason:
+  - **E2** — no tool calls the collaborator-permission endpoint; a collaborator *list* does not
+    cover it.
+  - **E4** — check runs and a combined status come from separate tools, and neither the
+    individual statuses nor an end to the check-run pages can be confirmed.
+  - **E5** — `page` / `perPage` with no end signal, and a documented filter that would drop a
+    third-party human's comment: exactly the comment E5 exists to find.
+  - The **vetted-set build** — `get_sub_issues` is subject to the same filter.
+  - The **sync** under the rebase method — no rebase option.
+- **(a)** runs the whole run on the CLI — including operations the connector appears to
+  offer, such as a merge tool taking `expectedHeadSha`: operations are never split.
+- **(b)** stops in Phase 0 and reports, merging nothing, naming the uncovered operations and
+  that no CLI is installed. It does **not** fall back to triaging in human-merge mode through
+  the connector.
+
+### Case 39: The method fails partway through (`platform-access-mid-run-failure`)
+
+**Setup**: the run resolved the `gh` CLI; a GitHub connector that covers every read is also
+available. Three eligible candidates, #241, #242, #243. Merge method: merge. Three variants:
+**(a)** at #242's 2-1 re-check, the E5 conversation-comment read fails with `401 Bad
+credentials`, and so does every later call; **(b)** #241's `gh pr merge` call fails with a
+network timeout and the confirmation read fails the same way, while `git fetch` shows the
+integration branch has moved past the recorded pre-merge base; **(c)** as (b), but `git fetch`
+shows the branch still at the pre-merge base.
+
+**Expected behavior**:
+- In no variant does the run retry any operation through the connector.
+- **(a)** #242 defers with E5 unestablished, and so does #243; the loop does not stop the line
+  for them (no merge was submitted), and #241's earlier verified merge stands.
+- **(b)** and **(c)** alike: the merge's outcome cannot be confirmed from platform state, and
+  git is not used to infer it — in (c) an unmoved branch read just afterwards does not prove
+  the merge did not land. Both stop the line and **escalate** as a *merge outcome
+  unconfirmed*, naming #241 and the branch head git reports; no re-attempt, no auto-revert
+  (no revert target is established), and #241 is not reported as deferred. The escalation is
+  flip-blocking (milestone-pr.md F3).
+- The Phase 4 report names the method and each operation whose failure deferred, stopped or
+  escalated.
+
+### Case 40: A user-named method that does not cover the run (`platform-access-user-named-uncovered`)
+
+**Setup**: the user says "use the GitHub MCP server for this, not gh, and process the ready PRs
+for parent #109". The server is Case 38's. `gh` is authenticated.
+
+**Expected behavior**:
+- Does not run any part of the gate through the named server, and does not silently switch to
+  the CLI either.
+- Names the operations it does not cover (at least E2, E4, E5 and the vetted-set build) and
+  asks whether to use the CLI instead or stop.
+- Merges nothing before that answer.
+
+### Case 41: Invoked as the merge gate by an orchestrator on a connector (`platform-access-merge-gate-resolves-its-own`)
+
+**Setup**: implement-issue runs a batch in integration mode for parent #109. A GitHub connector
+covers every operation implement-issue's Batch mode uses — including the approval record's
+permission read through the collaborator-permission endpoint — so the orchestrator resolved
+it. Its PR-comment tool takes `page` / `perPage` and returns no total and no next-page signal.
+`gh` is authenticated. The orchestrator invokes this skill with the integration branch, the
+vetted-issue-set source, the dependency graph, and no terminal-state declaration yet.
+
+**Expected behavior**:
+- The gate resolves its own method in its own Phase 0; it does not take the orchestrator's.
+- The connector does not cover E5 (no end signal), so the gate runs entirely on the CLI.
+- The hand-off items it was given are used as specified; nothing about the method is expected
+  from the orchestrator, and its absence is not treated as a defect.
+- The gate's report names the CLI as its method.
+
 ## Evaluation Log
 
 | Date | Case | Result | Notes |
@@ -1048,3 +1150,54 @@ reverted-issue set. Two variants: **(a)** the milestone PR was **merged** yester
 | 2026-08-07 | Cases 1–23, trigger evals | **not benchmarked — deferred to the completion of the skill** | Not because the suite would score an incomplete skill — every case here exercises the specified surface, and none touches Phase 3. The reason is that the benchmark is being run **once, against the finished skill**, rather than three times mid-construction: the suite grew 14 → 19 → 23 across #110 and #114, and a baseline recorded against a surface that is still being extended is superseded before it is useful. **Owed immediately after #111 lands**, not merely "before the milestone PR". This deferral must not survive a third task. |
 | 2026-08-07 | Cases 1–34, trigger evals | **not benchmarked — deferred once more, with a named owner and a deadline** | The skill's surface is now complete, so the reason given in the rows above (a baseline superseded by the next task) no longer applies and this is the last deferral the suite gets. The remaining reason is narrow and specific: #110 and #114 each had their rules changed **materially** by the review gates that ran immediately after the implementer finished — #114's reverted-work exclusion was re-keyed from the PR to the issue in round 2 — and this PR has both gates plus automated review still ahead of it, so a baseline recorded now would measure a spec that is about to move. Secondarily, this implementer runs in a parallel batch on an account that has already hit a usage limit once, and a 49-prompt benchmark from inside it risks the sibling run. **Owner: the batch orchestrator** (the user, in a Direct run). **When: as soon as this PR's review gates and automated review complete and it is flipped to ready — and in any case before #116 is implemented**, since #116 documents the finished skill. If it has not run by then, it stops being a deferral and becomes a defect. |
 | 2026-08-07 | Cases 1–34, trigger evals | **benchmarked** — 21/21 trigger, 24 Pass / 10 Partial / 0 Fail behavioral | The deferral above is discharged. The run found defects in the skill and in the suite: an under-matching E1c linking-keyword pattern that **attributes** rather than defers (fail-open), a zero-merge definition contradicting M0 on a reverted first merge, an escalation path that stops before recording its exclusion, and a merge onto a branch whose milestone already merged (strands the branch). All ten Partials were placement, not policy — correct material sitting away from the decision point. Fixed in the same pass, with Cases 35–36 added and 17, 18, 24, 25, 26 widened so each defect now has a case that fails if it returns. Suite is 36 behavioral + 21 trigger. **Re-run owed against the amended suite**, since these results predate the fixes. |
+| 2026-10-25 | Cases 37–41 (platform access) | **desk-checked**, not benchmarked — see below | Platform access resolution added; separate agent instance against the shipped text |
+
+### 2026-10-25 — Platform access resolution
+
+The skill no longer hard-requires `gh`. SKILL.md gained "Platform Access" and an Environment
+Adaptation row; `platform-github.md` replaced "Prerequisites" with "Access Method", which makes
+the commands the reference specification and defines when a connector covers one. The order is
+the one AGENTS.md fixes — user-named → available connector that covers the run → the CLI →
+ask — with three tightenings because this skill merges without per-PR review:
+
+- **Coverage is judged against the whole run** (not human-merge mode's subset), and one
+  uncovered operation sends the whole run to the CLI; operations are never split.
+- **The fail-open reads are named and covered only on positive evidence**: complete lists
+  (a page parameter with no end signal is not enough), content filters by author, E4's
+  union, E2's collaborator-permission endpoint, the guarded merge, the rebase sync, and P3's
+  push identity under a connector.
+- **No re-resolution boundary, no fail-over.** A failure before a merge defers; a failed
+  branch-level read takes no candidates; a failure from the merge call onward whose outcome
+  platform state cannot confirm is a new flip-blocking escalation, *merge outcome
+  unconfirmed* (workflow.md 2-5, milestone-pr.md F3) — git is not used to infer that a merge
+  did not land, since a timed-out call can still complete on the server.
+
+**Cross-skill hand-off.** The method does not cross: the gate resolves its own, stated on both
+sides (implement-issue `batch.md` Merge Modes and `SKILL.md` known limits; this SKILL.md) and
+in AGENTS.md. Reconciled in the same pass, as AGENTS.md asked whenever either side next
+changed: F1 no longer calls (a) "the vetted issue set it dispatched", and AGENTS.md drops the
+known-mismatch note.
+
+**Fixtures.** Case 37 is the session state observed on 2026-10-25 (`plugin:engineering:github`
+pending authentication, `gh` logged in). Cases 38 and 40 use `github/github-mcp-server` as its
+README documents it at commit `f385262`: no collaborator-permission tool, check runs and a
+combined status from separate tools, `page`/`perPage` with no end signal, a lockdown filter on
+comments, reviews and sub-issues from accounts without push access (opt-in, public repositories
+only), and an update-branch tool with no rebase option. That is a reading of the README, not a
+run against the server.
+
+**Desk-check** (separate agent instance, round 1): 37, 38, 40, 41 Pass; 39 Conditional. Seven
+defects, all fixed:
+1. Inferring "not landed" from an unmoved branch after an ambiguous merge call failed open → now
+   escalates as *merge outcome unconfirmed*.
+2. Defer-and-stop contradicted "a deferral never stops the line" and 2-5 → the new row
+   escalates instead, and the sentence names it.
+3. "By the step's own failure rule" overclaimed for branch-level reads (B0, enumeration,
+   reverted-issue set) → stated: no candidates this run; an errored B0 is never "none yet".
+4. A P3 identity rule asserted for the CLI with no mechanism → scoped to connectors.
+5. "Each write here is followed by a verification read" was false → removed.
+6. Known limits cited an unrun case as evidence, and fixtures claimed coverage the README
+   does not show → reworded to "desk-checked from its README"; "would cover" claims dropped.
+7. (merge-renovate-prs) see that skill's log.
+
+**Known limit.** Only the CLI path is verified; no connector path was exercised.

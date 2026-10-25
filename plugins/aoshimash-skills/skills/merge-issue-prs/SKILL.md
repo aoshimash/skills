@@ -28,8 +28,9 @@ integration→main PR per milestone.
 
 **State that relocation as the mechanism delivers it, not as a guarantee about attention.**
 What is enforced is that reaching the default branch **costs a human action on a pull
-request**: this gate never merges, approves, or reviews the milestone PR, `gh pr ready` is
-the only flip command it runs, and a PR targeting the default branch is not even a merge
+request**: this gate never merges, approves, or reviews the milestone PR, marking it ready
+for review (with the CLI, `gh pr ready`) is the only flip it performs, and a PR targeting the
+default branch is not even a merge
 candidate ([references/eligibility.md](references/eligibility.md)). That confinement is
 solid, and it is what the whole design rests on.
 
@@ -107,10 +108,14 @@ below use capability terms; map them to your environment as follows.
 |---|---|---|
 | **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`) | Numbered options as plain text; wait for the user's reply |
 | **Background execution** — run long commands without blocking | Background shell (e.g. Claude Code's background Bash) | Run commands sequentially |
+| **Platform access** — read and write GitHub: issues, PRs, checks, runs, labels, refs | A connector or MCP server for GitHub, only when it provably covers every operation the run can use (see [Platform Access](#platform-access)) | The `gh` CLI; with neither, ask the user how to reach GitHub, or stop and merge nothing when no user is reachable |
 | **Scheduled invocation** — run this skill again later without a user present | Recurring or cron-scheduled agent runs (e.g. Claude Code's scheduled tasks) | Re-invoke manually once per session; every run re-derives its state from the tracker and git, so a fresh session resumes at no cost |
 
 - *User choice* is used when the run scope is ambiguous, when a run-level precondition
   fails, and on the escalation path — a failed revert always returns to a human.
+- *Platform access* is resolved once, at the start of Phase 0, and judged strictly: an
+  operation a connector cannot be shown to perform exactly as the reference command does sends
+  the whole run to the CLI.
 - *Background execution* is used by E4's bounded wait for unsettled checks (Phase 1) and
   by post-merge verification (Phase 2).
 - *Scheduled invocation* is what makes multi-day unattended operation possible: a run
@@ -124,6 +129,9 @@ below use capability terms; map them to your environment as follows.
 ## Workflow
 
 ### Phase 0: Establish run scope, the vetted issue set, and preconditions
+
+Before the first platform read — step 1's own reads included — resolve the platform access
+method ([Platform Access](#platform-access)).
 
 1. **Resolve the run scope** — the parent issue and its integration branch
    (`integration/issue-<parent-number>`; `integration/<date>-<slug>` for a batch with
@@ -165,6 +173,70 @@ below use capability terms; map them to your environment as follows.
    Creating a label is a **write to the repository**, and on a run that merges nothing it may
    be the only write performed. Report every label created in Phase 4; a run that reports
    "nothing was changed" while having added three labels is reporting inaccurately.
+
+### Platform Access
+
+The platform guide's commands specify each operation; they do not fix the tool that performs
+it. This skill merges without per-PR human review, so its coverage test is stricter than the
+other issue skills', and its failure direction is always the CLI, never a connector. Resolve the
+method **once per run**, before the first platform read, taking the first that applies:
+
+1. **Named by the user** in this conversation → use it, if it covers every operation the run
+   can use (coverage is defined in the platform guide's Access Method section). A named method
+   that does not is never used for part of the run: name the operations it does not cover and
+   ask whether to use the CLI instead or stop; with no user reachable, stop and report, merging
+   nothing.
+2. **Connector** — a connector or MCP server for GitHub is available in this session and covers
+   every operation the run can use → use it. Coverage is judged against the **whole** run —
+   Phase 0 through Phase 4, the merge loop, the revert and the milestone PR — not against
+   human-merge mode's smaller set, because which mode applies is learned only from Phase 0's
+   reads. Whatever cannot be confirmed from the connector's own tool descriptions and schemas is
+   not covered, and **one uncovered operation sends the whole run to the CLI**: operations are
+   never split between methods. A connector counts as available only when its tools can be
+   called now; one listed as needing authentication is not, and the run does not ask the user
+   to authenticate it.
+3. **CLI** — `gh` is installed and authenticated → use the guide's commands.
+4. **Neither** → ask the user how to reach GitHub; with no user reachable, stop and report,
+   merging nothing.
+
+**Keep the method for the whole run, and never fail over to another.** There is no
+re-resolution boundary: every operation a run can use was judged at the start. A retry a step
+already prescribes — E2's transient retry, the body update's single retry — runs through the
+same method. When the method fails, or proves unable to perform an operation, that operation's
+result is **unknown**, and it resolves the way this skill resolves every gap in evidence:
+
+- **Before a merge is submitted**, nothing merges. A failed read of the **branch** — B0, the
+  candidate enumeration, the reverted-issue-set build — takes no candidates this run: every
+  candidate defers, and a B0 read that errored is never read as "no milestone PR yet". A failed
+  Phase 0 read leaves its precondition unestablished (human-merge mode) or the vetted set
+  unbuilt (nothing is eligible). A failed per-PR read — triage, the 2-1 re-check, the 2-2
+  sync — defers that PR, and the loop continues.
+- **From the merge call onward** the merge may have landed — a call that timed out can still
+  complete on the server after the client gave up — so a method failure is never a deferral.
+  If the merge's outcome cannot be confirmed from platform state, do not infer it from git:
+  an unmoved branch read just afterwards proves nothing. **Escalate** as a *merge outcome
+  unconfirmed*, naming the PR and the integration branch head git reports (or that git could
+  not be read either), and stop the line — no re-attempt, no revert, since no revert target is
+  established; it is flip-blocking (milestone-pr.md F3). Once the merge is confirmed, a
+  verification read that cannot be performed counts as a **verification timeout**
+  (auto-revert, [references/workflow.md](references/workflow.md) 2-5), and a platform step of
+  the revert that fails is a **revert failure**, which escalates.
+- **In Phase 3**, by the milestone lifecycle's own rules: a failed body or title write is M3's
+  stale-dashboard concern, a flip condition that cannot be read withholds the flip, and a
+  cleanup read that fails deletes nothing.
+
+Name the method in the Phase 4 report. **Run as implement-issue's merge gate**, this skill
+resolves its own method here, in its own Phase 0. The method the orchestrator resolved does not
+cross the hand-off (implement-issue's `references/batch.md`, Merge Modes, states the same) and
+says nothing about this skill's reads, which it was never judged against; a method
+the user named in the conversation is held to this skill's coverage test like any other.
+
+**Known limits.** The guide's CLI commands are the verified path. A connector's coverage is
+judged from its own tool descriptions and schemas — the runtime behaviour behind them is not
+observed — and no connector path has been exercised by this skill's evaluations. The one GitHub
+MCP server desk-checked against the Access Method test, from its README, fails it on E2, E4
+and E5 ([references/eval-cases.md](references/eval-cases.md) Case 38), so in practice the CLI
+is expected to remain the path.
 
 ### Phase 1: Eligibility triage
 
@@ -212,7 +284,8 @@ never re-enumerated, and what re-admits the content is a new PR for the same iss
 
 The shape of the decisions:
 
-- **A deferral never stops the line; a post-merge failure always does.** A conflict on
+- **A deferral never stops the line; a post-merge failure always does** — and so does a
+  platform-access failure at the merge call, which escalates rather than defers. A conflict on
   sync, red CI, unknown mergeability, a refused merge, a human comment landing mid-run, or
   membership of the reverted-issue set all defer that PR unmerged and the loop continues.
 - **Verification is integration-branch CI for the merge commit**, plus any checks the
@@ -259,7 +332,8 @@ outstanding, and the body is already final.
 
 **"Escalation" covers two different things, and only one of them blocks the flip.** What
 blocks it is anything leaving *the branch's contents or this PR's effect on merge*
-unestablished: a failed revert or a branch head that is not what the loop left, a
+unestablished: a failed revert, a merge whose outcome could not be confirmed, or a branch head
+that is not what the loop left, a
 linking-keyword reference outside the managed block, or a divergence between an
 orchestrator's declared statuses and the gate's own derivation. What does **not** block it is
 an **unrecorded exclusion** — an E5 or revert label write that could not be verified. That
@@ -291,7 +365,8 @@ The report covers, in this order:
 - Anything **escalated** — first, and marked as requiring human action. Two kinds, reported
   together but labelled apart, because they need different human responses and only one of
   them held the milestone PR back:
-  - **Flip-blocking** — a failed revert, a branch head that is not what the loop left, a
+  - **Flip-blocking** — a failed revert, a merge outcome unconfirmed, a branch head that is
+    not what the loop left, a
     linking-keyword reference outside the managed block, an orchestrator/gate divergence.
     The branch's contents are not established.
   - **Non-blocking** — an exclusion whose label write could not be verified (E5 or a revert
@@ -309,6 +384,8 @@ The report covers, in this order:
   the queue **is** as well as what is in it: the label-carrying PRs plus this run's deferred
   list, with **no state file** behind them, re-derived every run. A reader given a list and
   no store reasonably assumes something is tracking the rest; nothing is.
+- The **platform access method** the run used ([Platform Access](#platform-access)), and any
+  operation whose failure under it produced a deferral, a revert or an escalation.
 - Any **labels created** in Phase 0. On a run that merges nothing this is the only write it
   performed, and a report that omits it claims the repository was left untouched when it was
   not.
@@ -342,8 +419,8 @@ and git.
   confined to, the aggregation rules for untrusted per-issue content, the closing
   references, the four flip conditions and the deferred-items disclosure rule, cleanup of
   the integration branch, the zero-merge case, and the lifecycle's known limits.
-- [references/platform-github.md](references/platform-github.md) — `gh` commands for the
-  eligibility reads, the preconditions, the merge loop, the revert, and the milestone PR,
+- [references/platform-github.md](references/platform-github.md) — GitHub operations, with
+  `gh` reference commands and the connector-coverage test, for the eligibility reads, the preconditions, the merge loop, the revert, and the milestone PR,
   including the pagination rules that keep list reads from failing open.
 - [references/eval-cases.md](references/eval-cases.md) — Human-readable index of the eval
   scenarios.

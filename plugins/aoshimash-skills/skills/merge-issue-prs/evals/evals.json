@@ -648,6 +648,77 @@
         "Recognises that merging would put work onto the default branch's future past the milestone's human review",
         "Does not delete the branch in either variant, and does not retarget or close #233 itself"
       ]
+    },
+    {
+      "id": 37,
+      "name": "platform-access-unauthenticated-connector",
+      "prompt": "Process the ready pipeline PRs for parent issue #109 on aoshimash/skills. Paper exercise — say what you do, do not run anything. The session lists a GitHub connector (plugin:engineering:github) among MCP servers that require authentication before their tools can be used; `gh auth status` reports the account aoshimash logged in. How does the run reach GitHub, and what does the report say about it?",
+      "expected_output": "The skill resolves the platform access method once, at the start of Phase 0 before step 1's first read. A connector that needs authentication is not available, so the method is the gh CLI. It asks nothing about access and does not ask the user to authenticate the connector. Every platform operation goes through the CLI for the whole run; local git runs as written. The Phase 4 report names the gh CLI as the method.",
+      "files": [],
+      "expectations": [
+        "Resolves the access method once, before the first platform read",
+        "Treats the connector that needs authentication as unavailable and uses the gh CLI",
+        "Asks no access question and does not ask the user to authenticate the connector",
+        "Uses the CLI for every platform operation of the run",
+        "Names the method in the Phase 4 report"
+      ]
+    },
+    {
+      "id": 38,
+      "name": "platform-access-connector-fails-coverage",
+      "prompt": "Run the merge gate for parent issue #109 on aoshimash/skills. Paper exercise. The session has the GitHub MCP server github/github-mcp-server connected and authenticated, as documented in its README at commit f385262. Its relevant tools: issue_read (get, get_comments, get_sub_issues) and pull_request_read (get, get_status - \"Get combined commit status of a head commit in a pull request\", get_check_runs, get_comments, get_review_comments, get_reviews), each paged by page/perPage with a cursor only for get_review_comments; list_repository_collaborators; merge_pull_request with merge_method and expectedHeadSha; update_pull_request_branch with expectedHeadSha and no rebase option; update_pull_request with draft. The README documents a lockdown mode that filters out content from users lacking push access in issue_read get_comments and get_sub_issues and pull_request_read get_comments, get_review_comments and get_reviews; it is opt-in and applies to public repositories only, which aoshimash/skills is. `gh` is also authenticated. The repository's merge method may be rebase. (a) The user is present. (b) The same, but as a scheduled run with no user reachable, and gh is NOT installed. Which method does each variant use, and why?",
+      "expected_output": "Coverage is judged against the whole run (Phase 0-4, merge loop, revert, milestone PR), not human-merge mode's subset, and only on positive evidence from the tool descriptions. The connector fails it: E2 has no tool calling the collaborator-permission endpoint (a collaborator list does not cover it); E4 gets check runs and a combined status from separate tools, and neither the individual statuses nor an end to the check-run pages can be confirmed; E5's comment reads page by page/perPage with no end signal and are subject to the documented lockdown filter that would drop a third-party human's comment - exactly what E5 must find; get_sub_issues is subject to the same filter, so the vetted-set build is not covered; update_pull_request_branch has no rebase option, so the rebase-method sync is not covered. One uncovered operation sends the whole run to the CLI. (a) Every operation runs on the CLI, including ones the connector appears to offer, such as a merge tool taking expectedHeadSha - operations are never split between methods. (b) No method covers the run and no user is reachable: stop in Phase 0 and report, merging nothing, naming the uncovered operations and the missing CLI; do not triage in human-merge mode through the connector.",
+      "files": [],
+      "expectations": [
+        "Judges coverage against the whole run, not human-merge mode's subset",
+        "Finds E2 uncovered because no tool calls the collaborator-permission endpoint",
+        "Finds E4 uncovered because the union of check runs and individual statuses cannot be confirmed complete",
+        "Finds E5 uncovered, citing the missing pagination end signal and/or the lockdown filter that drops third-party comments",
+        "Finds the vetted-set build or the rebase sync uncovered",
+        "(a) Uses the CLI for the whole run, including operations the connector appears to offer, and never splits operations",
+        "(b) Stops and reports, merging nothing, without triaging through the connector"
+      ]
+    },
+    {
+      "id": 39,
+      "name": "platform-access-mid-run-failure",
+      "prompt": "A merge-gate run on integration/issue-109 resolved the gh CLI as its method; a GitHub connector that covers every read is also available. Three eligible candidates, #241, #242, #243; merge method merge. (a) At #242's 2-1 re-check, the E5 conversation-comment read fails with 401 Bad credentials, and so does every later call. (b) Instead, #241's gh pr merge call fails with a network timeout and the confirmation read fails the same way, while git fetch shows the integration branch has moved past the recorded pre-merge base. (c) As (b), but git fetch shows the branch still at the pre-merge base. What does the run do in each variant?",
+      "expected_output": "No variant retries any operation through the connector: the method is kept for the whole run and never failed over. (a) The failure comes before any merge is submitted for #242, so its result is unknown and resolves by the step's own rule: #242 defers with E5 unestablished, and so does #243; no merge was submitted for them, so the line does not stop on their account, and #241's earlier verified merge stands. (b) and (c) alike: from the merge call onward the merge may have landed (a timed-out call can still complete on the server), so the failure is never a deferral. The outcome cannot be confirmed from platform state, and git is not used to infer it - in (c) an unmoved branch read just afterwards proves nothing. Both stop the line and escalate as a merge outcome unconfirmed, naming #241 and the branch head git reports; no re-attempt and no auto-revert, since no revert target is established, and #241 is not reported as deferred. The escalation is flip-blocking. The Phase 4 report names the method and each operation whose failure deferred, stopped or escalated.",
+      "files": [],
+      "expectations": [
+        "Never retries an operation through the connector",
+        "(a) Defers #242 and #243 with the condition unestablished and does not stop the line",
+        "(b) and (c) Stop the line and escalate as a merge outcome unconfirmed, naming #241 and the branch head, with no re-attempt and no auto-revert",
+        "(c) Does not conclude from the unmoved git branch that the merge did not land",
+        "Does not report #241 as a routine deferral; treats the escalation as flip-blocking",
+        "Names the method and the failed operations in the report"
+      ]
+    },
+    {
+      "id": 40,
+      "name": "platform-access-user-named-uncovered",
+      "prompt": "The user says: \"use the GitHub MCP server for this, not gh, and process the ready PRs for parent #109.\" The session has the GitHub MCP server github/github-mcp-server connected and authenticated, as documented in its README at commit f385262. Its relevant tools: issue_read (get, get_comments, get_sub_issues) and pull_request_read (get, get_status - \"Get combined commit status of a head commit in a pull request\", get_check_runs, get_comments, get_review_comments, get_reviews), each paged by page/perPage with a cursor only for get_review_comments; list_repository_collaborators; merge_pull_request with merge_method and expectedHeadSha; update_pull_request_branch with expectedHeadSha and no rebase option; update_pull_request with draft. The README documents a lockdown mode that filters out content from users lacking push access in issue_read get_comments and get_sub_issues and pull_request_read get_comments, get_review_comments and get_reviews; it is opt-in and applies to public repositories only, which aoshimash/skills is. gh is authenticated. What do you do?",
+      "expected_output": "A method the user named is used only if it covers every operation the run can use. This one does not: E2 (no collaborator-permission endpoint), E4 (the check-run/status union cannot be confirmed complete), E5 and the vetted-set build (no pagination end signal; the documented lockdown filter can drop third-party content). The skill does not run any part of the gate through it and does not silently switch to the CLI either: it names the uncovered operations and asks whether to use the CLI instead or stop. Nothing is merged before the answer.",
+      "files": [],
+      "expectations": [
+        "Does not run any part of the gate through the named server",
+        "Does not silently switch to the CLI",
+        "Names the uncovered operations, including at least E2, E4 and E5",
+        "Asks whether to use the CLI or stop, and merges nothing before the answer"
+      ]
+    },
+    {
+      "id": 41,
+      "name": "platform-access-merge-gate-resolves-its-own",
+      "prompt": "implement-issue runs a batch in integration mode for parent #109. A GitHub connector covers every operation implement-issue's Batch mode uses, including the approval record's permission read through the collaborator-permission endpoint, so the orchestrator resolved it. The connector's PR-comment tool takes page/perPage and returns no total and no next-page signal. gh is authenticated. The orchestrator invokes merge-issue-prs with the integration branch, the vetted-issue-set source, and the dependency graph; the batch is not finished, so no terminal-state declaration yet. Which method does the gate use, and does it expect anything about the method from the orchestrator?",
+      "expected_output": "The gate resolves its own method in its own Phase 0 under its stricter coverage test; the orchestrator's method does not cross the hand-off and is no evidence that the gate's reads are covered. The connector does not cover E5 (no pagination end signal), so the gate runs entirely on the CLI. It uses the hand-off items it was given as specified, expects nothing about the method from the orchestrator and does not treat its absence as a defect, and its report names the CLI.",
+      "files": [],
+      "expectations": [
+        "Resolves its own method rather than taking the orchestrator's",
+        "Finds E5 uncovered by the connector and runs on the CLI for the whole gate run",
+        "Does not expect or require the method in the hand-off",
+        "Names the CLI in its report"
+      ]
     }
   ]
 }

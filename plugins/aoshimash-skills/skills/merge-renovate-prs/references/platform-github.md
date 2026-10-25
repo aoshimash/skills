@@ -1,10 +1,10 @@
-# GitHub CLI / API Commands for Renovate PRs
+# GitHub Platform Guide — Renovate PRs
 
-GitHub-only for v1. All commands use the `gh` CLI; replace `{owner}`, `{repo}`, `{pr}` as needed.
+GitHub-only for v1. The commands are written for the `gh` CLI and are the reference specification of each operation (see Access Method); replace `{owner}`, `{repo}`, `{pr}` as needed.
 
 ## Table of Contents
 
-- [Prerequisites](#prerequisites)
+- [Access Method](#access-method)
 - [List and filter Renovate PRs](#list-and-filter-renovate-prs)
 - [Read a PR: diff, files, body, branch, labels](#read-a-pr-diff-files-body-branch-labels)
 - [Release age (the cooldown gate)](#release-age-the-cooldown-gate)
@@ -16,10 +16,19 @@ GitHub-only for v1. All commands use the `gh` CLI; replace `{owner}`, `{repo}`, 
 - [Comment on the PR](#comment-on-the-pr)
 - [Read bot config](#read-bot-config)
 
-## Prerequisites
+## Access Method
 
-- `gh` CLI installed and authenticated (`gh auth status`).
-- The current directory is the target repo, or pass `-R {owner}/{repo}`.
+Resolved once per run as SKILL.md "Platform Access" describes: a connector for GitHub only when it covers **every** operation in this file and in [release-age.md](release-age.md), otherwise the CLI.
+
+- **CLI**: `gh` installed and authenticated (`gh auth status`); the current directory is the target repo, or pass `-R {owner}/{repo}`.
+- **Connector coverage**: each command is the reference for its operation. A connector tool covers an operation only when its own description or schema shows that it returns the same fields with the same completeness the command guarantees, or performs the same write. Where that cannot be confirmed, the operation is not covered, and one uncovered operation sends the whole run to the CLI. The tests below are where a connector falls short **silently**, letting a PR through that the reference read would have held, so each is covered only on positive evidence:
+  - **Complete lists.** The open-PR list and the CI entries below are covered only when the tool shows it returns every item — it reads every page itself, or exposes a signal that ends the pagination (a total, a next-page cursor or link) that the run follows to the end. A page-number parameter with no such signal is not enough: a page the tool shortened by its own filtering looks exactly like the last page.
+  - **The CI gate** is covered only when the connector's tools — one or several — return every entry of the rollup the reference reads: every check run **and** every commit status on the PR's head, each with its own settled state, complete by the test above. Check runs alone, or one combined state without the individual statuses, do not cover it: a failing commit status, or a failing check hidden inside a summary, would read as green.
+  - **The lower-bound read** (release-age.md) is covered only by a tool returning the PR's commits with each commit's author login and `committedDate`, newest included. A list that may stop short of the newest commits gives an older bound, which makes a release look older than it is — the unsafe direction.
+  - **Upstream release lookups** are covered only by a tool that reads a release **by exact tag** from a repository other than the target, with its `published_at`. A tool confined to the target repository does not cover them.
+  - **The merge** is covered only by a tool that takes the repo's merge method, and the post-approval `mergeStateStatus` read only by one that returns it — without it a `BLOCKED` PR cannot be told from a mergeable one.
+  - **Writes** — approving a review, merging, updating a branch with the merge or the rebase form, creating, approving and merging the revert PR, closing with a comment, commenting — are covered by a tool that performs that write and reports whether it succeeded.
+- **Outside this choice**: local git (fetch, branches, revert, push) and the deploy tooling the verification plan uses (`kubectl`, Flux/Argo CLIs, `talosctl`, …) always run as written, whatever the method.
 
 ## List and filter Renovate PRs
 
@@ -30,6 +39,8 @@ gh pr list --state open --limit 100 \
   --json number,title,author,headRefName,labels,isDraft \
   --jq '.[] | {number, title, author: .author.login, isBot: .author.is_bot, branch: .headRefName, labels: [.labels[].name]}'
 ```
+
+`--limit` caps what is fetched: if the number of rows returned equals it, the list may be short — raise the limit and re-read before triaging.
 
 Filter directly by the known bot author (fast path for the common case):
 
@@ -87,16 +98,19 @@ CI green is a precondition for merge (workflow.md 2-3). Read the rolled-up statu
 # Human-readable checks summary
 gh pr checks {pr}
 
-# Programmatic rollup — every check must be SUCCESS (or neutral/skipped) to merge
+# Programmatic rollup — every check must be SUCCESS (or neutral/skipped) to merge.
+# The rollup is a union: a CheckRun carries status/conclusion, a StatusContext only state,
+# so select __typename and both shapes or a commit status reads as nulls.
 gh pr view {pr} --json statusCheckRollup \
-  --jq '.statusCheckRollup[] | {name: (.name // .context), status, conclusion}'
+  --jq '.statusCheckRollup[] | {type: .__typename, name: (.name // .context), status, conclusion, state}'
 ```
 
 Decision:
 
-- All checks `SUCCESS`/`NEUTRAL`/`SKIPPED` → CI gate passes.
+- Every `CheckRun` `COMPLETED` with conclusion `SUCCESS`/`NEUTRAL`/`SKIPPED`, and every `StatusContext` with state `SUCCESS` → CI gate passes.
 - Any `FAILURE`/`TIMED_OUT`/`CANCELLED` → **do not merge**; investigate and present as a finding.
 - `PENDING`/`IN_PROGRESS` → wait, then re-check.
+- An **empty** rollup, or any other value (`ERROR`, `ACTION_REQUIRED`, `STARTUP_FAILURE`, `STALE`, …) → not green: **do not merge**.
 
 ## Approve before merge
 

@@ -66,6 +66,12 @@ every one of those from the tracker and git on every run and may disagree with a
 in the declaration; this file records that disagreement rather than overriding it (B2-4,
 B2-6).
 
+**The platform access method does not cross either.** The gate resolves its own, against
+its own operations and under a stricter coverage test (merge-issue-prs SKILL.md "Platform
+Access"); the method this orchestrator resolved (SKILL.md "Platform Access") is not passed
+to it and is no evidence that the gate's reads are covered. A batch running on a connector
+may therefore find its merge gate on the CLI.
+
 **Integration mode is batch-only.** Single mode has no execution-plan approval and no
 dependency graph, so nothing in this file reaches it: a single-issue run never offers the
 mode and never changes its base branch.

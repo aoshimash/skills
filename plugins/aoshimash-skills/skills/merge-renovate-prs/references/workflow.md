@@ -30,7 +30,7 @@ The two modes share every phase below; they differ only at the marked decision p
 
 ## Phase 0: Discover repo conventions & verify preconditions
 
-Run once at the start. First confirm the repo is hosted on **GitHub** (a `github.com` remote in `git remote -v`, or `gh repo view` succeeds) — this skill is GitHub-only for v1; if the remote is GitLab or another host, say so and stop rather than guessing at non-GitHub commands. Then learn **how this repo ships a merged change to the running system** before you merge anything — because in many repos merging is only the first of several steps.
+Run once at the start. First confirm the repo is hosted on **GitHub** (a `github.com` remote in `git remote -v`, or, with the CLI, `gh repo view` succeeds) — this skill is GitHub-only for v1; if the remote is GitLab or another host, say so and stop rather than guessing at non-GitHub commands. Then resolve the platform access method once for the run (SKILL.md "Platform Access") before the first GitHub operation. Then learn **how this repo ships a merged change to the running system** before you merge anything — because in many repos merging is only the first of several steps.
 
 ### 0-1: Learn the deploy mechanism and merge method
 
@@ -81,7 +81,7 @@ Autonomous mode replaces human approval with machine-checkable safety. The split
 
 1. **Observability.** Run the read-only probes the verification plan needs and confirm they return data:
    - GitOps repo: controller status (e.g. Flux/Argo CLI or `kubectl` reads succeed), workload health is readable.
-   - CI-deploy or library repo: post-merge workflow runs on the default branch are readable (e.g. `gh run list --branch main`).
+   - CI-deploy or library repo: post-merge workflow runs on the default branch are readable (e.g., with the CLI, `gh run list --branch main`).
    - Any check in the plan whose probe fails (a dashboard the agent cannot read, a command that errors) is a failed precondition for the targets that depend on it.
 2. **Revert path.** Merging a revert PR must actually restore the running system under this repo's deploy mechanism. GitOps reconcile and CI-deploy-from-main both qualify. If the *repo-level* mechanism does not propagate a revert (e.g. deploys are manual-only), autonomous merging has no safety net.
    - Changes that a revert PR alone cannot undo (a node OS already upgraded, an irreversible DB migration) are handled **per-PR** in 2-5 — they defer unless an alternative rollback path is verified — not here.
@@ -198,20 +198,22 @@ Assemble the same package in both modes:
 
 If Renovate pushed a new commit to the PR since triage (its newest Renovate-authored commit differs from the one 1-3 saw), the update set or its age may have changed: re-run the release-age gate for this PR first, and wait it out per 1-3 if it no longer passes.
 
-On a *go* decision (autonomous) or user approval (interactive): first submit a GitHub review approval so branch-protection rules requiring at least one approved review are satisfied, then merge using the repo's merge method (see [platform-github.md](platform-github.md) for both commands).
+On a *go* decision (autonomous) or user approval (interactive): first submit a GitHub review approval so branch-protection rules requiring at least one approved review are satisfied, then merge using the repo's merge method (see [platform-github.md](platform-github.md) for both operations). With the CLI:
 
 ```bash
 gh pr review {pr} --approve --body "Dependency update reviewed: release notes read, CI green, risk assessed."
 gh pr merge {pr} --<method>
 ```
 
+If the merge call fails through the platform access method and its outcome cannot be confirmed from platform state, it is a *merge outcome unconfirmed*: stop the line and escalate (SKILL.md "Platform Access") — never defer it as unmerged on the strength of a git read.
+
 If the repo enforces CODEOWNERS or team-based required reviewers that an agent cannot satisfy, never bypass the check. Autonomous: defer the PR (reason: required review the agent cannot provide). Interactive: surface it and ask the user to approve.
 
-Resolve conflicting sibling PRs identified in 1-2: close the superseded PR. The survivor may need updating against `main`; the bot will rebase it on its **own schedule**, so if you need it current now, `gh pr update-branch` is the deterministic path.
+Resolve conflicting sibling PRs identified in 1-2: close the superseded PR. The survivor may need updating against `main`; the bot will rebase it on its **own schedule**, so if you need it current now, a branch update (with the CLI, `gh pr update-branch`) is the deterministic path.
 
 **main-divergence rule:** if the PR is behind `main`:
 
-- A **clean** `gh pr update-branch` (which creates a merge commit by default, or `--rebase`) that integrates `main` without conflicts → do it **without asking**, in either mode.
+- A **clean** branch update (with the CLI, `gh pr update-branch`, which creates a merge commit by default, or `--rebase`) that integrates `main` without conflicts → do it **without asking**, in either mode.
 - A merge that needs **manual conflict resolution** → conflict resolution is a judgment call that can change behavior. Autonomous: **defer**. Interactive: **ask the user**.
 
 ### 2-7: Run/route the pre/post work
@@ -260,6 +262,7 @@ Present what happened across the run:
 - **Deferred / human queue** — PRs held, each with its reason (C-class step, CI red, no rollback path, manual conflicts, undecidable risk, drift-blocked, ambiguous candidate) and what a human needs to do.
 - **Disruptive changes executed** — flagged prominently with what downtime occurred.
 - **Follow-ups** — anything that needs a human later.
+- **Platform access** — the method the run used (SKILL.md "Platform Access"), and any operation whose failure under it deferred a PR, stopped the line, or escalated.
 
 ### 3-2: Surface improvements (do not auto-fix)
 

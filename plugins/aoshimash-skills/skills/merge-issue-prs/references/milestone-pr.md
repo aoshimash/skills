@@ -152,8 +152,9 @@ human and no route to deletion. One merge strands it.
 **Where this is checked: immediately before candidate enumeration**, as the first step of
 Phase 1 ([SKILL.md](../SKILL.md)), not in Phase 3. Phases 1 and 2 both run *before* this table
 is consulted, so a gate that learns the milestone's state at Phase 3 has already merged. It
-reads the same `gh pr list --state all --head … --base …` this section specifies; the read is
-in Phase 3's toolbox, the *decision* is two phases earlier.
+reads the same milestone-PR list this section specifies (with the CLI,
+`gh pr list --state all --head … --base …`); the read is in Phase 3's toolbox, the *decision*
+is two phases earlier.
 
 Every open PR on a closed branch is deferred, recorded as the branch-level exclusion **B0**
 ([eligibility.md](eligibility.md), "Candidates"), with the human action stated per state:
@@ -540,7 +541,8 @@ current. Update the body:
 **The title is updated on the same schedule as the body, and independently of the flip.**
 The partial marker (M1, F4 rule 2) is applied whenever the milestone **is** partial — not
 only when the flip proceeds. F4 states its title rule among the flip's permission
-conditions, and the platform command sits next to `gh pr ready`, which together read as
+conditions, and the platform command sits next to the ready flip (with the CLI,
+`gh pr ready`), which together read as
 though a withheld flip leaves a stale title; they do not. This section is the authority:
 the dashboard's value is being **current**, and a milestone PR left a draft is exactly the
 one a human is glancing at mid-run. A draft still titled as if complete, while the status
@@ -549,7 +551,7 @@ from a PR list.
 
 So: a run that withholds the flip still corrects the title. A run that flips corrects it
 before flipping (F4 — the body, title included, is final first). The only thing the flip
-gates is `gh pr ready`.
+gates is the ready flip itself.
 
 A body update **never** affects the merge loop. It edits a PR body; it produces no commit
 and lands nothing on the branch. If the edit fails, retry once, then record a **stale
@@ -616,8 +618,9 @@ ready PR that isn't.
 
 - **As implement-issue's merge gate:** the orchestrator declares it, because it is the only
   party that can see whether implementers are still running. A declaration is only a
-  declaration when it carries all three of: **(a)** the vetted issue set it dispatched,
-  **(b)** a final per-issue status for every member of that set, and **(c)** an explicit
+  declaration when it carries all three of: **(a)** the issue set it dispatched — not vetted
+  by the orchestrator, but cross-checked against the vetted set this gate builds for itself in
+  Phase 0 — **(b)** a final per-issue status for every member of that set, and **(c)** an explicit
   assertion that no implementer is still running. Batch identity alone is not a declaration.
   Anything short of the three is treated as *not declared*, and the standalone derivation
   below applies instead — silently accepting a partial hand-off is how an early flip happens.
@@ -713,7 +716,8 @@ terminal state.
 
 **F3 — no outstanding escalation.** Three kinds block the flip:
 
-- A failed revert, or a branch head that is not what the loop left (workflow.md R-1…R-3):
+- A failed revert, a merge whose outcome could not be confirmed (SKILL.md "Platform
+  Access"), or a branch head that is not what the loop left (workflow.md R-1…R-3):
   the branch's contents are not established, and nothing gets flipped on an unestablished
   branch.
 - **Any linking-keyword reference outside the managed block** (M2). Merging acts on it, and

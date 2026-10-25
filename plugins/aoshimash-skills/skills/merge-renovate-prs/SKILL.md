@@ -52,8 +52,9 @@ below use capability terms; map them to your environment as follows.
 | Capability | With native support (example) | Fallback |
 |---|---|---|
 | **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`) | Numbered options as plain text; wait for the user's reply |
+| **Platform access** — read and write GitHub: PRs, checks, reviews, merges, comments, upstream releases | A connector or MCP server for GitHub, only when it provably covers every operation the run can use (see [Platform Access](#platform-access)) | The `gh` CLI; with neither, ask the user how to reach GitHub, or stop and merge nothing when no user is reachable |
 
-(User choice is used by interactive mode's gates, by autonomous mode's escalation path — a failed revert always comes back to the human — and by the Phase 0 knowledge-gap question when a high-blast-radius target has no human-defined verification checks.)
+(User choice is used by interactive mode's gates, by autonomous mode's escalation path — a failed revert always comes back to the human — and by the Phase 0 knowledge-gap question when a high-blast-radius target has no human-defined verification checks. Platform access is resolved once, in Phase 0, and judged strictly: an operation a connector cannot be shown to perform exactly as the reference command does sends the whole run to the CLI.)
 
 ## Workflow
 
@@ -63,10 +64,30 @@ Establish how this repo ships code, and whether autonomous mode is safe here, be
 
 **Summary:**
 
+0. Confirm the repo is on GitHub, then **resolve the platform access method** before the first GitHub operation — see [Platform Access](#platform-access).
 1. Read `AGENTS.md` / `CLAUDE.md` / `README` / `docs/` and CI config to learn the **deploy mechanism** (GitOps Flux/Argo vs. CI pipeline vs. manual), the **merge method** (merge / squash / rebase), and any **upgrade runbooks** or known "merge ≠ apply" cases (e.g. a `talosctl upgrade-k8s` step, a console-only Terraform runtime bump).
 2. Read the Renovate config — `renovate.json5` or `.github/renovate.json` — to learn configured `branchPrefix`, labels, and bot identity (feeds detection in Phase 1), the **cooldown** (`minimumReleaseAge`, per `packageRules`), and the **grouping rules** with the reasons their comments give.
 3. Detect **start-of-run drift**: PRs already merged but not yet applied to the live environment. Autonomous: exclude PRs touching the drifted component from this run (defer to the human queue); interactive: ask whether to resolve the drift first.
 4. **Assemble the verification plan & verify autonomous preconditions** (autonomous mode only): build the per-target functioning checks from **human-authored sources** — the user's request, then repo runbooks/docs, then the repo-type baseline. A high-blast-radius target with no human-defined checks: ask once at run start (user choice), or defer in an unattended launch — a knowledge gate, not an approval gate. Then verify by probing: (a) **observability** — the planned checks are actually readable (cluster/controller status, or post-merge CI on the default branch); (b) **revert path** — merging a revert PR actually restores the running system under this repo's deploy mechanism. If either fails, **fall back to interactive mode and say why**.
+
+### Platform Access
+
+The platform guide's commands specify each operation; they do not fix the tool that performs it. In autonomous mode this skill merges and reverts without per-PR approval, so its coverage test is strict and its failure direction is always the CLI, never a connector. Resolve the method **once per run**, after confirming the repo is on GitHub and before the first GitHub operation, taking the first that applies:
+
+1. **Named by the user** in this conversation → use it, if it covers every operation the run can use (coverage is defined in the platform guide's Access Method section). A named method that does not is never used for part of the run: name the operations it does not cover and ask whether to use the CLI instead or stop; with no user reachable, stop and report, merging nothing.
+2. **Connector** — a connector or MCP server for GitHub is available in this session and covers every operation the run can use → use it. Coverage is judged against autonomous mode's whole run — triage, release-age reads, approval, merge, branch update, the revert PR, comments — since both modes share every phase. Whatever cannot be confirmed from the connector's own tool descriptions and schemas is not covered, and **one uncovered operation sends the whole run to the CLI**: operations are never split between methods. A connector counts as available only when its tools can be called now; one listed as needing authentication is not, and the run does not ask the user to authenticate it.
+3. **CLI** — `gh` is installed and authenticated → use the guide's commands.
+4. **Neither** → ask the user how to reach GitHub; with no user reachable, stop and report, merging nothing.
+
+**Keep the method for the whole run, and never fail over to another.** There is no re-resolution boundary: the fallback from autonomous to interactive mode uses the same operations. A re-read a step already prescribes (re-checking CI that is still pending) runs through the same method. When the method fails, or proves unable to perform an operation, that operation's result is **unknown**, and an unknown never lets a PR through:
+
+- **Before the merge** — triage, the release-age gate, CI, the pre-check reads, the approval — the PR is not merged: autonomous defers it to the human queue and the loop continues; interactive surfaces it.
+- **From the merge call onward** the merge may have landed — a call that timed out can still complete on the server after the client gave up — so a method failure is never a deferral. If the merge's outcome cannot be confirmed from platform state, do not infer it from git: an unmoved default branch read just afterwards proves nothing. **Stop the line and escalate to the human** as a *merge outcome unconfirmed*, naming the PR and the default branch's head as git reports it (or that git could not be read either); no re-attempt and no revert, since no revert target is established. Once the merge is confirmed, verification that cannot be completed is a **verification failure** (auto-revert, [references/verification.md](references/verification.md)), and a revert PR the method cannot create, approve or merge is a **revert failure**, which escalates to the human immediately.
+- A documentation comment that cannot be posted is reported, not retried through another method.
+
+Name the method in the Phase 3 report.
+
+**Known limits.** The guide's CLI commands are the verified path. A connector's coverage is judged from its own tool descriptions and schemas — the runtime behaviour behind them is not observed — and no connector path has been exercised by this skill's evaluations. The one GitHub MCP server desk-checked against the Access Method test, from its README, fails it on the CI gate ([references/eval-cases.md](references/eval-cases.md) Case 13), so in practice the CLI is expected to remain the path.
 
 ### Phase 1: Enumerate & triage
 
@@ -82,7 +103,7 @@ Find the Renovate PRs, understand how they relate, and propose an order. See [re
 
 ### Phase 2: Per-PR loop (STRICTLY SERIAL — one change in flight)
 
-For each PR, in order, run the full sequence below before starting the next. See [references/workflow.md](references/workflow.md) for the detailed per-PR procedure, [references/verification.md](references/verification.md) for verification and revert, and [references/platform-github.md](references/platform-github.md) for the `gh` commands.
+For each PR, in order, run the full sequence below before starting the next. See [references/workflow.md](references/workflow.md) for the detailed per-PR procedure, [references/verification.md](references/verification.md) for verification and revert, and [references/platform-github.md](references/platform-github.md) for the reference commands.
 
 **Summary per PR:**
 
@@ -98,8 +119,8 @@ For each PR, in order, run the full sequence below before starting the next. See
    - Autonomous **defer conditions** — any of these sends the PR to the human queue *unmerged*, and the loop continues: contains C-class work; no verified revert/rollback path for an irreversible change; CI red; manual conflict resolution needed; risk the pre-check cannot resolve. **A verified rollback path is a merge precondition.**
    - Autonomous **downtime handling:** disruptive changes (node reboots, single-replica restarts, DB failover) are *not* a gate — but they get extended settle/verification time and are flagged prominently in the report.
    - Interactive: present risk + required work + rollback plan; explicit approval before merge; prominent downtime confirmation for disruptive changes.
-7. **Approve, then merge** — if Renovate pushed since triage, re-run the release-age gate first. Then submit a GitHub review approval (`gh pr review {pr} --approve`) before `gh pr merge`, so branch-protection rules requiring an approved review are satisfied. Resolve conflicting sibling PRs (close superseded ones). See [references/platform-github.md](references/platform-github.md).
-8. **main divergence:** a clean `gh pr update-branch` → do it without asking; manual conflict resolution needed → autonomous: defer; interactive: ask the user.
+7. **Approve, then merge** — if Renovate pushed since triage, re-run the release-age gate first. Then submit a GitHub review approval before the merge (with the CLI, `gh pr review {pr} --approve`, then `gh pr merge`), so branch-protection rules requiring an approved review are satisfied. Resolve conflicting sibling PRs (close superseded ones). See [references/platform-github.md](references/platform-github.md).
+8. **main divergence:** a clean branch update (with the CLI, `gh pr update-branch`) → do it without asking; manual conflict resolution needed → autonomous: defer; interactive: ask the user.
 9. **Run the pre/post work** per its A/B/C class (C never reaches this step in autonomous mode).
 10. **Document on the PR:** manual steps, and a closing "applied & verified" (or "reverted") comment — only when real steps/risk/revert exist, in English.
 11. **Verify it is actually working — three states:** merged → applied/reconciled (poll/wait for async) → functioning (health checks, no regression). Adapt the checks to the repo type (GitOps cluster health vs. post-merge CI on the default branch). See [references/verification.md](references/verification.md).
@@ -110,7 +131,7 @@ For each PR, in order, run the full sequence below before starting the next. See
 
 ### Phase 3: Wrap-up
 
-1. Report what was **merged & verified / reverted (with cause) / waiting on the cooldown (with eligible date) / deferred to the human queue (with reasons) / followed up**.
+1. Report what was **merged & verified / reverted (with cause) / waiting on the cooldown (with eligible date) / deferred to the human queue (with reasons) / followed up**, and the **platform access method** the run used.
 2. Surface (do not auto-fix) any **doc drift** or **repeatedly-manual** packages noticed during the run. For a package that needed the same manual apply again, **propose** adding a Renovate `prBodyNotes` entry so the note appears automatically on every future PR for it. A PR held by the lower bound for a **second consecutive run** gets a proposal to reconfigure its slow-to-age member.
 3. **Grouping proposals** — when the run shows a Renovate group should be split (one member blocked or reverted the rest, members need different handling, an ordering edge inside the group, a member that never ages) or separate PRs should be combined (lockstep updates, one upstream release split across PRs), **propose** the `packageRules` change with the run's evidence, the config's own stated rationale addressed, and the cost. Evidence from this run or the group's recorded history only — never speculation. See workflow.md 3-3.
 
@@ -120,5 +141,5 @@ For each PR, in order, run the full sequence below before starting the next. See
 - [references/release-age.md](references/release-age.md) — Release-age gate: cooldown value resolution, upstream release dates with sanity check, Renovate-commit lower bound, cooldown wait, repeated-wait record, known limits.
 - [references/detection.md](references/detection.md) — Composite Renovate-PR detection: signals, config cross-check, multi-instance dedupe, ambiguity handling.
 - [references/verification.md](references/verification.md) — Three-state verification per repo type, downtime classification, rollback-readiness as a merge precondition, residue-vs-failure, auto-revert and escalation.
-- [references/platform-github.md](references/platform-github.md) — `gh` commands for listing/filtering/reading/merging/commenting; CI status as a gate; creating a revert PR.
+- [references/platform-github.md](references/platform-github.md) — GitHub operations, with `gh` reference commands and the connector-coverage test, for listing/filtering/reading/merging/commenting; CI status as a gate; creating a revert PR.
 - [references/eval-cases.md](references/eval-cases.md) — Human-readable index of the eval scenarios.

@@ -156,6 +156,35 @@ The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 
 - Addresses the config comment's rationale and states the cost of the split.
 - Offers the config change without making it; proposes nothing for members that caused no problem.
 
+### Case 12: Unauthenticated connector, authenticated CLI (`platform-access-unauthenticated-connector`) — autonomous
+
+**Setup** (observed in a real session on 2026-10-25): the session lists a GitHub connector (`plugin:engineering:github`) among MCP servers that require authentication before their tools can be used; `gh auth status` reports a logged-in account. The user asks to process the open Renovate PRs.
+
+**Expected behavior**:
+- Confirms the repo is on GitHub, then resolves the access method once, before the first GitHub operation: the connector is not available, so the `gh` CLI.
+- Asks nothing about access and does not ask the user to authenticate the connector.
+- Every GitHub operation in the run goes through the CLI; git and the deploy tooling run as written.
+- The Phase 3 report names the method.
+
+### Case 13: A real connector that fails the coverage test (`platform-access-connector-fails-coverage`) — autonomous
+
+**Setup**: `github/github-mcp-server`, as documented in its README at commit `f385262` (read on 2026-10-25), is connected and authenticated; `gh` is authenticated too. For this run its relevant tools are `pull_request_read` (`get`, `get_status` — "combined commit status" —, `get_check_runs`, `get_commits`, `get_comments`, …, paged by `page` / `perPage`), `get_release_by_tag`, `merge_pull_request` (with `merge_method`), `pull_request_review_write`, and `update_pull_request_branch` (no rebase option).
+
+**Expected behavior**:
+- Judges coverage against autonomous mode's whole run.
+- Finds the **CI gate** uncovered — check runs and a combined status come from separate tools, and neither the individual statuses nor an end to the pages can be confirmed — and at least one more uncovered operation: the branch update's rebase form (no rebase option), the `mergeStateStatus` read (not shown to be returned), or the upstream release lookup (`published_at` not shown).
+- Runs the whole run on the CLI, including operations the connector appears to offer, such as the merge: operations are never split between methods.
+- The Phase 3 report names the CLI.
+
+### Case 14: The method fails at the merge (`platform-access-merge-call-failure`) — autonomous
+
+**Setup**: the run resolved the `gh` CLI; a GitHub connector is also available. The first PR passes every gate and is approved; `gh pr merge` then fails with a network timeout, and the confirmation read fails the same way. Variant **(a)**: `git fetch` shows the default branch has moved. Variant **(b)**: it has not moved.
+
+**Expected behavior**:
+- Does not retry the merge or the confirmation through the connector.
+- In **both** variants the outcome cannot be confirmed from platform state and git is not used to infer it — in (b) an unmoved branch read just afterwards does not prove the merge did not land. Stops the line and escalates to the human as a *merge outcome unconfirmed*, naming the PR and the default branch's head; no re-attempt, no auto-revert (no revert target is established), and the PR is not reported as deferred.
+- Processes no further PRs; the report names the method and the failed operation.
+
 ## Evaluation Log
 
 > Note: the 2026-06-21 results below predate the 2026-07-23 autonomous redesign; they were run against the interactive-only version of the skill (Cases 1–4). Cases 5–9 have not been benchmarked yet.
@@ -212,3 +241,19 @@ Both with-skill Case 11 runs also proposed splitting Home Assistant out, citing 
 | 2026-06-21 | Case 1–4 | with 1.00 / base 0.66 | with-skill beats baseline on 1–3; Case 4 non-discriminating (see above). |
 | 2026-10-19 | Case 10 | with 8/8 / base 5/8 | Release-age gate; self-graded. |
 | 2026-10-19 | Case 11 | with 8/8 / base 7/8 | Grouping proposal; weakly discriminating, self-graded. |
+| 2026-10-25 | Cases 12–14 | desk-checked | Platform access resolution; separate agent instance (see below). |
+
+### 2026-10-25 — Platform access resolution (Cases 12–14)
+
+The skill no longer hard-requires `gh`. SKILL.md gained "Platform Access" and an Environment Adaptation row; `platform-github.md` replaced "Prerequisites" with "Access Method", which makes the commands (and release-age.md's) the reference specification and defines connector coverage; the `gh` commands written in SKILL.md steps 7–8, workflow.md, verification.md and detection.md are now CLI examples. As in merge-issue-prs, coverage is judged against the whole autonomous run, one uncovered operation sends the run to the CLI, there is no fail-over, and a merge call whose outcome platform state cannot confirm escalates as *merge outcome unconfirmed* rather than being read from git.
+
+Two reference-command fixes the coverage test depends on, made in the same pass:
+- **The CI rollup projected only `status`/`conclusion`**, so a `StatusContext` read as nulls. It now selects `__typename` and `state`, and the decision states per-type rules, plus *empty or any other value → not green*. Run as written against aoshimash/skills#146 (a `CheckRun`) and aoshimash/homelab-k8s#389, whose rollup carries Renovate's own `renovate/stability-days` `StatusContext` — exactly the entry the old projection nulled.
+- **The open-PR list** now states the `--limit` row-count check.
+
+Case 12's fixture is the session state observed on 2026-10-25; Case 13's is `github/github-mcp-server` as its README documents it at commit `f385262` (a reading of the README, not a run).
+
+Desk-check (separate agent instance, round 1): Case 12 Pass; 13 and 14 Conditional. Fixed: Case 13 expected a rebase-update finding the skill does not derive and called `get_release_by_tag` covered although the README does not show `published_at` (expectation reworded); Case 14's defer-and-stop contradicted "deferred … the loop continues" (both variants now escalate, and SKILL.md says to name the PR and branch head); the rewritten CI decision passed an empty rollup vacuously (now not green).
+
+Known limit: only the CLI path is verified; no connector path was exercised.
+

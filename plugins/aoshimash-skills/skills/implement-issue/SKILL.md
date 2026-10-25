@@ -211,9 +211,10 @@ Areas ([references/workflow.md](references/workflow.md) 3-1).
 **Known limits.** The guide's CLI commands are the verified path. Whether a
 connector covers an operation is judged from that connector's own tool
 descriptions and schemas, and a connector path has not been exercised by this
-skill's evaluations. Integration mode's merge gate reaches GitHub through the
-merge-issue-prs skill's own platform guide, which this resolution does not
-govern.
+skill's evaluations. Integration mode's merge gate resolves its own method
+under merge-issue-prs's stricter coverage test; this resolution does not
+govern it and is not handed to it
+([references/batch.md](references/batch.md) Merge Modes).
 
 There is no implementation-location question: Single mode works in a git
 worktree by default, reusing one the host environment already prepared for
