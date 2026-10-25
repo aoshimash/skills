@@ -99,7 +99,7 @@ Plan-local placeholders must be replaced with real issue numbers before they
 mislead readers — platforms like GitHub auto-link any `#N`, so a leftover `#1`
 links to whatever unrelated issue holds that number.
 
-1. Fetch the current parent issue body (e.g.
+1. Fetch the current parent issue body (with the GitHub CLI,
    `gh issue view <number> --json body -q '.body'`).
 2. In the `## Task Overview` table only:
    - **Task column**: prepend the real reference — `<title>` becomes
@@ -107,8 +107,8 @@ links to whatever unrelated issue holds that number.
    - **Dependencies column**: replace each plan-local reference (`#1`, `#2`)
      with the corresponding real issue number
    - Change nothing outside the table rows.
-3. Write the body back with the platform CLI (e.g.
-   `gh issue edit <parent-number> --body-file <file>`).
+3. Write the body back through the run's platform access method (with the
+   GitHub CLI, `gh issue edit <parent-number> --body-file <file>`).
 
 Example — before (plan-local numbers):
 
@@ -186,7 +186,8 @@ no plan or research artifacts.
 
 Output the parent issue URL (or the single issue URL), the sub-issue and
 grandchild URLs with titles and dependencies, and the hierarchy as an ASCII
-tree. Mention where the research comment was posted.
+tree. Mention where the research comment was posted, and the platform access
+method the run used (SKILL.md "Platform Access").
 
 ```
 Created issue hierarchy:

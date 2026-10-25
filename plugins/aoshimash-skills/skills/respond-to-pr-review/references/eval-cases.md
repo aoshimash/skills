@@ -164,6 +164,25 @@ and its agent instructions have no `## Code Hosting` section.
 
 ---
 
+## Case 10: Connector configured but unauthenticated, CLI authenticated
+
+**Setup** (observed in a real session on 2026-10-25 in this repository): the session
+lists a GitHub connector (`plugin:engineering:github`) among servers that require
+authentication before their tools can be used; `gh auth status` reports a logged-in
+account. The current branch has an open PR with review comments.
+
+**Expected behavior**:
+- Phase 0 resolves the access method once: the connector is unavailable, so the `gh` CLI
+- The PR confirmation gate shows `(platform access: gh CLI)`
+- Every fetch and every reply in the run goes through the CLI
+
+**Verification**:
+- [ ] No question about how to reach GitHub, and no request to authenticate the connector
+- [ ] The Phase 0 gate names the method
+- [ ] No operation switches to another method mid-run
+
+---
+
 ## Case 9: Pattern Broadening — drip-feed bot review
 
 **Setup**: PR modifying 4 files. A bot reviewer (e.g., DeepSource) posts one comment:
@@ -205,6 +224,7 @@ and its agent instructions have no `## Code Hosting` section.
 | 2026-04-08 | Case 1 (PR #44) | with_skill 5/6 criteria passed | Devin bot comments on refactored skill. Bot tone correct, grouping correct, batch approval worked. Verification Gate criterion not testable (old skill version loaded from marketplace). |
 | 2026-04-08 | Case 2-3, 5-8 | Not tested | Require specific PR scenarios (out-of-scope comments, informational-only, verification gate mismatch, GitLab MR) not available in current environment |
 | 2026-07-27 | Case 8 (GitLab MR) | Desk-check — Fail → Fixed | Every documented `glab api ... --jq` invocation would have exited with "unknown flag"; corrected to `jq` pipes (see below) |
+| 2026-10-25 | Case 10 (unauthenticated connector) | Desk-check — Pass | Platform access resolution added (see below); separate agent instance |
 
 ### 2026-07-27 — `glab api` has no `--jq` flag (fact correction)
 
@@ -238,3 +258,30 @@ Phase 0 and `workflow.md` 1-2 were removed. Case 8 (GitLab MR review) was
 replaced with "Non-GitHub remote", which checks that the skill stops in Phase 0.
 Desk-check: **Pass** — Phase 0 step 1 stops before any command runs. Entries
 above that mention GitLab are historical.
+
+### 2026-10-25 — Platform access resolution
+
+Platform access is no longer pinned to one CLI per platform. SKILL.md gained a
+"Platform Access" subsection and an Environment Adaptation row; each
+`platform-*.md` replaced "Prerequisites" with "Access Method", which makes the
+guide's commands the reference specification of each operation and defines
+when a connector covers one. The order is user-named → available connector
+that covers the operations → the guide's CLI → ask, resolved once, with no
+mid-run switching except at one stated boundary.
+
+**Placement.** The resolution rule lives in SKILL.md (one place per skill) and
+the coverage definition in each platform guide, next to the commands it is
+judged against. Skills are installed independently, so the rule is repeated in
+each of the three skills rather than shared.
+
+**Known limit.** Only the CLI path is verified. Connector coverage is judged
+from the connector's own tool descriptions and schemas, and no connector path
+was exercised in this evaluation.
+
+Desk-checked by a separate agent instance against the shipped text. Case 10
+passed. Two gaps were found and fixed:
+- "Available" was undefined. It now means the connector's tools can be called;
+  a connector listed as needing authentication is not available.
+- The Phase 0 gate's **Change** option did not say what happens to the method.
+  It now keeps the method; only a method the user names at the gate replaces it,
+  and only before any comment is fetched.

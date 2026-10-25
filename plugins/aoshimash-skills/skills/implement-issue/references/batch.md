@@ -140,7 +140,7 @@ only ever written in prose.
 **1. Platform relationship records (primary).** Read the structured relationships the
 tracker itself holds:
 
-- GitHub: the `blockedBy` field of `gh issue view`/`gh issue list --json` — see [platform-github.md](platform-github.md) "Platform-Level Issue Relationships" for fields, availability, and fallbacks.
+- GitHub: the issue's `blockedBy` relationship (with the CLI, the `blockedBy` field of `gh issue view`/`gh issue list --json`) — see [platform-github.md](platform-github.md) "Platform-Level Issue Relationships" for fields, availability, and fallbacks.
 - Backlog: no built-in blocking; body parsing is the only source — see [platform-backlog.md](platform-backlog.md).
 
 **2. Issue body (fallback).** Scan each body for dependency declarations, since an issue
@@ -503,16 +503,17 @@ Run each issue's implementer with an instruction set that includes:
 
 1. The full issue body and issue number. When the batch source is a parent issue, also include the parent issue's body — its Background, Design Decisions, and Task Overview are shared context for every sub-issue.
 2. The absolute path to the worktree already created for it (step B2-1) — the implementer works there, it does not create its own.
-3. The absolute paths to this skill's [workflow.md](workflow.md) and the relevant `platform-*.md` guide, with the instruction:
+3. The absolute paths to this skill's [workflow.md](workflow.md) and the relevant `platform-*.md` guide, plus the platform access method the orchestrator resolved for each platform (SKILL.md "Platform Access") — the implementer uses it and does not resolve its own — with the instruction:
    > "Read these files, then execute workflow.md Phases 1–3 in the **Orchestrated context** inside the given worktree. Create the PR as a draft against `<base-branch>` and leave it a draft. Skip the review gates (3-2), the automated review response (3-4), the ready flip (3-5), and decision harvesting (3-7) — the orchestrator does all four; do run CI monitoring (3-3) and the issue comment (3-6). Then return exactly one status line (`DONE` / `DONE_WITH_CONCERNS` / `NEEDS_CONTEXT` / `BLOCKED`) plus the PR URL or failure details, per workflow.md step 3-8 — **at most 10 further lines**, with everything longer left in the PR body or the kept worktree, named rather than reproduced."
 4. The path to the project's agent instructions (e.g. CLAUDE.md, AGENTS.md), when the project has one.
-5. **For a stacked PR** (standard mode), the dependency's head branch as the **base**, the
-   command that targets it (`gh pr create --draft --base <dependency-head-branch> …`), and the
+5. **For a stacked PR** (standard mode), the dependency's head branch as the **base**, how the
+   PR-creation operation targets it (with the GitHub CLI,
+   `gh pr create --draft --base <dependency-head-branch> …`), and the
    `## Stack` section to put first in the body, filled in ([stacked-prs.md](stacked-prs.md) S3).
    The implementer must not retarget the PR at the default branch.
 6. **In integration mode**, three additions the implementer cannot derive on its own:
-   - The **base branch** by name, and the platform command that targets it (on GitHub,
-     `gh pr create --draft --base <integration-branch> …` — see
+   - The **base branch** by name, and how the PR-creation operation targets it (with the
+     GitHub CLI, `gh pr create --draft --base <integration-branch> …` — see
      [platform-github.md](platform-github.md)). The default branch is not the base, and an
      implementer that defaults to it produces a PR the merge gate will not even consider a
      candidate.
@@ -899,7 +900,7 @@ Batch Complete: N/M issues implemented
 | #105 | Integration tests | ⏭️ Skipped (dep) | — |
 ```
 
-For blocked issues, explain what went wrong and suggest next steps. If the issue tracker supports it, post a summary comment on the parent issue.
+For blocked issues, explain what went wrong and suggest next steps. Name the platform access method used for each platform (SKILL.md "Platform Access"). If the issue tracker supports it, post a summary comment on the parent issue.
 
 **Standard mode with stacks:** restack once more before printing this summary
 ([stacked-prs.md](stacked-prs.md) S6), so a push during the last group is not left stale. A

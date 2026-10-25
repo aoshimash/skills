@@ -251,7 +251,8 @@ judgment and ends with what doesn't:
 
 ## Risk Areas
 <what deserves reviewer attention: unresolved concerns, failing checks,
-subtle changes; "None" if none>
+subtle changes, a platform access method other than the guide's CLI;
+"None" if none>
 
 ## Acceptance Criteria → Evidence
 - [x] <criterion> — <how it was verified: test name, command output, diff ref>
@@ -379,6 +380,8 @@ batch (batch.md B3-1).
   candidates skipped, already recorded, or not offered. Omitted entirely when
   there were no candidates.
 - **Review focus**: the few places a human reviewer should look first.
+- **Platform access**: the method used for each platform (SKILL.md "Platform
+  Access").
 - **Gates**: one line per gate — self-review rounds/findings, security review,
   Stage 1, Stage 2, CI, and automated review (which reviewers were handled, how
   many rounds, what remains — or that none were configured).

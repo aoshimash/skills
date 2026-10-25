@@ -83,6 +83,7 @@ below use capability terms; map them to your environment as follows.
 |---|---|---|
 | **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`, which can carry several questions in one round) | Numbered options as plain text; wait for the user's reply |
 | **Separate agent instance** — run a task in a fresh context that has not seen this conversation | Subagent dispatch (e.g. Claude Code's Task tool) | Run sequentially in the current context; for verification, mark the result `SELF-REVIEWED` in the artifact it lands in (e.g. the PR body) |
+| **Platform access** — read and write the issue tracker and the code host | A connector or MCP server for the platform, preferred when it covers the operations the run uses (see [Platform Access](#platform-access)) | The platform guide's CLI (`gh`, `bee`); with neither, ask how to reach the platform, or stop when no user is reachable |
 | **Model selection** — run a separate agent instance on a chosen model | Per-instance model override (e.g. Claude Code's Task tool `model` parameter, or an agent definition's `model` frontmatter) | Run every instance on the session's default model — the implementer classification is skipped entirely rather than approximated, and the reviewer-stronger-than-implementer recommendation is unavailable |
 | **Security review** — security-focused review of the pending diff | Dedicated command (e.g. Claude Code's `/security-review`) | Review the diff yourself against the checklist in [references/workflow.md](references/workflow.md) step 2-6 |
 | **User-level configuration** — a durable instruction store belonging to the user, outside any repository | User-level instruction file (e.g. `~/.claude/CLAUDE.md` on Claude Code) | No such store: cross-repository preferences cannot be promoted — offer repository scope or skip (see [references/harvesting.md](references/harvesting.md) C) |
@@ -150,6 +151,9 @@ nothing; its implementer is the session itself, on the model the user chose.
    case). Read the platform guide:
    - GitHub: [references/platform-github.md](references/platform-github.md)
    - Backlog: [references/platform-backlog.md](references/platform-backlog.md)
+
+   Then resolve the platform access method for each platform the run touches —
+   see [Platform Access](#platform-access).
 2. Obtain the issue identifier(s). **If the request names no issue, no batch
    source, and uses no batch phrasing** ("issue を実装して", "implement my
    issues" — but not "run sprint"), the source is
@@ -183,6 +187,44 @@ nothing; its implementer is the session itself, on the model the user chose.
    implement" / "Pick another issue" / "Abort". Batch mode: closed issues in
    the source set are filtered out silently; if all are closed, inform the
    user and stop.
+
+### Platform Access
+
+The platform guide's commands specify each operation; they do not fix the
+tool that performs it. Resolve the method **once per platform** — the issue
+tracker and the code host separately in the Backlog + GitHub case — before
+the first operation against it, taking the first that applies:
+
+1. **Named by the user** in this conversation → use it.
+2. **Connector** — a connector or MCP server for the platform is available in
+   this session and covers every operation the run's mode uses (coverage is
+   defined in the platform guide's Access Method section) → use it. Phase 0
+   judges coverage against Single mode's operations, since the mode is not yet
+   known. A connector counts as available only when its tools can be called
+   now; one listed as needing authentication is not, and the run does not ask
+   the user to authenticate it.
+3. **CLI** — the platform guide's CLI is installed and authenticated → use the
+   guide's commands.
+4. **Neither** → ask the user how to reach the platform; with no user
+   reachable, stop and report rather than guess.
+
+Keep the method for the whole run. If it fails or proves unable to perform an
+operation partway through, do not retry that operation through another
+method: treat the result as unknown and resolve it the way that step's
+failures already resolve. One boundary is the exception — routing into Batch
+mode (step 3) resolves again, before any Batch-only operation runs, when the
+method does not cover them. Batch implementers receive the orchestrator's
+resolved method in their dispatch and do not resolve their own
+([references/batch.md](references/batch.md) B2-2). Name the method in the
+recap; when it is not the guide's CLI, also name it under the PR body's Risk
+Areas ([references/workflow.md](references/workflow.md) 3-1).
+
+**Known limits.** The guide's CLI commands are the verified path. Whether a
+connector covers an operation is judged from that connector's own tool
+descriptions and schemas, and a connector path has not been exercised by this
+skill's evaluations. Integration mode's merge gate reaches GitHub through the
+merge-issue-prs skill's own platform guide, which this resolution does not
+govern.
 
 There is no implementation-location question: Single mode works in a git
 worktree by default, reusing one the host environment already prepared for
@@ -350,6 +392,6 @@ than starting new work.
 - [references/review-gates.md](references/review-gates.md) — Two-stage review procedure (Stage 1 spec compliance, Stage 2 code quality, Stage 2.5 pattern propagation)
 - [references/automated-review.md](references/automated-review.md) — Responding to repository-configured automated (bot/AI) reviewers before the draft → ready flip
 - [references/harvesting.md](references/harvesting.md) — Post-PR promotion of generalizable decisions into repository agent instructions or user-level configuration
-- [references/platform-github.md](references/platform-github.md) — GitHub CLI commands
-- [references/platform-backlog.md](references/platform-backlog.md) — Backlog CLI commands (bee)
+- [references/platform-github.md](references/platform-github.md) — GitHub operations, with `gh` CLI reference commands
+- [references/platform-backlog.md](references/platform-backlog.md) — Backlog operations, with `bee` CLI reference commands
 - [references/eval-cases.md](references/eval-cases.md) — Evaluation test cases

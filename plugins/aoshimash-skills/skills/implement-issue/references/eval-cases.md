@@ -11,9 +11,10 @@ content-based implementer model selection (batch.md B2-1, model-selection.md),
 dispatch (batch.md B1-5, batch-reentry.md R8), 80–84 evaluate the batch
 orchestrator's context budget (batch.md, context-budget.md), 85–90
 evaluate the no-identifier assigned-issue source and priority ranking
-(SKILL.md Phase 0, batch.md B1-2 step 5 and B1-3, priority-order.md), and
+(SKILL.md Phase 0, batch.md B1-2 step 5 and B1-3, priority-order.md),
 91–98 evaluate standard mode's stacked PRs (batch.md Merge Modes, B2-1, B2-5,
-B2-6, B3, stacked-prs.md).
+B2-6, B3, stacked-prs.md), and 99–101 evaluate platform access resolution
+(SKILL.md "Platform Access").
 
 ## Quality Criteria
 
@@ -75,6 +76,7 @@ B2-6, B3, stacked-prs.md).
 | 54 | Stacking needs CI that runs on a stacked PR, and fails closed | Before stacking is offered, every workflow that runs checks on an open PR is read for a base-branch filter; one that excludes arbitrary branches, CI that cannot be read, or a trigger that cannot be parsed makes stacking unavailable for the batch, with the workflow or reason named in the plan and every PR based on the default branch; a post-merge-only workflow is not counted, and a repository with no PR CI may stack |
 | 55 | Restacking is safe, and `HELD` is not failure | Restacking runs at every group boundary for delivered stacked PRs and when a batch is re-invoked, over every PR carrying a `## Stack` section, bottom-up, in a fresh detached worktree: a moved base is merged in, a merged base PR's own base becomes the new base (unless it already is) and is merged in, a base closed unmerged is reported; there is never a rebase, reset or force-push; a conflicting merge is aborted with nothing pushed; a PR with human activity, or a read that may be incomplete, is reported rather than restacked. `HELD` cascades `HELD`, never `SKIPPED`, is listed with what it waits for, and is dispatched later only under a plan approved in that session |
 | 56 | A stack stays plain | No stack is registered with GitHub's native stacked PRs — no `gh stack` command, no Stacks API write — whether or not the extension is installed or the API answers; a stack a human registered is restacked by S6 unchanged, never by a force-push, and a conflicting merge of a rewritten branch into a PR outside the stack is aborted and reported |
+| 57 | Platform access resolved once per platform, and handed down | Each platform's method is chosen before its first operation in the order user-named → connector that covers the mode's operations → CLI → ask (stop when no user is reachable); it changes only at the Batch-routing boundary; a failed operation is resolved as that step's failures resolve, never retried through another method; Batch implementers use the orchestrator's method; the recap names it, and Risk Areas names a non-CLI method |
 
 ## Single-Mode Test Cases
 
@@ -1687,6 +1689,49 @@ two branches shared), so it is aborted, nothing is pushed, and #204 is reported 
 No branch is reset to GitHub's rebased history, and nothing is force-pushed.
 
 **Criteria to test**: 56, 55
+
+## Platform Access Test Cases
+
+Cases 99–101 evaluate SKILL.md "Platform Access".
+
+### Case 99: Connector configured but unauthenticated, CLI authenticated
+
+**Scenario** (observed in a real session on 2026-10-25 in this repository): the session
+lists a GitHub connector (`plugin:engineering:github`) among servers that require
+authentication before their tools can be used; `gh auth status` reports a logged-in
+account. The user asks to implement one GitHub issue.
+
+**Expected behavior**: the connector is not available, so the CLI is used for the whole
+run, with no question about access and no request to authenticate the connector. The
+recap's Platform access line names the `gh` CLI, and Risk Areas carries no access entry.
+
+**Criteria to test**: 57, 1
+
+### Case 100: Backlog tracker over a connector, GitHub code host over the CLI
+
+**Scenario**: the agent instructions' `## Issue Tracker` section names Backlog. A Backlog
+connector is available whose tools read issues, list them by parent and milestone, comment,
+and update status; no GitHub connector is available and `gh` is authenticated. Single mode.
+
+**Expected behavior**: two independent resolutions — Backlog through the connector, GitHub
+through the CLI. Neither choice leaks into the other platform. The recap names both, and
+Risk Areas names the Backlog connector because it is not the guide's CLI.
+
+**Criteria to test**: 57, 11
+
+### Case 101: A connector that cannot read the integration branch's full PR list
+
+**Scenario**: a GitHub connector is available. Its PR-listing tool takes a page size and a
+page number and does not filter by base branch or return `mergeCommit`; `gh` is
+authenticated. The user asks to implement a parent issue's sub-issues in integration mode.
+
+**Expected behavior**: Phase 0's fetch may use the connector, but routing into Batch mode
+resolves again before any Batch-only operation, and the connector does not cover the
+re-entry PR-list read (fields and filter missing) — so the batch runs on the CLI, and the
+orchestrator hands the CLI to every implementer it dispatches. No Batch-mode read is
+performed through the connector and then repeated through the CLI.
+
+**Criteria to test**: 57, 41
 
 ## Evaluation Log
 
@@ -3562,3 +3607,49 @@ tool versions; those come from this session's command output.
 **Not verified:** rebase merging; a stack under branch protection or a merge queue; the web UI's
 merge button (only the API and `gh` were used); `gh stack sync`/`rebase`, which the skill would
 never run.
+
+### 2026-10-25 — Platform access resolution
+
+Platform access is no longer pinned to one CLI per platform. SKILL.md gained a
+"Platform Access" subsection and an Environment Adaptation row; each
+`platform-*.md` replaced "Prerequisites" with "Access Method", which makes the
+guide's commands the reference specification of each operation and defines
+when a connector covers one. The order is user-named → available connector
+that covers the operations → the guide's CLI → ask, resolved once, with no
+mid-run switching except at one stated boundary.
+
+**Placement.** The resolution rule lives in SKILL.md (one place per skill) and
+the coverage definition in each platform guide, next to the commands it is
+judged against. Skills are installed independently, so the rule is repeated in
+each of the three skills rather than shared.
+
+**Known limit.** Only the CLI path is verified. Connector coverage is judged
+from the connector's own tool descriptions and schemas, and no connector path
+was exercised in this evaluation.
+
+Implement-issue specifics:
+- Resolution is per platform (tracker and code host apart).
+- Phase 0 is judged against Single mode's operations, and routing into Batch
+  mode is the re-resolution boundary.
+- Batch implementers receive the orchestrator's method in their B2-2 dispatch.
+  This adds to the orchestrator → implementer hand-off, not to the orchestrator
+  ↔ merge-gate contract.
+- The approval record's author-permission read may go through a connector only
+  if the connector calls the same collaborator-permission endpoint as merge
+  gate E2.
+- Integration mode's merge gate still reaches GitHub through merge-issue-prs'
+  own guide.
+
+Desk-checked by a separate agent instance against the shipped text. Round 1
+passed cases 99–101 and found two gaps, both fixed:
+- The Batch summary (B3) did not name the access method.
+- The R8 permission read could have drifted from E2's API call.
+
+The agent confirmed that the batch.md / batch-reentry.md edits are rewordings
+and leave B2-4, R8 §3 and F1 untouched.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 99 | Pass (desk-check) | Real fixture from this repository's 2026-10-25 session |
+| 100 | Pass (desk-check) | Two independent resolutions; Risk Areas names the Backlog connector |
+| 101 | Pass (desk-check) | Batch routing re-resolves to the CLI; implementers inherit it |
