@@ -1,8 +1,16 @@
 # Backlog
 
-## Prerequisites
+## Access Method
 
-- `bee` CLI (`@nulab/bee`) installed and authenticated (`bee auth login`)
+Resolved once per run as SKILL.md "Platform Access" describes: a connector for
+Backlog when it covers every operation the flow uses, otherwise the CLI.
+
+- **CLI**: `bee` CLI (`@nulab/bee`) installed and authenticated (`bee auth login`).
+- **Connector coverage**: each command below is the reference for its
+  operation. A connector tool covers an operation only when its own description
+  or schema shows it returns the same fields with the same completeness the
+  command guarantees or performs the same write — including setting a parent
+  issue. When that cannot be confirmed, the operation is not covered.
 
 ## Detect Platform
 

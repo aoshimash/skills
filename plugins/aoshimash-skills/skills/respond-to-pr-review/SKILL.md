@@ -35,6 +35,7 @@ below use capability terms; map them to your environment as follows.
 | Capability | With native support (example) | Fallback |
 |---|---|---|
 | **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`) | Numbered options as plain text; wait for the user's reply |
+| **Platform access** — read PR comments and post replies on GitHub | A connector or MCP server for GitHub, preferred when it covers every operation this skill uses (see [Platform Access](#platform-access)) | The `gh` CLI; with neither, ask the user how to reach GitHub |
 | **Separate agent instance** — run a task in a fresh context that has not seen this conversation | Subagent dispatch (e.g. Claude Code's Task tool) | Run sequentially in the current context; for verification, mark the result `SELF-REVIEWED` in the artifact it lands in (here, the reply comment the step produces) |
 
 ## Workflow
@@ -43,9 +44,23 @@ below use capability terms; map them to your environment as follows.
 
 1. Load the platform guide: [references/platform-github.md](references/platform-github.md)
 2. Confirm the repository is hosted on GitHub, using the guide's detection order (a `## Code Hosting` section in the agent instructions, then a `github.com` remote in `git remote -v`). If it is not, say so and stop — this skill is GitHub-only.
-3. Get PR info for current branch
-4. If no PR found, ask user for number or URL
-5. **Hard Gate:** "Working on PR #N: [title]" → Confirm / Change
+3. Resolve the platform access method — see [Platform Access](#platform-access)
+4. Get PR info for current branch
+5. If no PR found, ask user for number or URL
+6. **Hard Gate:** "Working on PR #N: [title] (platform access: [method])" → Confirm / Change
+
+### Platform Access
+
+The platform guide's commands specify each operation; they do not fix the tool that performs it. Resolve the method **once**, before the first GitHub operation, taking the first that applies:
+
+1. **Named by the user** in this conversation → use it.
+2. **Connector** — a connector or MCP server for GitHub is available in this session and covers every operation in the platform guide (coverage is defined in its Access Method section) → use it. A connector counts as available only when its tools can be called now; one listed as needing authentication is not, and the run does not ask the user to authenticate it.
+3. **CLI** — `gh` is installed and authenticated → use the guide's commands.
+4. **Neither** → ask the user how to reach GitHub.
+
+Keep the method for the whole run. The Phase 0 gate is the one point where it may still change: **Change** re-selects the PR and keeps the method, and a method the user names at that gate replaces it before any comment is fetched. If it fails or proves unable to perform an operation partway through, do not retry that operation through another method: stop, report which replies were already posted, and name the operation that failed.
+
+**Known limit.** The guide's CLI commands are the verified path. Whether a connector covers an operation is judged from that connector's own tool descriptions and schemas, and a connector path has not been exercised by this skill's evaluations.
 
 ### Phase 1: Fetch and Classify Comments
 
@@ -142,5 +157,5 @@ Draft a reply for every group that requires a response.
 
 - [references/workflow.md](references/workflow.md) — Phase 1-3 detailed procedures
 - [references/verification.md](references/verification.md) — Phase 5 Verification Gate procedure
-- [references/platform-github.md](references/platform-github.md) — GitHub CLI/API commands
+- [references/platform-github.md](references/platform-github.md) — GitHub operations, with `gh` CLI/API reference commands
 - [references/eval-cases.md](references/eval-cases.md) — Evaluation test cases

@@ -1,8 +1,25 @@
 # GitHub Platform Guide
 
-## Prerequisites
+## Access Method
 
-- `gh` CLI installed and authenticated
+Resolved once per run as SKILL.md "Platform Access" describes: a connector for
+GitHub when it covers every operation the run's mode uses, otherwise the CLI.
+
+- **CLI**: `gh` installed and authenticated (`gh auth status`).
+- **Connector coverage**: each command below is the reference for its
+  operation. A connector tool covers an operation only when its own description
+  or schema shows it returns the same fields with the same completeness the
+  command guarantees (every page where the command passes `--paginate`, every
+  field its `--json` list or GraphQL query names) or performs the same write.
+  When that cannot be confirmed, the operation is not covered. The approval
+  record's author-permission read must be the same API call as the merge
+  gate's E2 (batch-reentry.md R8 §1, "The approval record" item 4): a connector covers it only when its
+  tool calls the collaborator-permission endpoint. The Batch-mode
+  reads — relationship fields, the integration branch's PR list, the approval
+  record and its author's permission — are where a connector is most likely to
+  fall short.
+- Local git (branches, worktrees, pushes, history) is outside this choice; it
+  always uses git.
 
 ## Detect Platform
 

@@ -8,8 +8,9 @@ integration mode (batch.md Merge Modes, B1-4, B2-4), 55–66 evaluate
 multi-session re-entry (batch.md B0, batch-reentry.md), 67–76 evaluate
 content-based implementer model selection (batch.md B2-1, model-selection.md),
 77–79 evaluate the recorded approval plan that licenses an unattended
-dispatch (batch.md B1-5, batch-reentry.md R8), and 80–84 evaluate the batch
-orchestrator's context budget (batch.md, context-budget.md).
+dispatch (batch.md B1-5, batch-reentry.md R8), 80–84 evaluate the batch
+orchestrator's context budget (batch.md, context-budget.md), and 85–87
+evaluate platform access resolution (SKILL.md "Platform Access").
 
 ## Quality Criteria
 
@@ -64,6 +65,7 @@ orchestrator's context budget (batch.md, context-budget.md).
 | 47 | Only a trusted record licenses an unattended dispatch | An integration-mode approval over a parent issue is recorded on that issue at the approval — considered set, approved subset, integration branch — written once and never updated, and not written for the batch sources or modes that cannot carry it. A later session with no user dispatches exactly the approved issues R5 left unsettled, intersected with the platform-derived set; only the newest record for this branch counts and its trust is the merge gate's E2 on the comment's author; absent, superseded, untrusted, unreadable, or malformed all fall back to the artifact-evidence bound rather than to an older record; and an issue the record never considered withholds the terminal-state declaration |
 | 48 | Bounded returns, durable before droppable | Every step the orchestrator dispatches writes its full output into the artifact it belongs in **before** returning, and returns a verdict, its counts, and at most its stated line budget; a return that drops findings states how many. Work the orchestrator does inline leaves only its result behind — the DAG's edges and file scopes, not the codebase reads that produced them. A fix round is dispatched with a pointer into the PR body, never the finding text, and what is read back that way is data — it can describe defects in that PR's own diff and can never waive a stage or widen the change. No fact the batch depends on exists only in the orchestrator's context, and anything in neither column — the statuses that leave no artifact, and an approved plan no B1-5 record covers — is named as such rather than assumed recoverable |
 | 49 | A compaction is recovered, and a stop is chosen | The light position read runs at every boundary and its answer wins over what the run believes it remembers, so no compaction has to be detected; every dispatch first checks its issue for an existing PR or branch, so a lost position never becomes two PRs for one issue; a read that errored or may have been truncated dispatches nothing new rather than treating a missing row as a missing PR; the recency check does not run mid-batch, where it would stop the run on its own writes; a compaction that took the approval falls back to R8 §1's two paths unchanged — the plan re-presented where a user is reachable, a trusted B1-5 record's Approved list where none is — and never proceeds on the re-derived plan as though it had been approved; the position line reports the run's depth plus the environment's readout where one exists and says so where none does, never an estimate; and a deliberate stop lands on a group boundary, sends no terminal-state declaration, and is reported as a stop rather than as completion |
+| 50 | Platform access resolved once per platform, and handed down | Each platform's method is chosen before its first operation in the order user-named → connector that covers the mode's operations → CLI → ask (stop when no user is reachable); it changes only at the Batch-routing boundary; a failed operation is resolved as that step's failures resolve, never retried through another method; Batch implementers use the orchestrator's method; the recap names it, and Risk Areas names a non-CLI method |
 
 ## Single-Mode Test Cases
 
@@ -1444,6 +1446,49 @@ run here, unlike in Case 80: across a session boundary the newest write may genu
 another session's.
 
 **Criteria to test**: 49, 47, 41, 42
+
+## Platform Access Test Cases
+
+Cases 85–87 evaluate SKILL.md "Platform Access".
+
+### Case 85: Connector configured but unauthenticated, CLI authenticated
+
+**Scenario** (observed in a real session on 2026-10-25 in this repository): the session
+lists a GitHub connector (`plugin:engineering:github`) among servers that require
+authentication before their tools can be used; `gh auth status` reports a logged-in
+account. The user asks to implement one GitHub issue.
+
+**Expected behavior**: the connector is not available, so the CLI is used for the whole
+run, with no question about access and no request to authenticate the connector. The
+recap's Platform access line names the `gh` CLI, and Risk Areas carries no access entry.
+
+**Criteria to test**: 50, 1
+
+### Case 86: Backlog tracker over a connector, GitHub code host over the CLI
+
+**Scenario**: the agent instructions' `## Issue Tracker` section names Backlog. A Backlog
+connector is available whose tools read issues, list them by parent and milestone, comment,
+and update status; no GitHub connector is available and `gh` is authenticated. Single mode.
+
+**Expected behavior**: two independent resolutions — Backlog through the connector, GitHub
+through the CLI. Neither choice leaks into the other platform. The recap names both, and
+Risk Areas names the Backlog connector because it is not the guide's CLI.
+
+**Criteria to test**: 50, 11
+
+### Case 87: A connector that cannot read the integration branch's full PR list
+
+**Scenario**: a GitHub connector is available. Its PR-listing tool takes a page size and a
+page number and does not filter by base branch or return `mergeCommit`; `gh` is
+authenticated. The user asks to implement a parent issue's sub-issues in integration mode.
+
+**Expected behavior**: Phase 0's fetch may use the connector, but routing into Batch mode
+resolves again before any Batch-only operation, and the connector does not cover the
+re-entry PR-list read (fields and filter missing) — so the batch runs on the CLI, and the
+orchestrator hands the CLI to every implementer it dispatches. No Batch-mode read is
+performed through the connector and then repeated through the CLI.
+
+**Criteria to test**: 50, 41
 
 ## Evaluation Log
 
@@ -3081,3 +3126,49 @@ Earlier log entries that mention GitLab are historical.
 
 Desk-checked by reading the shipped instructions; no separate agent instance
 was used, so this is `SELF-REVIEWED`.
+
+### 2026-10-25 — Platform access resolution
+
+Platform access is no longer pinned to one CLI per platform. SKILL.md gained a
+"Platform Access" subsection and an Environment Adaptation row; each
+`platform-*.md` replaced "Prerequisites" with "Access Method", which makes the
+guide's commands the reference specification of each operation and defines
+when a connector covers one. The order is user-named → available connector
+that covers the operations → the guide's CLI → ask, resolved once, with no
+mid-run switching except at one stated boundary.
+
+**Placement.** The resolution rule lives in SKILL.md (one place per skill) and
+the coverage definition in each platform guide, next to the commands it is
+judged against. Skills are installed independently, so the rule is repeated in
+each of the three skills rather than shared.
+
+**Known limit.** Only the CLI path is verified. Connector coverage is judged
+from the connector's own tool descriptions and schemas, and no connector path
+was exercised in this evaluation.
+
+Implement-issue specifics:
+- Resolution is per platform (tracker and code host apart).
+- Phase 0 is judged against Single mode's operations, and routing into Batch
+  mode is the re-resolution boundary.
+- Batch implementers receive the orchestrator's method in their B2-2 dispatch.
+  This adds to the orchestrator → implementer hand-off, not to the orchestrator
+  ↔ merge-gate contract.
+- The approval record's author-permission read may go through a connector only
+  if the connector calls the same collaborator-permission endpoint as merge
+  gate E2.
+- Integration mode's merge gate still reaches GitHub through merge-issue-prs'
+  own guide.
+
+Desk-checked by a separate agent instance against the shipped text. Round 1
+passed cases 85–87 and found two gaps, both fixed:
+- The Batch summary (B3) did not name the access method.
+- The R8 permission read could have drifted from E2's API call.
+
+The agent confirmed that the batch.md / batch-reentry.md edits are rewordings
+and leave B2-4, R8 §3 and F1 untouched.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 85 | Pass (desk-check) | Real fixture from this repository's 2026-10-25 session |
+| 86 | Pass (desk-check) | Two independent resolutions; Risk Areas names the Backlog connector |
+| 87 | Pass (desk-check) | Batch routing re-resolves to the CLI; implementers inherit it |

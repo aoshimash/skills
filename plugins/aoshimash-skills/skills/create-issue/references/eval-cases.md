@@ -2,7 +2,8 @@
 
 Cases 1–12 evaluate the Lightweight Flow (batched question round + draft
 approval), cases 13–21 the Design Flow (one plan file + annotation cycle +
-single final approval), and cases 22–23 external-fact verification.
+single final approval), cases 22–23 external-fact verification, and cases
+24–26 platform access resolution (SKILL.md "Platform Access").
 
 ## How to Run
 
@@ -33,6 +34,7 @@ single final approval), and cases 22–23 external-fact verification.
 | 15 | Real issue numbers | Task Overview tables carry real issue numbers after creation, and links are read back to confirm they registered |
 | 16 | External facts verified | Precise external-software claims are verified against a primary source fetched this session, or explicitly marked as assumptions |
 | 17 | No obsolete ceremony | The skill text contains no boring-scope test; task quality is judged by the 7 checks in plan-file.md |
+| 18 | Platform access resolved once, in order | The method is chosen before the first tracker operation in the order user-named → connector that covers the flow's operations → CLI → ask; it does not change mid-run except at the Design-Flow escalation boundary; a failed operation is reported, not retried through another method; the completion report names the method |
 
 ## Lightweight Flow Cases
 
@@ -291,6 +293,43 @@ single final approval), and cases 22–23 external-fact verification.
 
 ---
 
+## Platform Access Cases
+
+### Case 24: Connector configured but unauthenticated, CLI authenticated
+
+- **Setup** (observed in a real session on 2026-10-25 in this repository): the
+  session lists a GitHub connector (`plugin:engineering:github`) among servers
+  that require authentication before their tools can be used; `gh auth status`
+  reports a logged-in account. The user asks for a single bug report.
+- **Expected behavior**: the connector is not available, so step 2 does not
+  apply and the CLI is used for the whole run. The run does not ask how to
+  reach GitHub, and does not ask the user to authenticate the connector. The
+  completion report says `Platform access: gh CLI`.
+- **Criteria**: 18, 1
+
+### Case 25: Connector lacks sub-issue and dependency links
+
+- **Setup**: a GitHub connector is available and its tools can create, read,
+  and comment on issues, but none of its tool descriptions mention sub-issues
+  or issue dependencies. `gh` is authenticated. The request triggers the
+  Design Flow.
+- **Expected behavior**: the connector does not cover the Design Flow's
+  operations, so the CLI is used for every tracker operation in the run —
+  including the issue creation the connector could have done. No issue is
+  created through the connector and then linked through the CLI.
+- **Criteria**: 18, 15
+
+### Case 26: No method at all
+
+- **Setup**: no connector for the tracker and no `gh` binary; the user names
+  no method.
+- **Expected behavior**: the question of how to reach the platform rides in
+  the run's single batched round alongside any other open items. If the user
+  has no method, the approved issue is output as Markdown to paste manually.
+- **Criteria**: 18, 2
+
+---
+
 ## Evaluation Log
 
 Record results here after each evaluation run.
@@ -387,3 +426,37 @@ All 23 cases pass the desk-check. This entry records a static evaluation
 was performed for this rewrite. Case 10 (repository issue forms) and case 19
 (unanswered open question) exercise behavior that has never been run live and
 are the first candidates for a live run.
+
+### 2026-10-25 — Platform access resolution
+
+Platform access is no longer pinned to one CLI per platform. SKILL.md gained a
+"Platform Access" subsection and an Environment Adaptation row; each
+`platform-*.md` replaced "Prerequisites" with "Access Method", which makes the
+guide's commands the reference specification of each operation and defines
+when a connector covers one. The order is user-named → available connector
+that covers the operations → the guide's CLI → ask, resolved once, with no
+mid-run switching except at one stated boundary.
+
+**Placement.** The resolution rule lives in SKILL.md (one place per skill) and
+the coverage definition in each platform guide, next to the commands it is
+judged against. Skills are installed independently, so the rule is repeated in
+each of the three skills rather than shared.
+
+**Known limit.** Only the CLI path is verified. Connector coverage is judged
+from the connector's own tool descriptions and schemas, and no connector path
+was exercised in this evaluation.
+
+Desk-checked by a separate agent instance against the shipped text. Round 1:
+cases 24 and 26 passed; case 25 was conditional — it failed when the Design Flow
+was chosen directly at Step 2, because only mid-flight escalation re-resolved.
+Round 1 also found the access question had no row in L2's table, and that the
+pre-round tracker reads ran with no method. All three are fixed: any entry into
+the Design Flow is now the boundary, L2 has a Platform access row, and the
+pre-round reads are skipped until a method is resolved. The re-check after the
+fixes was not re-dispatched, so it is `SELF-REVIEWED`.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 24 | Pass (desk-check) | An unauthenticated connector is not available → CLI; real fixture from this repository's 2026-10-25 session |
+| 25 | Pass after fix (desk-check, `SELF-REVIEWED`) | Entering the Design Flow re-resolves before the sub-issue link |
+| 26 | Pass (desk-check) | Asked in the batched round; Markdown fallback |

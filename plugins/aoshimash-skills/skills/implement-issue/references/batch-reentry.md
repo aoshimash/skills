@@ -50,8 +50,8 @@ batch state.
 | Comments on each merged issue | platform guide, "Read Issue Comments" | Whether B2-4's per-merge comment was already posted for that merge commit |
 | `## Batch Plan Approved` comments on the parent issue, in the order the platform returns them, each with its author | platform guide, "Record and Read a Batch's Approved Plan" | Which issues a human approved into this batch — the one fact no other artifact carries (R8 §1) |
 
-**One PR list read serves R2, R3, R5 and R6.** It is the same
-`gh pr list --base <branch> --state all` query with the fields above; read it once per
+**One PR list read serves R2, R3, R5 and R6.** It is the same PR-list read with the
+fields above (with the CLI, `gh pr list --base <branch> --state all`); read it once per
 run and reuse the result. "Re-derived on every run" means nothing is carried between
 *runs*, not that the same call is repeated within one.
 

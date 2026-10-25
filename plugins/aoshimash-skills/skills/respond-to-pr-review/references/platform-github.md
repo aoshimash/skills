@@ -1,8 +1,12 @@
-# GitHub CLI / API Commands for PR Review Comments
+# GitHub Platform Guide — PR Review Comments
 
-## Prerequisites
+## Access Method
 
-- `gh` CLI installed and authenticated (`gh auth status`)
+Resolved once per run as SKILL.md "Platform Access" describes: a connector for GitHub when it covers every operation below, otherwise the CLI.
+
+- **CLI**: `gh` installed and authenticated (`gh auth status`).
+- **Connector coverage**: each command below is the reference for its operation. A connector tool covers an operation only when its own description or schema shows it returns the same fields with the same completeness the command guarantees (every page, where the command paginates) or performs the same write — including replying inside an inline review thread and resolving a thread, which a connector may lack. When that cannot be confirmed, the operation is not covered.
+- Local git (the branch, commits, `git remote -v`) is outside this choice.
 
 ## Detect Platform
 

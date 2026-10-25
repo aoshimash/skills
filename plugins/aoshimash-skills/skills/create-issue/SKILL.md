@@ -90,6 +90,7 @@ below use capability terms; map them to your environment as follows.
 | Capability | With native support (example) | Fallback |
 |---|---|---|
 | **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`, which can carry several questions in one round) | Numbered options as plain text, all questions in one message; wait for the user's reply |
+| **Platform access** — read and write the issue tracker | A connector or MCP server for the platform, preferred when it covers the operations the flow uses (see [Platform Access](#platform-access)) | The platform guide's CLI (`gh`, `bee`); with neither, ask how to reach the platform, and failing that output Markdown to paste manually |
 
 ## Step 1: Detect Platform and Templates
 
@@ -107,6 +108,43 @@ below use capability terms; map them to your environment as follows.
    the platform guide's template-detection section). If it does, they become
    the skeleton for every issue this run creates — see [Repository Issue
    Templates](#repository-issue-templates).
+4. Resolve the platform access method before the first operation against the
+   tracker — see [Platform Access](#platform-access).
+
+### Platform Access
+
+The platform guide's commands specify each operation; they do not fix the
+tool that performs it. Resolve the method **once**, taking the first that
+applies:
+
+1. **Named by the user** in this conversation → use it.
+2. **Connector** — a connector or MCP server for the platform is available in
+   this session and covers every operation the flow uses (coverage is defined
+   in the platform guide's Access Method section) → use it. A connector counts
+   as available only when its tools can be called now; one listed as needing
+   authentication is not, and the run does not ask the user to authenticate
+   it.
+3. **CLI** — the platform guide's CLI is installed and authenticated → use the
+   guide's commands.
+4. **Neither** → ask how to reach the platform together with the run's other
+   questions (L2's round, or the plan's Open Questions); if no method is
+   available, output the issue(s) as Markdown for the user to paste manually.
+
+Keep the method for the whole run. If it fails or proves unable to perform an
+operation partway through, do not retry that operation through another
+method: stop, report what was already created, and name the operation that
+failed. Resolution here is judged against the Lightweight Flow's operations.
+One boundary is the exception — **entering the Design Flow**, whether chosen at
+Step 2, from the batched round, or by mid-flight escalation, resolves again
+before any Design-Flow-only operation runs, when the method does not cover
+them. Until a method is resolved, tracker reads that only inform the round
+(existing labels, issue conventions) are skipped rather than attempted. Name the method in the completion report
+(`Platform access: <method>`).
+
+**Known limit.** The guide's CLI commands are the verified path. Whether a
+connector covers an operation is judged from that connector's own tool
+descriptions and schemas, and a connector path has not been exercised by this
+skill's evaluations.
 
 ## Step 2: Choose the Flow
 
@@ -182,6 +220,7 @@ Candidate contents of the round — include only what is genuinely open:
 | **Labels** | No default labels are configured; fetch existing labels (e.g. `gh label list`) and present a recommendation to confirm |
 | **Assignee** | No default assignee rule is configured |
 | **Flow choice** | Escalation signals are weak or conflicting (Step 2), or analysis revealed mid-flight escalation |
+| **Platform access** | No method resolved in Step 1 (see [Platform Access](#platform-access)) |
 
 Acceptance criteria are generated from the motivation, proposal, and analysis
 — not asked. They are presented for the first time in the L3 draft.
@@ -235,7 +274,8 @@ a separate gate.
    issue without this approval.
 3. On approval, create the issue with the platform-specific method from the
    loaded platform guide, applying labels, assignee, and priority.
-4. Report the issue URL, plus any durable-convention offer from L2.
+4. Report the issue URL and the platform access method used, plus any
+   durable-convention offer from L2.
 
 ## Design Flow
 
@@ -362,6 +402,6 @@ SKILL.md based on the results.
 - [references/plan-file.md](references/plan-file.md) — Design Flow research, design, and the consolidated plan file format
 - [references/annotation-cycle.md](references/annotation-cycle.md) — Design Flow annotation cycle and final approval
 - [references/issue-creation.md](references/issue-creation.md) — Design Flow issue creation, research comment, and cleanup
-- [references/platform-github.md](references/platform-github.md) — GitHub CLI commands (issues, sub-issues, dependencies, comments, templates)
-- [references/platform-backlog.md](references/platform-backlog.md) — Backlog CLI commands (bee) (issues, parent-child, comments)
+- [references/platform-github.md](references/platform-github.md) — GitHub operations (issues, sub-issues, dependencies, comments, templates), with `gh` CLI reference commands
+- [references/platform-backlog.md](references/platform-backlog.md) — Backlog operations (issues, parent-child, comments), with `bee` CLI reference commands
 - [references/eval-cases.md](references/eval-cases.md) — Evaluation test cases
