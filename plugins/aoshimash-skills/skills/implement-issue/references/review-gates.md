@@ -48,7 +48,10 @@ mode there is no orchestrator to protect and the main agent holds the findings d
 Review with:
 
 - The issue body (the "spec"), plus the parent issue's body when the issue has one (its Design Decisions and Background apply to the sub-issue)
-- The PR diff (`git diff origin/<default-branch>...<branch-name>`)
+- The PR diff (`git diff origin/<base-branch>...<branch-name>`), where `<base-branch>` is the
+  PR's own base — the default branch, the batch's integration branch, or, for a stacked PR,
+  its dependency's head branch ([stacked-prs.md](stacked-prs.md)). Diffing a non-default-base
+  PR against the default branch shows code that is not this PR's as part of it
 - The PR number and this stage's round number — a dispatched reviewer writes its own `Gate Results` line and `Risk Areas` entries before returning (see Reviewer return), and cannot do either without them
 - Instructions below
 
@@ -166,7 +169,7 @@ Classify a violation as `rule-violation-instance` (rather than a one-off bug) wh
 
 1. For each other in-flight issue that has a PR branch, run:
    ```
-   git diff origin/<default-branch>...<branch> | grep -n <pattern>
+   git diff origin/<base-branch>...<branch> | grep -n <pattern>   # <base-branch>: that PR's own base
    ```
 2. Collect all matches across in-flight branches — **one line per in-flight PR scanned**
    (`PR #<n> — <file:line>`, or that it had no match), which is the bound

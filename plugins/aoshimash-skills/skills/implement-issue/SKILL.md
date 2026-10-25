@@ -3,19 +3,19 @@ name: implement-issue
 description: >
   Read issues (GitHub or Backlog), analyze the codebase, implement
   autonomously, and open review-first GitHub pull requests: draft PR with
-  decisions logged in the body, two-stage review (spec compliance,
-  then code quality), a pre-push security review, an automatic response to
-  the repository's bot/AI reviewers, and a flip to ready-for-review once
-  gates, CI, and those reviewers are done. Implements one issue end to end
-  with zero routine questions by default; given a parent issue, milestone,
-  label, or list of issues, offers batch implementation with a dependency
-  graph, git worktrees, and parallel agent instances where supported
-  (sequential otherwise). Use when the user says
-  "implement issue", "issue を実装", "issue #N を対応", "この issue をやって",
-  "implement #N", "fix issue #N", "work on issue", "run sprint",
-  "スプリント実行", "これらの issue を実装", "implement these issues",
-  "start the sprint", "issue を順に実装して", "sprint を回して", or references
-  issue numbers/URLs with the intent to implement them.
+  decisions logged in the body, two-stage review (spec, then code quality), a
+  pre-push security review, a response to the repository's bot/AI reviewers,
+  and a ready-for-review flip once gates, CI, and those reviewers are done. A
+  named issue is implemented alone with zero routine questions; a parent
+  issue, milestone, label, list, or no issue at all (the user's assigned open
+  issues, ranked by priority) runs as a batch with a dependency graph, git
+  worktrees, and parallel agent instances where supported. Use when the user
+  says "implement issue", "issue を実装して", "issue #N を対応",
+  "この issue をやって", "implement #N", "fix issue #N", "work on issue",
+  "implement my issues", "担当 issue を実装", "run sprint", "スプリント実行",
+  "これらの issue を実装", "implement these issues", "start the sprint",
+  "issue を順に実装して", "sprint を回して", or references issue numbers/URLs
+  with the intent to implement them.
 ---
 
 # Implement Issue
@@ -26,7 +26,8 @@ end to end without routine user interaction: decisions are resolved from the
 issue, its parent, repository agent instructions, or user-level configuration
 — and logged in the PR instead of asked. **Batch mode** (many issues,
 dependency-ordered, parallel where the environment supports it) is used for
-parent issues, milestones, labels, or explicit lists.
+parent issues, milestones, labels, or explicit lists — and, when no issue is
+named at all, for the user's own assigned open issues, ranked by priority.
 
 ## Core Principles
 
@@ -63,7 +64,8 @@ parent issues, milestones, labels, or explicit lists.
    large for one, suggest splitting (see the create-issue skill); if it must
    be one PR, implement incrementally with clear scope per commit.
 7. **Batch mode: the DAG is the scheduler** — Dependency-driven parallelism,
-   one worktree per issue, fail fast without blocking independent issues (see
+   with priority ordering work only inside what the DAG allows
+   ([references/priority-order.md](references/priority-order.md)), one worktree per issue, fail fast without blocking independent issues (see
    [references/batch.md](references/batch.md)). In integration mode the DAG
    advances on **merges** rather than on ready flips, so a dependent's worktree
    contains its dependency's code. The orchestrator carries a context budget of
@@ -152,14 +154,23 @@ nothing; its implementer is the session itself, on the model the user chose.
 
    Then resolve the platform access method for each platform the run touches —
    see [Platform Access](#platform-access).
-2. Obtain the issue identifier(s). If none are provided, list open issues from
-   the platform (see the platform guide's issue-listing section) and ask the
-   user to select.
+2. Obtain the issue identifier(s). **If the request names no issue, no batch
+   source, and uses no batch phrasing** ("issue を実装して", "implement my
+   issues" — but not "run sprint"), the source is
+   **the user's assigned issues**: read every open issue assigned to the
+   authenticated user in this repository, set aside parent issues, and route
+   on what remains — none → list open issues and ask the user to select one;
+   exactly one → continue as a single issue referenced; two or more → **Batch
+   mode** over that set, which downstream is a manual list. With no user
+   reachable this source starts no new work at all, whatever the count (see
+   [references/priority-order.md](references/priority-order.md) P1). An
+   identifier the user gives is never widened into this source.
 3. **Mode routing:**
    - **Multiple issues referenced** — a list of numbers, "these issues", a
-     milestone, a label, or "run sprint" / "スプリント実行" phrasing →
-     **Batch mode**. If the source is ambiguous, ask the user to choose (see
-     Environment Adaptation): Parent issue / Milestone / Label / Manual list.
+     milestone, a label, "run sprint" / "スプリント実行" phrasing, or two or
+     more assigned issues from step 2 → **Batch mode**. If batch phrasing
+     names no source, ask the user to choose (see Environment Adaptation):
+     Assigned to me / Parent issue / Milestone / Label / Manual list.
    - **Single issue referenced** — fetch it, then **check whether it is a
      parent issue** with open sub-issues (see the platform guide's sub-issue
      detection section).
@@ -259,14 +270,20 @@ solely when the user explicitly asks for a plan gate; never by default.
 
 ## Batch Mode
 
-Used for a parent issue's sub-issues, a milestone, a label, or a manual list.
-See [references/batch.md](references/batch.md) for the full procedure.
+Used for a parent issue's sub-issues, a milestone, a label, a manual list, or
+the user's assigned issues (a manual list once read). See
+[references/batch.md](references/batch.md) for the full procedure.
 
 Batch mode runs in one of two **merge modes**, chosen inside the execution-plan
 approval — never as a separate gate, and never in Single mode:
 
-- **Standard** — every worktree and PR is based on the default branch; each PR
-  stops at ready for review and a human merges it.
+- **Standard** — every worktree and PR is based on the default branch, except a
+  dependent with exactly one unmerged dependency, which is **stacked** on that
+  dependency's branch so it builds on its code; each PR stops at ready for
+  review and a human merges it, bottom of a stack first. A merge point (two or
+  more unmerged dependencies) is held for a later run, stacks stop at three
+  levels, and stacking is used only where the repository's CI runs on stacked
+  PRs ([references/stacked-prs.md](references/stacked-prs.md)).
 - **Integration** — the batch creates one integration branch, bases every
   worktree and PR on it, and hands each ready PR to the **merge-issue-prs**
   skill, which owns the whole merge lifecycle. A dependency counts as satisfied
@@ -304,8 +321,12 @@ than starting new work.
    relationship records (e.g. GitHub's `blockedBy` field) and, as a fallback,
    from `Blocked by` / `Depends on` / `After` declarations in each issue body;
    build a DAG from the union; detect cycles and ask the user how to resolve
-   them; compute parallel execution groups (topological levels); visualize the
-   plan; get approval via a user choice (see Environment Adaptation) with
+   them; compute parallel execution groups (topological levels); rank each
+   group's issues by priority — priority label first, an order proposed from
+   the issues' content where labels do not decide, issue number last, with a
+   blocker inheriting its dependents' urgency
+   ([references/priority-order.md](references/priority-order.md) P2); visualize
+   the plan, showing each issue's rank basis; get approval via a user choice (see Environment Adaptation) with
    options Approve (standard) / Approve (integration mode, when available) /
    Reorder / Abort (Reorder collects dependency-graph edits and re-presents the
    plan — see batch.md B1-3). The plan shows the ordering edges integration mode
@@ -350,8 +371,9 @@ than starting new work.
    issue linked in after the approval leaves the milestone PR a draft rather
    than being finished over. Then present a status table
    (issue, title, status, PR) covering DONE / DONE_WITH_CONCERNS /
-   NEEDS_CONTEXT / BLOCKED / SKIPPED, plus MERGED / DEFERRED / NOT_ATTEMPTED /
-   REVERTED in integration mode, where the deferred and reverted PRs are the
+   NEEDS_CONTEXT / BLOCKED / SKIPPED, plus HELD (with what it waits for) and
+   each stacked PR's base in standard mode, and MERGED / DEFERRED /
+   NOT_ATTEMPTED / REVERTED in integration mode, where the deferred and reverted PRs are the
    human queue and merged issues stay open until the milestone PR merges;
    explain any blockers, and optionally post a summary comment on the parent
    issue. Then harvest generalizable decisions
@@ -362,6 +384,8 @@ than starting new work.
 
 - [references/workflow.md](references/workflow.md) — Canonical autonomous pipeline (Direct context for Single mode, Orchestrated context for Batch implementers)
 - [references/batch.md](references/batch.md) — Batch mode dependency graph, dispatch, and failure handling
+- [references/stacked-prs.md](references/stacked-prs.md) — Standard mode's stacked PRs: which dependents are stacked, the depth limit, the CI precondition, the `HELD` status, and restacking a re-invoked batch without force-pushing
+- [references/priority-order.md](references/priority-order.md) — The no-identifier source (the user's assigned issues) and priority ranking inside the DAG: label schemes, the content-based proposal, inherited urgency, and what the ranking does not control
 - [references/batch-reentry.md](references/batch-reentry.md) — Resuming an integration-mode batch in a fresh session: the artifacts state is re-derived from, concurrent-session detection, and the idempotency rules
 - [references/context-budget.md](references/context-budget.md) — Keeping the batch orchestrator's own context bounded: what each dispatched step may return, what must be durable before it can leave, the position read that survives a compaction, the sequential fallback, and the deliberate stop
 - [references/model-selection.md](references/model-selection.md) — Batch dispatch's content-based implementer tiers: the classification rubric, the default mapping, the classes never dispatched cheaply, and the repository override

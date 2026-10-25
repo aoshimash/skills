@@ -39,7 +39,7 @@ batch state.
 
 | Artifact | How it is read | What it establishes |
 |---|---|---|
-| The batch source — a parent issue's sub-issues, a milestone, a label, or the explicit list | platform guide, "List Sub-Issues / Issues by Milestone / Issues by Label" | The issue set this batch covers (R1) |
+| The batch source — a parent issue's sub-issues, a milestone, a label, the explicit list, or the user's assigned issues | platform guide, "List Sub-Issues / Issues by Milestone / Issues by Label", or "List Assigned Issues" for the last ([priority-order.md](priority-order.md) P1) | The issue set this batch covers (R1) |
 | Remote refs under `integration/` | platform guide, "Re-derive a Batch's State (re-entry)" | Which integration branch this batch is on, when its name is not computable (R2) |
 | Whether that branch exists, and how far ahead of / behind the default branch it is | platform guide, "Create Branch" | Whether a batch was ever started under this name, and what a reused branch already carries |
 | The branch's commit history, freshly fetched | platform guide, "Confirm a PR Merged into the Integration Branch — and Was Not Reverted" | Which merges landed, and which of them were reverted |
@@ -436,7 +436,9 @@ costs one call and does not depend on what an earlier session saw.
 5. **A stopped run produces no writes at all.** Every R2 and R3 stop ends the run before
    B1-3 draws a plan.
 6. **The merge gate is invoked, not second-guessed.** Re-entry never merges, retargets,
-   closes, or labels anything to move a PR toward eligibility, and never reconstructs an
+   closes, or labels anything to move a PR toward eligibility (standard mode's restack of a
+   stacked PR, [stacked-prs.md](stacked-prs.md) S6, keeps a PR on top of its base and
+   touches no eligibility, so it is not this), and never reconstructs an
    earlier run's deferral reasons — B2-4's report is where those come from, this session as
    much as any other.
 
@@ -535,7 +537,8 @@ milestone PR.
   a trusted record licenses, and no others.** With no such record, dispatch no new
   implementer at all. Either way, advance what a plan already produced — re-run the gates on
   the unmerged drafts (R6), which includes re-invoking an implementer for a gate fix round
-  against a PR that already exists, invoke the merge gate, post the merge comments, report —
+  against a PR that already exists, invoke the merge gate, post the merge comments, restack a
+  standard-mode batch's stacked PRs ([stacked-prs.md](stacked-prs.md) S6), report —
   and name whatever is left waiting on an approved plan. Merging needs no approval here: it
   is merge-issue-prs' own autonomous remit under its own policy, and it acts only on PRs a
   plan already produced.

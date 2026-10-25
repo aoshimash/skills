@@ -27,7 +27,7 @@ The same pipeline runs in one of two contexts:
 |---|---|---|
 | Undecidable decision / missing critical field (1-1, 1-3) | One batched question; answers written back to the issue | Stop, report `NEEDS_CONTEXT` |
 | Working environment (2-1) | Worktree by default; reuse one already prepared for this run | Always the worktree the orchestrator created |
-| PR base branch (3-1) | The default branch | The base branch the dispatch names — the integration branch under batch integration mode (batch.md B2-2) |
+| PR base branch (3-1) | The default branch | The base branch the dispatch names — the integration branch under batch integration mode, or the dependency's head branch for a standard-mode stacked PR (batch.md B2-2) |
 | Checks still failing after 3 attempts (2-4) | Record the failure in the PR body, continue; the PR stays draft | Stop, report `BLOCKED` |
 | Unresolved Critical/High security finding (2-6) | Stop before pushing, report to the user | Stop before pushing, report `BLOCKED` |
 | Review gates (3-2) | Main agent is responsible for both stages (dispatch per review-gates.md) | Skipped here — the orchestrator runs them after the implementer reports |
@@ -234,7 +234,9 @@ signal: it is removed only in 3-5.
 **Base branch.** Default-branch base unless the dispatch names another one.
 **Orchestrated**: use the base branch given in the dispatch — under batch integration
 mode that is the batch's integration branch, and targeting the default branch instead
-puts the PR outside the merge gate's candidate set entirely. The closing reference stays
+puts the PR outside the merge gate's candidate set entirely; for a standard-mode stacked
+PR it is the dependency's head branch, and the body opens with the `## Stack` section the
+dispatch supplies ([stacked-prs.md](stacked-prs.md) S3). The closing reference stays
 in the body either way; on a non-default base the platform ignores it (see the platform
 guide's "Link PR to Issue"), and it is still what attributes the PR to its issue.
 
