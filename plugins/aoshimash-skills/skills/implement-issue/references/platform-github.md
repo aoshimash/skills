@@ -21,15 +21,36 @@ Structured JSON:
 gh issue view <number> --json title,body,labels,assignees,state
 ```
 
-## List Open Issues
+## List Assigned Issues
 
-To let the user select an issue when no identifier is provided (Phase 0 step 2):
+The source when no identifier is provided (Phase 0 step 2,
+[priority-order.md](priority-order.md) P1). `@me` resolves to the authenticated user, and the
+fields are those of the milestone and label reads below plus `subIssuesSummary`, so this one
+read yields the set, its labels for ranking, its dependency edges, and which members are parents:
 
 ```bash
-gh issue list --state open --limit 20
+gh issue list --assignee "@me" --state open --limit 100 \
+  --json number,title,body,labels,state,parent,blockedBy,subIssuesSummary
 ```
 
-Present the list to the user and ask them to select one.
+**Check completeness.** Compare the number of issues returned against `--limit`; if they are
+equal the read may be short, so raise the limit and re-run until the count is strictly below
+it. An issue whose `subIssuesSummary.total` exceeds its `completed` has open sub-issues and is
+set aside as a parent; [Detect Sub-Issues of a Parent](#detect-sub-issues-of-a-parent) lists
+them for the plan's **Not dispatched** line, and holds the fallbacks where the field is
+unavailable.
+
+## List Open Issues
+
+To let the user select an issue when no identifier is provided and nothing is assigned to
+them (Phase 0 step 2):
+
+```bash
+gh issue list --state open --limit 100
+```
+
+Apply the same completeness check as above, then present the list to the user and ask them to
+select one.
 
 ## Platform-Level Issue Relationships
 
@@ -646,4 +667,5 @@ Add to the project's agent instructions (e.g. CLAUDE.md, AGENTS.md):
 ```markdown
 ## Issue Tracker
 - platform: github
+- priority_labels: P0, P1, P2, P3 (optional — highest first; see priority-order.md P2)
 ```

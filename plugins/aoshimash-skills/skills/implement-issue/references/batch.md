@@ -1,6 +1,6 @@
 # Batch Mode: Dependency Graph and Dependency-Ordered Execution
 
-This procedure is used in **Batch Mode** (see SKILL.md) to implement a set of issues — from a parent issue's sub-issues, a milestone, a label, or a manual list — in dependency order (in parallel where the environment allows), with worktree isolation and two-stage review per issue.
+This procedure is used in **Batch Mode** (see SKILL.md) to implement a set of issues — from a parent issue's sub-issues, a milestone, a label, a manual list, or the user's assigned issues (which become a manual list once read; see [priority-order.md](priority-order.md) P1) — in dependency order (in parallel where the environment allows), ranked by priority inside what that order allows, with worktree isolation and two-stage review per issue.
 
 The per-issue implementation itself is NOT duplicated here: each issue is implemented by running [workflow.md](workflow.md) in the **Orchestrated context** (see workflow.md's Invocation Contexts). This file covers only the orchestration around that: building the dependency graph, running the implementer for each issue, running review gates, responding to the repository's automated reviewers, flipping each draft PR to ready, handing ready PRs to the merge gate in integration mode, handling failures, and harvesting the batch's decisions once at the end.
 
@@ -107,7 +107,8 @@ Fresh / Resumable / Stop have nothing to key on.
 "resume", and not only when integration mode is on offer. A session cannot tell from its
 own context that an earlier one existed, and the probe that settles it is a handful of
 read-only calls: the integration branch — computed for a parent-issue batch, discovered by
-slug for the other three sources — and the milestone PR.
+slug for the other three sources (an assigned-issue batch is a manual list) — and the
+milestone PR.
 
 That trigger is deliberately wider than the mode's availability. Integration mode needs
 the merge gate installed and the repository on GitHub (Merge Modes), and an environment
@@ -203,6 +204,13 @@ in the B1-3 plan, since the batch cannot satisfy it.
    These edges are a scheduling judgment, not a dependency — mark them as such in the plan
    so the user can drop any of them through Reorder (B1-3), and add them only for the
    integration-mode reading of the plan.
+5. **Rank each level by priority**, once the levels are final — priority label first, an
+   order proposed from the issues' content where labels do not decide, issue number last,
+   with a blocker inheriting the highest rank among its transitive dependents. The ranking
+   orders issues only inside a level and never against an edge; it fixes the listing and
+   dispatch order, and the implementation order in the sequential case. The rules, the
+   recognised label schemes, and what the ranking does not control are in
+   [priority-order.md](priority-order.md) P2.
 
 ### B1-3. Visualize and Approve
 
@@ -218,17 +226,27 @@ Display the execution plan:
 ```
 Batch: <N> issues, <M> parallelizable groups
 
+Order partly proposed: no priority label decides #103, #104 — change it via Reorder.
+
 Group 1 (parallel):
-  #101 — Add search index [Small]
-  #102 — Create user model [Small]
+  #102 — Create user model [Small] [P1]
+  #101 — Add search index [Small] [P2]
 
 Group 2 (parallel, after Group 1):
-  #103 — Add search endpoint [Medium] ← depends on #101
-  #104 — Add user API [Medium] ← depends on #102
+  #104 — Add user API [Medium] [proposed: fixes the broken login flow] ← depends on #102
+  #103 — Add search endpoint [Medium] [proposed: new behaviour] ← depends on #101
 
 Group 3 (sequential, after Group 2):
   #105 — Integration tests [Medium] ← depends on #103, #104
+
+Not dispatched:
+  #100 — Search and users (parent: 5 open sub-issues, all in this batch)
 ```
+
+Each issue carries its rank basis — the label, `[proposed: <reason>]`, or the rank it
+inherits from a dependent — and the one-line notice above the groups appears whenever any
+position is a proposal, so the approval visibly covers it ([priority-order.md](priority-order.md)
+P3). **Not dispatched** lists the parent issues an assigned-issue batch set aside (P1).
 
 When integration mode is available (see Merge Modes), the plan also names the branch it
 would create, what that changes, and every ordering edge B1-2 step 4 added — those edges
@@ -266,7 +284,9 @@ Ask the user to choose (see Environment Adaptation in SKILL.md) — "Proceed wit
   reordering means editing its inputs: collect the user's changes (exclude an
   issue from the batch, add a dependency edge to force one issue after another,
   or drop a body-declared edge the user says is stale), apply them to the B1-1
-  mapping, then rebuild the DAG (B1-2) and re-present the plan. Repeat until
+  mapping, then rebuild the DAG (B1-2) and re-present the plan. A **ranking
+  change** — moving an issue earlier or later inside its level — is also
+  accepted; it changes order only and adds no edge (priority-order.md P3). Repeat until
   the user approves or aborts. Platform-registered relationships the user drops
   are ignored for this batch only — note the override in the re-presented plan;
   do not edit them on the platform. A requested order that contradicts a kept
@@ -299,7 +319,8 @@ approved. Naming:
 
 - `integration/issue-<parent-number>` when the batch source is a parent issue.
 - `integration/<date>-<slug>` (e.g. `integration/2026-08-07-search-milestone`) for a
-  milestone, a label, or a manual list — none of which has a parent number. The slug is
+  milestone, a label, or a manual list — none of which has a parent number. An
+  assigned-issue batch is a manual list named `assigned-<login>` (priority-order.md P1). The slug is
   derived from the batch source's name, which is text someone else wrote: reduce it to
   lower-case letters, digits, and hyphens before it goes anywhere near a command, and
   never interpolate tracker text into a shell command as it stands.
