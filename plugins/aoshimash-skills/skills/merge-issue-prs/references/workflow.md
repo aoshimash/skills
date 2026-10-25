@@ -347,6 +347,7 @@ anyway".
 | Platform refuses the merge (head moved twice, required check, protection) | 2-3 | **defer** | continues |
 | **Verification timeout** — no run, no completion, or nothing that concluded `success`, within the window | 2-4 | **auto-revert** | **stops** |
 | **Verification failure** — a run concluded non-success, or a repo-defined check failed | 2-4 | **auto-revert** | **stops** |
+| **Merge outcome unconfirmed** — the platform-access method failed from the merge call onward and platform state cannot confirm whether the merge landed (SKILL.md "Platform Access") | 2-3 | **escalate**, naming the PR and the branch head; no re-attempt, no revert | **stops immediately** |
 | **Revert failure** — the revert cannot be created, pushed, or verified, or (under rebase) the landed commits cannot be enumerated with certainty | revert | **record the exclusion (label, then comment), then escalate to a human** | **stops immediately** |
 
 ## Auto-revert

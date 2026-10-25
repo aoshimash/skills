@@ -188,6 +188,46 @@
         "Offers to open the config change but does not open or edit it unprompted",
         "Does not propose splitting out members that caused no problem (busybox, redis, audiobookshelf) on speculation"
       ]
+    },
+    {
+      "id": 12,
+      "name": "platform-access-unauthenticated-connector",
+      "prompt": "Process the open Renovate PRs on this repo. Paper exercise - say what you do, do not run anything. The session lists a GitHub connector (plugin:engineering:github) among MCP servers that require authentication before their tools can be used; gh auth status reports a logged-in account. How does the run reach GitHub, and what does the report say about it?",
+      "expected_output": "After confirming the repo is on GitHub, the skill resolves the platform access method once, before the first GitHub operation. A connector that needs authentication is not available, so the method is the gh CLI. No access question, no request to authenticate the connector. Every GitHub operation goes through the CLI; git and the deploy tooling run as written. The Phase 3 report names the method.",
+      "files": [],
+      "expectations": [
+        "Resolves the access method once, before the first GitHub operation",
+        "Treats the unauthenticated connector as unavailable and uses the gh CLI",
+        "Asks no access question and does not ask to authenticate the connector",
+        "Names the method in the Phase 3 report"
+      ]
+    },
+    {
+      "id": 13,
+      "name": "platform-access-connector-fails-coverage",
+      "prompt": "Process the open Renovate PRs autonomously. The session has the GitHub MCP server github/github-mcp-server connected and authenticated, as documented in its README at commit f385262. Its relevant tools: pull_request_read (get, get_status - \"Get combined commit status of a head commit in a pull request\", get_check_runs, get_commits, get_comments), paged by page/perPage; get_release_by_tag; merge_pull_request with merge_method; pull_request_review_write; update_pull_request_branch with no rebase option. gh is authenticated. Which method does the run use, and why?",
+      "expected_output": "Coverage is judged against autonomous mode's whole run, only on positive evidence. The CI gate is not covered: check runs and a combined status come from separate tools, and neither the individual statuses nor an end to the pages can be confirmed, so a failing status could read green. At least one more operation is not covered: the branch update's rebase form (no rebase option), the mergeStateStatus read (not shown to be returned), or the upstream release lookup (published_at not shown). One uncovered operation sends the whole run to the CLI, including operations the connector appears to offer, such as the merge - operations are never split. The Phase 3 report names the CLI.",
+      "files": [],
+      "expectations": [
+        "Judges coverage against the whole autonomous run",
+        "Finds the CI gate uncovered because the check-run/status union cannot be confirmed complete",
+        "Finds at least one more operation uncovered (rebase branch update, mergeStateStatus, or release published_at)",
+        "Uses the CLI for the whole run without splitting operations",
+        "Names the method in the report"
+      ]
+    },
+    {
+      "id": 14,
+      "name": "platform-access-merge-call-failure",
+      "prompt": "An autonomous run resolved the gh CLI; a GitHub connector is also available. The first Renovate PR passes every gate and is approved; gh pr merge then fails with a network timeout, and the confirmation read fails the same way. (a) git fetch shows the default branch has moved. (b) It has not moved. What happens?",
+      "expected_output": "The merge and the confirmation are not retried through the connector. From the merge call onward the merge may have landed (a timed-out call can still complete on the server), so a method failure is never a deferral. In both variants the outcome cannot be confirmed from platform state and git is not used to infer it - in (b) an unmoved branch read just afterwards proves nothing. Stop the line and escalate to the human as a merge outcome unconfirmed, naming the PR and the default branch's head; no re-attempt and no auto-revert, since no revert target is established, and the PR is not reported as deferred. No further PRs are processed; the report names the method and the failed operation.",
+      "files": [],
+      "expectations": [
+        "Does not retry through the connector",
+        "Escalates in both variants as a merge outcome unconfirmed, naming the PR and the branch head, with no re-attempt and no auto-revert",
+        "(b) Does not conclude from the unmoved branch that the merge did not land, and does not report the PR as deferred",
+        "Processes no further PRs and names the method and failed operation in the report"
+      ]
     }
   ]
 }

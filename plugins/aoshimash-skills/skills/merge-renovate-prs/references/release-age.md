@@ -36,6 +36,8 @@ No `minimumReleaseAge` configured anywhere → the repo has no cooldown; skip th
 
 ## Determining a member's age
 
+The commands in this file are the CLI form of each read; platform-github.md "Access Method" decides whether another method covers them.
+
 Collect up to two numbers per member and take the **larger** (see [The PR's age and the decision](#the-prs-age-and-the-decision) for why the larger is safe).
 
 ### 1. Upstream release date (version updates only)
@@ -63,7 +65,7 @@ gh pr view {pr} --json commits \
   --jq '[.commits[] | select(any(.authors[]; .login == "{renovate_login}"))] | last | .committedDate'
 ```
 
-`{renovate_login}` is the bot identity detection established (e.g. `renovate[bot]`). Filtering by author is required: a `gh pr update-branch` adds a merge commit authored by whoever ran it, and that commit's date bounds nothing (in homelab-k8s#374 the newest commit was such a merge, one minute before the merge).
+`{renovate_login}` is the bot identity detection established (e.g. `renovate[bot]`). Filtering by author is required: a branch update (`gh pr update-branch`) adds a merge commit authored by whoever ran it, and that commit's date bounds nothing (in homelab-k8s#374 the newest commit was such a merge, one minute before the merge).
 
 Renovate re-commits when it rebases or picks up a newer version; each re-commit resets the bound to later, which only makes the gate wait longer.
 
@@ -81,7 +83,7 @@ The gate runs at triage on every candidate, and again at 2-6 for a PR whose Reno
 A member whose age only the lower bound can establish — typically a GHCR digest on a floating tag — gets re-committed by Renovate on every scheduled run. On a weekly schedule with a same-day merge session, its bound never reaches a multi-day cooldown, and it holds back every other member of its group with it. That is the same failure Renovate's `timestamp-required` default has, so it must surface rather than repeat silently.
 
 - On the **first** lower-bound wait for a PR, post one comment on it (English, repo convention) carrying the marker `<!-- merge-renovate-prs:cooldown-wait -->`, the member that set the age, and the earliest eligible date. This is the cross-run record; the next run has no other memory.
-- When a later run finds the PR **again** waiting on the lower bound and a marker comment from the same account (`gh api user --jq .login`) already exists, it is the second consecutive wait: do not comment again, and raise a **configuration proposal** in Phase 3-2 (workflow.md) — for example removing that member from the group, pinning a floating tag to a full version so updates carry release dates, or `minimumReleaseAge: null` for that package with the reason recorded in the config.
+- When a later run finds the PR **again** waiting on the lower bound and a marker comment from the same account (the account the run is authenticated as — with the CLI, `gh api user --jq .login`) already exists, it is the second consecutive wait: do not comment again, and raise a **configuration proposal** in Phase 3-2 (workflow.md) — for example removing that member from the group, pinning a floating tag to a full version so updates carry release dates, or `minimumReleaseAge: null` for that package with the reason recorded in the config.
 
 ```bash
 gh pr view {pr} --json comments \

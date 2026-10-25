@@ -16,7 +16,7 @@ Detailed procedure for Phase 2's verification step (workflow.md 2-9), the downti
 
 "Merged the PR and CI is green" is not "the change is live and the system is healthy." Three separate states must each be confirmed:
 
-1. **Merged** — the change is in Git. (Easy; a `gh pr view` confirms it.)
+1. **Merged** — the change is in Git. (Easy; the PR's merged state confirms it — with the CLI, `gh pr view`.)
 2. **Deployed / applied** — the change reached the running system: a GitOps controller reconciled it, CI deployed it, or a manual apply ran. In GitOps repos this is **asynchronous** — the merge returns instantly but Flux/Argo may take minutes to reconcile.
 3. **Functioning** — the system is actually healthy after the change: health checks pass, the app responds, no regression appeared.
 

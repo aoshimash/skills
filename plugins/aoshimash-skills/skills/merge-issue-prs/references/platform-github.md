@@ -1,14 +1,67 @@
-# GitHub CLI / API Commands
+# GitHub Platform Guide
 
-GitHub-only. All commands use the `gh` CLI; replace `{owner}`, `{repo}`, `{pr}`,
-`{issue}`, `{parent}`, and `{integration_branch}` as needed. A guide for another
-platform, if one is ever added, sits beside this file — [eligibility.md](eligibility.md)
-is written in platform-neutral terms so it does not have to change.
+GitHub-only. The commands are written for the `gh` CLI and are the reference specification
+of each operation (see Access Method); replace `{owner}`, `{repo}`, `{pr}`, `{issue}`,
+`{parent}`, and `{integration_branch}` as needed. A guide for another platform, if one is
+ever added, sits beside this file — [eligibility.md](eligibility.md) is written in
+platform-neutral terms so it does not have to change.
 
-## Prerequisites
+## Access Method
 
-- `gh` CLI installed and authenticated (`gh auth status`).
-- The current directory is the target repository, or pass `-R {owner}/{repo}`.
+Resolved once per run as SKILL.md "Platform Access" describes: a connector for GitHub only
+when it covers **every** operation in this file, otherwise the CLI.
+
+- **CLI**: `gh` installed and authenticated (`gh auth status`); the current directory is the
+  target repository, or pass `-R {owner}/{repo}`.
+- **Connector coverage**: each command below is the reference for its operation. A connector
+  tool covers an operation only when its own description or schema shows that it returns the
+  same fields with the same completeness the command guarantees, or performs the same write
+  under the same guard. Where that cannot be confirmed, the operation is not covered, and one
+  uncovered operation sends the whole run to the CLI. The tests below are where a connector
+  falls short **silently** — each shortfall reads as "nothing there" and fails open — so each is
+  covered only on positive evidence:
+  - **Complete lists.** Every list read whose completeness a decision depends on — the
+    sub-issue set and its total, the candidate, milestone and merged-PR lists, the three E5
+    comment surfaces, the ruleset and label lists, the run lists, the PR commit list — is
+    covered only when the tool shows it returns every item: it reads every page itself, or it
+    exposes a signal that ends the pagination (a total, a next-page cursor or link) that the
+    run follows to the end. A page-number parameter with no such signal is not enough: a page
+    the tool shortened by its own filtering looks exactly like the last page. Where the
+    reference filters on the server (`--base`, `--head`, `--state`, `--commit`, `-e push`),
+    the tool must filter the same way on the server — filtering a capped fetch client-side is
+    the fail-open "Reading complete lists" describes.
+  - **Unfiltered content.** A tool that may withhold items by their author — a content filter
+    that drops comments, reviews or sub-issues from accounts without push access, for
+    instance — does not cover E5's three reads or the vetted-set build, however complete its
+    pagination, unless it shows the filter is not applied to that call. The comments such a
+    filter drops are exactly the ones E5 exists to find.
+  - **E4's rollup** is covered only when the connector's tools — one or several — return the
+    same union the reference reads: every check run **and** every commit status on the PR's
+    head, each entry's type known (`__typename`, or the tool that returned it) with its
+    `status` and `conclusion`, or its `state`, complete by the list test above. Check runs
+    alone, statuses alone, or one combined state without the individual entries do not cover
+    it.
+  - **E2's permission read** — and the milestone title's parent-author read, which is the same
+    read — is covered only by a tool that calls the collaborator-permission endpoint
+    (`GET /repos/{owner}/{repo}/collaborators/{username}/permission`) and returns its
+    `permission`. A collaborator *list*, the author-association label, or a role inferred
+    from anything else does not cover it (eligibility.md E2). This is the same rule the
+    implement-issue skill applies to its approval record's permission read.
+  - **The guarded merge** (2-3) is covered only by a tool taking the merge method **and** an
+    expected head SHA that makes the platform refuse the merge when the head moved. A merge
+    tool without the guard does not cover it.
+  - **The sync** (2-2) is covered only by a tool that can choose between the merge and the
+    rebase update, since the rebase method requires the latter.
+  - **P3's push-access read** speaks for the account that made it, while the revert is pushed
+    with git. A connector authenticates separately from git, so its read covers P3 only when
+    its account is shown to be the one git pushes as; otherwise P3 is not covered.
+  - **Writes** — creating and applying labels, commenting from a body, creating the draft
+    milestone PR with an explicit head and base, editing its body and title, marking it ready,
+    and deleting the integration branch's ref — are covered by a tool that performs that write
+    and reports whether it succeeded.
+- **Outside this choice**: local git (fetch, worktrees, revert, push, ancestry and history
+  checks) and the local `grep` / `sed` content commands always run as written, whatever the
+  method.
 
 ## Reading complete lists (applies to every command below)
 
