@@ -18,7 +18,8 @@ from an integration branch its dependencies have merged into. Single mode never 
 
 **Plain stacks only.** A stack here is a PR whose base is another PR's head branch, made with
 git and `gh pr create --base`. GitHub's native stacked-PR feature (the `gh stack` extension and
-the stacks API) is not used; see Known limits.
+the Stacks API) is never used to register one; S7 says why, and how a stack a human registered
+is handled.
 
 ## S1. Which dependents are stacked
 
@@ -76,6 +77,8 @@ A tree is allowed: two dependents may stack on the same dependency, each at the 
 Review gates, CI, the automated review response, and the ready flip run exactly as for any
 other PR. The gates diff the PR against its own base (review-gates.md), so they see only this
 PR's change — not its dependency's code, which a default-branch diff would show as scope creep.
+
+The stack stays plain: nothing registers it with GitHub's native stacks (S7).
 
 ## S4. Precondition: CI must run on a stacked PR
 
@@ -167,25 +170,67 @@ Restacking does not re-run the review gates. It brings in code that was reviewed
 and the PR's CI runs again on the push. It is not a move toward any eligibility, which is why
 batch-reentry.md's "never retargets" rule for the merge gate's candidates does not cover it.
 
+## S7. GitHub's native stacks are not registered
+
+Never register a stack with GitHub's native stacked-PR feature — no `gh stack` command and no
+write to the Stacks API — even where the extension is installed and the API answers. The reasons
+below were observed in a throwaway repository on 2026-10-25 except where marked (evaluation log,
+"GitHub native stacked PRs evaluated"):
+
+- **A merge below rewrites every branch above.** Once the bottom PR merged — by squash and by
+  merge commit alike (rebase merging was not tried) — GitHub rebased the PRs above it, in order,
+  onto the default branch, force-pushed each branch (`head_ref_force_pushed` on the PR's
+  timeline), and retargeted the next PR at the default branch. An implementer or fix round
+  still pushing to an upper PR would then be rejected as non-fast-forward, and this skill never
+  forces a push. A plain stack is only retargeted; its branches are untouched.
+- **A stack is a chain; S2 allows a tree.** A second dependent on the same base cannot join
+  (the API rejects a PR whose base is not the previous PR's head, and a PR belongs to at most one
+  stack). Left outside, it keeps the pre-rewrite commits and sees its base force-pushed
+  (`base_ref_force_pushed`): its diff showed the files of the PRs beneath it as its own, and once
+  a later commit edited a file the PR below had added, restacking it by merge conflicted
+  (add/add), because the rewrite removed the ancestor the two branches had shared.
+- **One merge lands what is below it.** Merging the top of a three-PR stack merged the PR beneath
+  it in the same request (GitHub's documentation says a merge takes every PR below the one
+  merged). A draft below stopped it, but S3's PRs are flipped to ready once machines are done,
+  not once a human has reviewed them. The plain stack's "merge #N first" leaves each merge to
+  its own human decision. `gh pr merge` (2.103.2) also cannot merge a registered PR: it refused
+  and pointed at the asynchronous merge API.
+- **What it would buy is partial.** Registering did make the default branch's PR CI run on every
+  upper PR — which would relax S4 — but only for a chain, and `github.base_ref` then reported the
+  stack's base, not the PR's own. A workflow that diffs against `base_ref` would therefore see
+  the lower PRs' code (inferred, not observed).
+
+**A stack a human registered anyway** is handled by S6 as written, with one gap. After GitHub's
+rewrite, the PR now at the bottom targets the default branch and each PR above already descends
+from its rebased base, so S6 pushes only where a base has moved since; its restack is a merge
+pushed without force, which GitHub accepted on a registered PR. A tree sibling left outside the
+stack is restacked like any other PR, and a conflicting merge is aborted and reported (S6). The
+gap is a push still in flight when the rewrite lands: see Known limits.
+
 ## Known limits
 
 - **Restacking needs a re-run.** Between runs, a stack is only as straight as GitHub keeps it.
   GitHub's documentation says that deleting a merged PR's head branch retargets the open PRs
-  based on it to that PR's base; it does not say whether the repository's automatic head-branch
-  deletion triggers the same. In the one real stack found in the owner's repositories
+  based on it to that PR's base. With automatic head-branch deletion on, the same happened:
+  observed on 2026-10-25 in a throwaway repository, merging a plain stack's bottom PR left its
+  branch deleted and the PR above retargeted at the default branch, with that PR's head
+  unchanged (evaluation log, "GitHub native stacked PRs evaluated"). Where the branch is not
+  deleted, the isucon-template stack below shows no retarget. In the one real stack found in
+  the owner's repositories
   (`Tech-Residence/isucon-template`, which deletes head branches on merge), the retarget never
   got the chance: #6 merged into `main`, its head branch was never deleted — it still exists —
   so #7, stacked on it, was never retargeted and was later merged into that already-merged
-  branch; its code reached `main` only by some later route. Without a retarget and without a re-run, that is what happens, which is
-  why S3's `## Stack` section tells the human.
+  branch; its code reached `main` only by some later route. Without a retarget and without a
+  re-run, that is what happens, which is why S3's `## Stack` section tells the human.
 - **Merge order is the human's.** The `## Stack` section says to merge bottom-up. A human who
   merges a stacked PR into its base branch first makes the base PR carry both changes; the
   base PR's diff then shows them, and both still reach the default branch only through a
   human-merged PR.
 - **Merge points wait for humans.** A batch with many merge points holds much of its work until
   humans merge; integration mode handles them in one run, because its merge gate merges.
-- **GitHub's native stacks are not used.** They would add stack-aware CI and server-side
-  rebasing, but need the `gh stack` extension and are not yet verified with this skill. The
-  plain stack works without them.
+- **A push onto a branch GitHub rewrote is rejected.** Where a human registers a stack natively
+  and merges its bottom PR while this run is still pushing to an upper PR — a fix round, a
+  Stage 2.5 propagation fix, a restack — that push is non-fast-forward and fails. Nothing here
+  forces it or resets onto GitHub's history; the PR is left for a human. Not exercised.
 - **The CI precondition reads workflow files only.** Required checks configured as rulesets or
   external CI are not inspected beyond S4's "cannot be established" rule.
