@@ -274,6 +274,7 @@ settle red, or do not settle in time, **defers**. Never merge on a pre-sync resu
   | explicit refusal | not merged, head **changed** from the recorded SHA | the guard fired → re-run 2-1 once against the new head; if it moves again, **defer** |
   | explicit refusal | not merged, head **unchanged** | refused for another reason → **defer** |
   | not a refusal | not merged — open, closed, head changed or not | **merge outcome unconfirmed** (2-5) |
+  | any result | merged, but the merge commit is not shown reachable from the integration branch (the ancestry check is false, or the fetch or check fails) | **merge outcome unconfirmed** (2-5) — no revert target is established |
   | any result | the read itself fails | **merge outcome unconfirmed** (2-5) |
 
   **Discriminate among refusals by re-reading the head, not by the error text.** The
@@ -550,7 +551,7 @@ kinds of member, and the report distinguishes them:
 |---|---|---|
 | **Branch closed to merges (B0)** | eligibility.md B0 — the milestone PR is merged, or closed unmerged | Yes for this branch: no later run reopens it. A human retargets the PR, or decides the branch's fate |
 | Eligibility deferrals | eligibility.md's exclusion classes | E5 only; the rest are re-evaluated |
-| Loop deferrals — conflict, red CI, unknown mergeability, refused merge | 2-2 / 2-1 / 2-3 | No — re-evaluated next run |
+| Loop deferrals — conflict, red CI, unknown mergeability, explicitly refused merge | 2-2 / 2-1 / 2-3 | No — re-evaluated next run |
 | **Reverted — verification failed** | auto-revert R-4 | Yes, until a human fixes the change and clears the label |
 | **Reverted — unverified (timeout)** | auto-revert R-4 | Yes, until a human confirms CI health and clears the label |
 | Not attempted | stop-the-line | No — the next run picks them up |

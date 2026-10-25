@@ -287,8 +287,9 @@ never re-enumerated, and what re-admits the content is a new PR for the same iss
 
 The shape of the decisions:
 
-- **A deferral never stops the line; a post-merge failure always does** — and so does a
-  platform-access failure at the merge call, which escalates rather than defers. A conflict on
+- **A deferral never stops the line; a post-merge failure always does** — and so does any
+  merge call that ends without an explicit refusal and does not read as merged, which
+  escalates rather than defers. A conflict on
   sync, red CI, unknown mergeability, an explicitly refused merge, a human comment landing mid-run, or
   membership of the reverted-issue set all defer that PR unmerged and the loop continues.
 - **Verification is integration-branch CI for the merge commit**, plus any checks the

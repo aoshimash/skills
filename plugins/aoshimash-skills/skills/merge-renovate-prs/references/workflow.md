@@ -273,7 +273,8 @@ Present what happened across the run:
 - **Merged & verified** — the PRs that completed all three states.
 - **Reverted** — auto-reverted PRs (autonomous), each with the failure cause, the revert PR link, and the recovery state.
 - **Cooldown wait** — PRs not yet old enough under the configured `minimumReleaseAge`, each with the member that set its age, the source (upstream release date or the lower bound from Renovate's commit), and the date it becomes eligible ("earliest" for a lower-bound date). These need no human action; the next run picks them up.
-- **Deferred / human queue** — PRs held, each with its reason (C-class step, CI red, no rollback path, manual conflicts, undecidable risk, drift-blocked, ambiguous candidate) and what a human needs to do.
+- **Deferred / human queue** — PRs held, each with its reason (C-class step, CI red, no rollback path, manual conflicts, undecidable risk, drift-blocked, ambiguous candidate, merge explicitly refused by the platform) and what a human needs to do.
+- **Merge outcome unconfirmed** — the PR whose merge call ended without an explicit refusal and did not read as merged (2-6), with the call's result, the PR read, and the default branch's head: why the line stopped, and that a human must establish whether the merge landed before the next run.
 - **Disruptive changes executed** — flagged prominently with what downtime occurred.
 - **Follow-ups** — anything that needs a human later.
 - **Platform access** — the method the run used (SKILL.md "Platform Access"), and any operation whose failure under it deferred a PR, stopped the line, or escalated.

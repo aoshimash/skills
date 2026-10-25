@@ -143,25 +143,30 @@ not an obstacle.
 
 **Classify the call's result, then confirm from platform state** (workflow.md 2-6).
 `gh pr merge` submits the GraphQL `mergePullRequest` mutation; with `gh` (behaviour
-read from the v2.103.2 source, `pkg/cmd/pr/merge/merge.go`, and from go-gh v2.17.0,
-`pkg/api/graphql_client.go` and `pkg/api/errors.go`, for which response becomes which
-error string) an **explicit refusal** is a non-zero exit whose stderr carries one of:
+read from source: gh v2.103.2 `pkg/cmd/pr/merge/merge.go` and `http.go`, which submit
+the mutation through go-gh v2.17.0's `Mutate` — `pkg/api/graphql_client.go`,
+`pkg/api/errors.go` — and cli/shurcooL-graphql v0.0.4 `graphql.go`, which turn the
+response into the error string) an **explicit refusal** is a non-zero exit whose stderr
+carries one of:
 
-- a line beginning `GraphQL: ` — go-gh's rendering of an `errors[]` payload in a 2xx
-  response — whose message gives a reason the merge is not allowed. An errors payload
+- a line beginning `GraphQL: ` — go-gh's rendering of an `errors[]` payload in a `200`
+  response to the mutation — whose message gives a reason the merge is not allowed. An errors payload
   is not automatically a refusal: GitHub can also return one alongside partial results
   when a request exceeds resource limits, and one reporting a timeout, a resource limit,
   or an internal failure is **not a refusal**;
 - `is not mergeable:` — printed by `gh` itself from the `mergeStateStatus` it read,
   before it submits the mutation; nothing was sent.
 
-Everything else is **not a refusal**: a line beginning `HTTP ` (go-gh's rendering of a
-non-2xx response, whatever the code — GitHub answers a GraphQL request it terminated
-after 10 seconds with a `502` or `504`, per
+Everything else is **not a refusal**: a line beginning `non-200 OK status code:`
+(shurcooL's rendering of any non-`200` response to the mutation, with the status and
+body — GitHub may answer a GraphQL request it terminated after 10 seconds with a `502`
+or `504`, per
 [GitHub Docs, "Rate limits and query limits for the GraphQL API"](https://docs.github.com/en/graphql/overview/rate-limits-and-query-limits-for-the-graphql-api#timeouts)),
-a network or TLS error, a killed or hung command, and **exit 0**. `gh` exits 0 without
-merging when the base branch requires a merge queue — it submits the auto-merge mutation
-instead, so the PR joins the queue and merges later, outside the one-in-flight loop.
+a line beginning `HTTP ` (go-gh's rendering of a non-2xx response to one of `gh`'s own
+reads; the output does not say which call failed), a network or TLS error, a killed or
+hung command, and **exit 0**. `gh` exits 0 without merging when the base branch requires
+a merge queue — it submits the auto-merge mutation instead (`http.go`), so the PR joins
+the queue and merges later, outside the one-in-flight loop.
 Through a **connector**, the same rule: only a tool result that carries the platform's
 refusal reason counts as a refusal; a tool error that does not show one is not.
 

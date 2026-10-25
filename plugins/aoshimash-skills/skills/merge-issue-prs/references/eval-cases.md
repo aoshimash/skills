@@ -1151,13 +1151,13 @@ vetted-issue-set source, the dependency graph, and no terminal-state declaration
 `gh pr merge 241 --merge --match-head-commit 040a6df93ff29d7ba53edb71ae6bcd9b8f777964`. In every variant the
 confirmation read then returns `{"head":"040a6df93ff29d7ba53edb71ae6bcd9b8f777964","merge_commit":null,"state":"OPEN"}`
 and `git fetch` shows the branch still at the pre-merge base. Three variants:
-**(a)** exit 1, stderr `HTTP 504: We couldn't respond to your request in time (https://api.github.com/graphql)`;
-**(b)** exit 0, stderr `✓ Pull request aoshimash/skills#241 will be added to the merge queue for integration/issue-109 when ready`;
+**(a)** exit 1, stderr `non-200 OK status code: 504 Gateway Timeout body: "We couldn't respond to your request in time"`;
+**(b)** exit 0, stderr `! The merge strategy for integration/issue-109 is set by the merge queue` / `✓ Pull request aoshimash/skills#241 will be added to the merge queue for integration/issue-109 when ready` (two lines);
 **(c)** exit 1, stderr `X Pull request aoshimash/skills#241 is not mergeable: the base branch policy prohibits the merge.`
 
 **Expected behavior**:
 - Classifies the call's own result before concluding from the read: (a) and (b) are **not a
-  refusal** (an HTTP status error; a success exit that left the PR open — here a merge-queue
+  refusal** (a non-`200` response to the mutation; a success exit that left the PR open — here a merge-queue
   enqueue that merges later), (c) is an **explicit refusal** (`gh` read the PR as
   unmergeable and submitted nothing).
 - **(a)** and **(b)**: the open, head-unchanged read does **not** make #241 a refusal or a
@@ -1261,19 +1261,38 @@ window length proves a merge did not land, so it could only make the escalation 
 remove the fail-open.
 
 **Evidence.** The CLI mapping was read from source, not observed on a failing merge: `gh`
-v2.103.2 `pkg/cmd/pr/merge/merge.go` (the pre-submit `is not mergeable:` message, and exit 0
-after an auto-merge/merge-queue mutation) and go-gh v2.17.0 `pkg/api/graphql_client.go` /
-`pkg/api/errors.go` (a non-2xx response renders as `HTTP <code>…`, an errors payload in a 2xx
-response as `GraphQL: …`). GitHub Docs, "Rate limits and query limits for the GraphQL API",
+v2.103.2 `pkg/cmd/pr/merge/merge.go` (the pre-submit `is not mergeable:` message, the
+merge-queue messages, exit 0 after enqueueing) and `http.go` (the mutation, and the auto-merge
+mutation used for a merge queue); go-gh v2.17.0 `pkg/api/graphql_client.go` / `pkg/api/errors.go`
+(`Mutate` renders an errors payload as `GraphQL: …`; `HTTP <code>…` is only the rendering of a
+non-2xx response to `gh`'s own reads); cli/shurcooL-graphql v0.0.4 `graphql.go` (a non-`200`
+response to the mutation renders as `non-200 OK status code: <status> body: <body>`, and only a
+`200` response is parsed for an errors payload). GitHub Docs, "Rate limits and query limits for the GraphQL API",
 Timeouts, states that a request taking over 10 seconds is terminated with a `502` or `504`.
 The confirmation command was run as written against aoshimash/skills#147 (open) and #144
 (merged). No merge was submitted to produce a refusal.
 
 **Fixture.** Case 42's read result is the command's actual output for aoshimash/skills#147 on
 2026-10-25, renumbered to #241; the stderr lines are built from the format strings in the
-source above and the documented 504 message, not captured from a live failure.
+source above, not captured from a live failure, and (a)'s body text is the documented timeout
+message — the actual body of a 504 is not known.
 
 **Known limit.** Classifying an errors payload as a refusal is a judgment over its message
 text. Misreading a refusal as "not a refusal" stops the line (fail-closed); misreading a
 timeout or internal-error payload as a refusal would defer and fail open, and the only guard
 against that is the instruction to treat an uncertain message as not a refusal.
+
+**Desk-check** (separate agent instance, round 1): Case 23 Pass; Case 42 Conditional; no
+fail-open found. Defects, all fixed:
+1. The CLI mapping said a non-2xx response renders as `HTTP <code>…`. On the mutation path it
+   renders as shurcooL's `non-200 OK status code: …`; `HTTP <code>` comes only from `gh`'s own
+   reads. Both strings are now listed with their origin, and `http.go` and shurcooL are cited.
+2. Case 42 (a)'s stderr used the wrong form for the same reason, and (b) lacked the
+   merge-strategy line `gh` prints when `--merge` is passed to a merge-queue branch.
+3. The log row said "desk-checked" before any result was recorded → this paragraph.
+4. SKILL.md's decision summary named only a platform-access failure at the merge call, narrower
+   than 2-3 (a merge-queue exit 0 is not a method failure) → reworded; the report table's
+   "refused merge" is now "explicitly refused merge".
+5. 2-3's table had no row for a PR reading merged whose merge commit is not shown reachable →
+   added, as unconfirmed.
+6. "GitHub answers … with a `502` or `504`" overstated the docs' "may receive" → "may answer".
