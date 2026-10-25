@@ -3127,6 +3127,21 @@ Earlier log entries that mention GitLab are historical.
 Desk-checked by reading the shipped instructions; no separate agent instance
 was used, so this is `SELF-REVIEWED`.
 
+### 2026-10-25 — Backlog parent-issue flag
+
+`platform-backlog.md` "List Child Issues of a Parent" passed `--parent <parent_issue_key>`
+to `bee issue list`. The bee command reference for `bee issue list`
+(<https://nulab.github.io/bee/commands/issue/list>) has no `--parent` flag — only
+`--parent-issue <id>` — and Backlog's "Get Issue List" API types `parentIssueId[]` as a
+Number, so the value is the numeric issue ID rather than the key. The command now matches
+create-issue's Backlog guide, which already used `--parent-issue <parent_issue_id>`.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 13 | Not re-run | Only the child-listing command changed; `bee` is not installed here, so the corrected command was checked against the bee reference and the Backlog API docs, not run |
+
+`SELF-REVIEWED`: no separate agent instance was used for a one-command change.
+
 ### 2026-10-25 — Platform access resolution
 
 Platform access is no longer pinned to one CLI per platform. SKILL.md gained a

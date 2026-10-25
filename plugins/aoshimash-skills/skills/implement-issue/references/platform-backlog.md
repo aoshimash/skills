@@ -51,8 +51,11 @@ Present the list to the user and ask them to select one.
 Used in Phase 0 (Setup and Mode Selection) to check whether a single referenced issue is a parent with open children, and in Batch mode to collect a parent's sub-issues as the source set:
 
 ```bash
-bee issue list -p <project_key> --parent <parent_issue_key>
+bee issue list -p <project_key> --parent-issue <parent_issue_id>
 ```
+
+`--parent-issue` takes the parent's numeric issue ID, not its issue key (`PROJ-123`) — read
+the ID from `bee issue view <parent_issue_key> --json`.
 
 ## List Issues by Milestone
 
