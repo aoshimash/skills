@@ -517,8 +517,8 @@ gh pr merge {pr} --merge --match-head-commit {head_sha_that_passed_the_recheck}
   `errors[]` payload, not as a distinct HTTP status. So do **not** branch on a status code to
   tell one refusal from another.
 - **Classify the call's result before reading the PR**, per workflow.md 2-3. With `gh`
-  (behaviour read from source: gh v2.103.2 `pkg/cmd/pr/merge/merge.go` and `http.go`, which
-  submit the mutation through go-gh v2.17.0's `Mutate` — `pkg/api/graphql_client.go`,
+  (behaviour read from source: gh v2.103.2 `pkg/cmd/pr/merge/merge.go` and `http.go`, whose
+  errors `internal/ghcmd/cmd.go` prints as `err.Error()`, and which submit the mutation through go-gh v2.17.0's `Mutate` — `pkg/api/graphql_client.go`,
   `pkg/api/errors.go` — and cli/shurcooL-graphql v0.0.4 `graphql.go`, which turn the response
   into the error string) an **explicit refusal** is a non-zero exit whose stderr carries one
   of:
@@ -546,7 +546,7 @@ gh pr merge {pr} --merge --match-head-commit {head_sha_that_passed_the_recheck}
   queue and merges later, outside the loop — so exit 0 with the PR still open is never a
   deferral either.
 - Through a **connector**, the same rule: only a tool result that carries the platform's
-  refusal reason counts as a refusal; a tool error that does not show one — a timeout, a
+  refusal reason counts as a refusal, whatever status it came with; a tool error that does not show one — a timeout, a
   transport failure, a generic failure — is not a refusal.
 - **Then discriminate a refusal by re-reading the head**: if `headRefOid` differs from the
   recorded SHA the guard fired (re-run 2-1 once); if it is unchanged the refusal was

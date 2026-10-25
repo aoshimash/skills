@@ -252,8 +252,9 @@ settle red, or do not settle in time, **defers**. Never merge on a pre-sync resu
   [platform-github.md](platform-github.md)).
 - **Only an explicit refusal means "not merged".** A merge call that timed out, lost its
   connection, or got a gateway error may still complete on the server after the client gave
-  up — the platform's own documentation describes timed-out requests being terminated with a
-  `502` or `504` and does not say the work was undone. A confirmation read taken just
+  up — the platform's own documentation says it terminates a request that runs too long and
+  the client may receive a `502` or `504`, and does not say the work was undone. A
+  confirmation read taken just
   afterwards can therefore show the PR open with its head unchanged while the merge is still
   landing; deferring on that read and moving to the next PR would put two merges in flight
   and leave one of them unverified. So the call's own result is classified first:
@@ -263,7 +264,8 @@ settle red, or do not settle in time, **defers**. Never merge on a pre-sync resu
     read the PR as unmergeable and declined to submit the merge.
     [platform-github.md](platform-github.md) "Merge (2-3)" maps both to what the CLI prints.
   - **Anything else is not a refusal** — a timeout, a transport or connection error, an HTTP
-    status error of any code, a command that was killed or hung, an error payload reporting
+    status error of any code (through the CLI; a connector's tool results are read as
+    platform-github.md "Merge (2-3)" says), a command that was killed or hung, an error payload reporting
     a timeout, an internal failure or exhausted resources, a success exit, and any output the
     agent cannot place in the first bullet.
 - **Then take the confirmation read** (state, merge commit, head) and conclude from both:
@@ -378,7 +380,7 @@ anyway".
 | Platform **explicitly** refuses the merge (head moved twice, required check, protection) and the PR reads as not merged | 2-3 | **defer** | continues |
 | **Verification timeout** — no run, no completion, or nothing that concluded `success`, within the window | 2-4 | **auto-revert** | **stops** |
 | **Verification failure** — a run concluded non-success, or a repo-defined check failed | 2-4 | **auto-revert** | **stops** |
-| **Merge outcome unconfirmed** — the merge call ended **without an explicit refusal** (timeout, transport or HTTP status error, success exit) and the PR does not read as merged, or the confirmation read itself failed (2-3; SKILL.md "Platform Access"). An open, head-unchanged read after such a call is this row, not a refusal | 2-3 | **escalate**, naming the PR and the branch head; no re-attempt, no revert | **stops immediately** |
+| **Merge outcome unconfirmed** — the merge call ended **without an explicit refusal** (timeout, transport or HTTP status error, success exit) and the PR does not read as merged; or the PR reads as merged but its merge commit is not shown reachable from the integration branch; or the confirmation read itself failed (2-3; SKILL.md "Platform Access"). An open, head-unchanged read after such a call is this row, not a refusal | 2-3 | **escalate**, naming the PR and the branch head; no re-attempt, no revert | **stops immediately** |
 | **Revert failure** — the revert cannot be created, pushed, or verified, or (under rebase) the landed commits cannot be enumerated with certainty | revert | **record the exclusion (label, then comment), then escalate to a human** | **stops immediately** |
 
 ## Auto-revert

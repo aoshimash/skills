@@ -1153,7 +1153,7 @@ confirmation read then returns `{"head":"040a6df93ff29d7ba53edb71ae6bcd9b8f77796
 and `git fetch` shows the branch still at the pre-merge base. Three variants:
 **(a)** exit 1, stderr `non-200 OK status code: 504 Gateway Timeout body: "We couldn't respond to your request in time"`;
 **(b)** exit 0, stderr `! The merge strategy for integration/issue-109 is set by the merge queue` (stdout is not a terminal, so `gh` prints no success line);
-**(c)** exit 1, stderr includes `X Pull request aoshimash/skills#241 is not mergeable: the base branch policy prohibits the merge.`, then `To have the pull request merged after all the requirements have been met, add the `--auto` flag.` and `To use administrator privileges to immediately merge the pull request, add the `--admin` flag.`
+**(c)** exit 1, stderr includes `X Pull request aoshimash/skills#241 is not mergeable: the base branch policy prohibits the merge.`, then ``To have the pull request merged after all the requirements have been met, add the `--auto` flag.`` and ``To use administrator privileges to immediately merge the pull request, add the `--admin` flag.``
 
 **Expected behavior**:
 - Classifies the call's own result before concluding from the read: (a) and (b) are **not a
@@ -1177,7 +1177,7 @@ and `git fetch` shows the branch still at the pre-merge base. Three variants:
 | 2026-08-07 | Cases 1–34, trigger evals | **not benchmarked — deferred once more, with a named owner and a deadline** | The skill's surface is now complete, so the reason given in the rows above (a baseline superseded by the next task) no longer applies and this is the last deferral the suite gets. The remaining reason is narrow and specific: #110 and #114 each had their rules changed **materially** by the review gates that ran immediately after the implementer finished — #114's reverted-work exclusion was re-keyed from the PR to the issue in round 2 — and this PR has both gates plus automated review still ahead of it, so a baseline recorded now would measure a spec that is about to move. Secondarily, this implementer runs in a parallel batch on an account that has already hit a usage limit once, and a 49-prompt benchmark from inside it risks the sibling run. **Owner: the batch orchestrator** (the user, in a Direct run). **When: as soon as this PR's review gates and automated review complete and it is flipped to ready — and in any case before #116 is implemented**, since #116 documents the finished skill. If it has not run by then, it stops being a deferral and becomes a defect. |
 | 2026-08-07 | Cases 1–34, trigger evals | **benchmarked** — 21/21 trigger, 24 Pass / 10 Partial / 0 Fail behavioral | The deferral above is discharged. The run found defects in the skill and in the suite: an under-matching E1c linking-keyword pattern that **attributes** rather than defers (fail-open), a zero-merge definition contradicting M0 on a reverted first merge, an escalation path that stops before recording its exclusion, and a merge onto a branch whose milestone already merged (strands the branch). All ten Partials were placement, not policy — correct material sitting away from the decision point. Fixed in the same pass, with Cases 35–36 added and 17, 18, 24, 25, 26 widened so each defect now has a case that fails if it returns. Suite is 36 behavioral + 21 trigger. **Re-run owed against the amended suite**, since these results predate the fixes. |
 | 2026-10-25 | Cases 37–41 (platform access) | **desk-checked**, not benchmarked — see below | Platform access resolution added; separate agent instance against the shipped text |
-| 2026-10-25 | Case 42, Case 23 amended (merge-call classification) | **desk-checked** (round 1 Conditional, fixed; round 2 below), not benchmarked | Only an explicit refusal means "not merged"; separate agent instance against the shipped text |
+| 2026-10-25 | Case 42, Case 23 amended (merge-call classification) | **desk-checked** — round 3: Cases 23 and 42 Pass (rounds 1–2 Conditional, fixed); not benchmarked | Only an explicit refusal means "not merged"; separate agent instance against the shipped text |
 
 ### 2026-10-25 — Platform access resolution
 
@@ -1265,8 +1265,8 @@ v2.103.2 `pkg/cmd/pr/merge/merge.go` (the pre-submit `is not mergeable:` message
 the merge-queue messages — success lines print only when stdout is a terminal — and exit 0
 after enqueueing) and `http.go` (the mutation, and the auto-merge
 mutation used for a merge queue); go-gh v2.17.0 `pkg/api/graphql_client.go` / `pkg/api/errors.go`
-(`Mutate` renders an errors payload as `GraphQL: …`; `HTTP <code>…` is only the rendering of a
-non-2xx response to `gh`'s own reads); cli/shurcooL-graphql v0.0.4 `graphql.go` (a non-`200`
+(`Mutate` renders an errors payload as `GraphQL: …`; `HTTP <code>…` is the rendering of a
+non-2xx response to `gh`'s own reads or to the post-merge branch deletion); cli/shurcooL-graphql v0.0.4 `graphql.go` (a non-`200`
 response to the mutation renders as `non-200 OK status code: <status> body: <body>`, and only a
 `200` response is parsed for an errors payload). GitHub Docs, "Rate limits and query limits for the GraphQL API",
 Timeouts, states that a request taking over 10 seconds is terminated and that the client may receive a `502` or `504`.
@@ -1306,3 +1306,12 @@ prints after the refusal; the guide notes that `gh`'s own reads also render `Gra
 log's 502/504 sentence says "may"; the log row records the rounds. Not fixed here, as
 pre-existing and outside this change: a *merge outcome unconfirmed* escalation is not
 persisted, so a later run does not see it (raised as a follow-up).
+
+**Desk-check** (separate agent instance, round 3): Cases 23 and 42 **Pass**; no fail-open.
+Six fail-closed or minor defects, fixed after the verdict: 2-5's unconfirmed row now includes
+2-3's merged-but-not-reachable case; M2's State column gained *escalated — merge outcome
+unconfirmed*, so such a PR is not written as "deferred"; the CLI-only scope of "an HTTP status
+error is not a refusal" is stated, since a connector's result carrying a refusal reason counts
+whatever its status; the Evidence paragraph's "only" now also names the post-merge branch
+deletion; the guide cites `internal/ghcmd/cmd.go`, which prints the error string; nested
+backticks in the fixture fixed. These edits change no case's expected behaviour.

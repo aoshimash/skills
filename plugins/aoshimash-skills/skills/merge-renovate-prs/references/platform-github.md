@@ -143,7 +143,8 @@ not an obstacle.
 
 **Classify the call's result, then confirm from platform state** (workflow.md 2-6).
 `gh pr merge` submits the GraphQL `mergePullRequest` mutation; with `gh` (behaviour
-read from source: gh v2.103.2 `pkg/cmd/pr/merge/merge.go` and `http.go`, which submit
+read from source: gh v2.103.2 `pkg/cmd/pr/merge/merge.go` and `http.go`, whose errors
+`internal/ghcmd/cmd.go` prints as `err.Error()`, and which submit
 the mutation through go-gh v2.17.0's `Mutate` — `pkg/api/graphql_client.go`,
 `pkg/api/errors.go` — and cli/shurcooL-graphql v0.0.4 `graphql.go`, which turn the
 response into the error string) an **explicit refusal** is a non-zero exit whose stderr
@@ -171,7 +172,7 @@ hung command, and **exit 0**. `gh` exits 0 without merging when the base branch 
 a merge queue — it submits the auto-merge mutation instead (`http.go`), so the PR joins
 the queue and merges later, outside the one-in-flight loop.
 Through a **connector**, the same rule: only a tool result that carries the platform's
-refusal reason counts as a refusal; a tool error that does not show one is not.
+refusal reason counts as a refusal, whatever status it came with; a tool error that does not show one is not.
 
 After **every** merge call, refusal or not, read the PR (a read that fails is a
 *merge outcome unconfirmed*):
