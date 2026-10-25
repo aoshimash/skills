@@ -12,7 +12,7 @@ dispatch (batch.md B1-5, batch-reentry.md R8), 80–84 evaluate the batch
 orchestrator's context budget (batch.md, context-budget.md), 85–90
 evaluate the no-identifier assigned-issue source and priority ranking
 (SKILL.md Phase 0, batch.md B1-2 step 5 and B1-3, priority-order.md), and
-91–97 evaluate standard mode's stacked PRs (batch.md Merge Modes, B2-1, B2-5,
+91–98 evaluate standard mode's stacked PRs (batch.md Merge Modes, B2-1, B2-5,
 B2-6, B3, stacked-prs.md).
 
 ## Quality Criteria
@@ -74,6 +74,7 @@ B2-6, B3, stacked-prs.md).
 | 53 | A stack is used exactly where it can carry the dependency | In standard mode a dependent with exactly one unmerged dependency is cut from that dependency's head branch, its PR targets that branch, its body opens with a `## Stack` section naming the base PR, level and merge order, and keeps `Closes #N`; its review gates diff it against its own base, so a dependency's code is never judged as its scope creep; no unmerged dependency means the default branch; two or more means `HELD`, unless a dependency failed, which makes it `SKIPPED`; nothing lands past level 3; two dependents may share a base; satisfaction still means the dependency reached ready; integration mode and Single mode never stack |
 | 54 | Stacking needs CI that runs on a stacked PR, and fails closed | Before stacking is offered, every workflow that runs checks on an open PR is read for a base-branch filter; one that excludes arbitrary branches, CI that cannot be read, or a trigger that cannot be parsed makes stacking unavailable for the batch, with the workflow or reason named in the plan and every PR based on the default branch; a post-merge-only workflow is not counted, and a repository with no PR CI may stack |
 | 55 | Restacking is safe, and `HELD` is not failure | Restacking runs at every group boundary for delivered stacked PRs and when a batch is re-invoked, over every PR carrying a `## Stack` section, bottom-up, in a fresh detached worktree: a moved base is merged in, a merged base PR's own base becomes the new base (unless it already is) and is merged in, a base closed unmerged is reported; there is never a rebase, reset or force-push; a conflicting merge is aborted with nothing pushed; a PR with human activity, or a read that may be incomplete, is reported rather than restacked. `HELD` cascades `HELD`, never `SKIPPED`, is listed with what it waits for, and is dispatched later only under a plan approved in that session |
+| 56 | A stack stays plain | No stack is registered with GitHub's native stacked PRs — no `gh stack` command, no Stacks API write — whether or not the extension is installed or the API answers; a stack a human registered is restacked by S6 unchanged, never by a force-push, and a conflicting merge of a rewritten branch into a PR outside the stack is aborted and reported |
 
 ## Single-Mode Test Cases
 
@@ -1663,6 +1664,29 @@ delivered) before group 3 is dispatched. #202's own gates are not re-run. A run 
 built on #201's pre-fix code until some later invocation fails this case.
 
 **Criteria to test**: 55, 21
+
+### Case 98: GitHub's native stacks are present
+
+**Scenario** (modelled on PRs #1–#4 of the throwaway `aoshimash/gh-stack-probe`, 2026-10-25):
+Case 91's chain plus #104, which depends on #102 only. A: `gh stack` 0.2.1 is installed and
+`GET /repos/{owner}/{repo}/stacks` answers `[]`. B: after the run, a human registered the chain
+with `gh stack link 201 202 203` — #204 cannot join, since its base is not #203's head — and
+merged #201 by squash. GitHub rebased #202 and #203 onto `main`, force-pushed both, and
+retargeted #202 at `main`; #204 still targets #202's branch and carries #202's pre-rewrite
+commits, so its diff now shows #201's and #202's files. A fix round from #202's bot review is then
+pushed to it, editing a file #202 added; no human has commented on #202, #203 or #204. The batch is re-invoked.
+
+**Expected behavior**: A: #202 and #203 are created exactly as in Case 91 and #204 is stacked on
+#202 at level 3 beside #203; nothing runs `gh stack` or writes to the Stacks API, and the plan
+does not offer native registration. B: the restack works bottom-up as in Case 94. #202's base is
+`main`, which its rebased head already contains, so nothing is pushed to it. #202's head is not
+an ancestor of #203's (the review fix) or #204's, so `origin/<#202's branch>` is merged into
+each, in a fresh detached worktree. For #203 the merge applies and is pushed without force.
+For #204 it conflicts (add/add on the file the fix edited — the rewrite removed the ancestor the
+two branches shared), so it is aborted, nothing is pushed, and #204 is reported with the path.
+No branch is reset to GitHub's rebased history, and nothing is force-pushed.
+
+**Criteria to test**: 56, 55
 
 ## Evaluation Log
 
@@ -3447,3 +3471,94 @@ a later route — the hazard the `## Stack` section and the restack's retarget e
 **Not verified:** no stacked PR was created and no real `gh pr edit --base` was run — both would
 write to a real repository. As before, there is no scored `evals/evals.json`; cases 91–97 were
 desk-checked.
+
+### 2026-10-25 — GitHub native stacked PRs evaluated
+
+The previous entry left GitHub's native stacked PRs out until they could be verified. They were
+verified live and are **not adopted**: stacked-prs.md gains S7, which forbids registering a
+stack (no `gh stack` command, no Stacks API write) and records why, and the S3 step that
+creates a stacked PR points at it. Known limits' retarget entry now cites an observation
+instead of an open question. No command was added to the skill, so platform-github.md is
+unchanged.
+
+**Why not adopted.** The feature's one gain for this skill — default-branch PR CI on upper PRs,
+which would relax S4 — comes with a server-side rebase that force-pushes every upper branch
+whenever a lower PR merges, a chain-only shape where S2 allows trees, and a merge that lands
+every PR below the one merged. The first collides with "never force-push" for any implementer
+still pushing to an upper PR; the second orphans a tree sibling onto rewritten history; the
+third folds several per-PR human merges into one. A plain stack has none of these, and the
+skill must work without the extension anyway.
+
+**Placement.** S7 is a new section of `stacked-prs.md`, next to the rules it
+qualifies; nothing in `batch.md` changes, since no step gains an action.
+
+| Case | Result | Notes |
+|------|--------|-------|
+| 98 | Pass | A: S7 forbids any registration, and S3 points at it. B: S6 as written pushes nothing to #202, merges into #203 without force, aborts #204's conflicting merge — each step matches what the probe showed |
+| 91–97 | Not re-run | Outside S7 only the intro's "Plain stacks only", S3's closing pointer and Known limits changed; none alters a step those cases exercise |
+| 1–90 | Not re-run | Untouched |
+
+**Live observations** — `aoshimash/gh-stack-probe`, a private throwaway repository created for
+this with the user's permission; `delete_branch_on_merge` on; one workflow,
+`pull_request: branches: [main]`, echoing `github.base_ref`. PRs #1←#2←#3 and #2←#4 (a tree),
+#5←#6, and the never-registered control #7←#8, all opened as drafts with `gh pr create --base`.
+`gh` 2.103.2, `gh stack` 0.2.1, Stacks API version header `2026-03-10`.
+
+- Before registration only #1, #5 and #7 — the PRs on `main` — got a CI run.
+- `gh api -H "X-GitHub-Api-Version: 2026-03-10" -X POST repos/aoshimash/gh-stack-probe/stacks`
+  with `{"pull_requests":[1,2,3]}` created stack #9 (stack numbers share the issue sequence).
+  No head SHA changed. CI then ran on #2 and #3 with `github.base_ref` = `main`; their
+  `refs/pull/N/merge` commits still had the PR's own base as first parent. #2's REST resource
+  gained `stack: {number: 9, position: 2, size: 3, base: {ref: "main"}}`.
+- `gh stack link 5 6` (run in a clone) printed `Created stack with 2 PRs (stack #10)`; no head
+  SHA changed.
+- Trees: `POST …/stacks/9/add` with `[4]` → 422 "Pull requests must form a stack, where each PR's
+  base ref is the previous PR's head ref"; `POST …/stacks` with `[1,2,4]` → 422 "Pull requests #1,
+  #2 are already part of a stack"; a one-PR stack → 422 "2 items required".
+- `gh pr merge 1 --squash` → "This pull request is part of a stack and must be merged using the
+  asynchronous merge REST API". `PUT …/pulls/1/merge-async` with `merge_method=squash` → merged.
+  Then #2 was retargeted at `main` and its head went `37f8851c` → `b585f6a3` (the old head is not
+  an ancestor), #3's `5028273f` → `c8455110`; #2's timeline reads `automatic_base_change_succeeded`,
+  `head_ref_force_pushed`. #4, outside the stack, kept `f9e48ce4` and `s1b` as base, got
+  `base_ref_force_pushed` at the same moment, and its files became `s1a.txt`, `s1b.txt`,
+  `s1d.txt`.
+- `PUT …/pulls/5/merge-async` with `merge_method=merge` → #6 retargeted and force-pushed alike
+  (`head_ref_force_pushed`, old head not an ancestor). Rebase merging was not tried.
+- Control: `gh pr merge 7 --merge` (the first attempt returned "Base branch was modified", the
+  second merged) → #7's branch was auto-deleted and #8 was retargeted at `main`
+  (`automatic_base_change_succeeded`), head `c70b0bae` unchanged, no force-push event.
+- Restack on a registered PR: a fast-forward push to `s1b`, then S6's sequence
+  (`git worktree add --detach`, `merge --no-edit origin/s1b`, `push origin HEAD:s1c`) was
+  accepted without force and stack #9 stayed intact. The same sequence for `s1d` conflicted
+  (add/add in `s1b.txt`) and was aborted. Before the fast-forward commit, `s1b.txt` had the same
+  blob on both sides, so the conflict needs a later edit to a file the base added.
+- `PUT …/pulls/3/merge-async` (the top) while #2 was a draft → `failed`: "Pull request must be
+  open and not in draft mode in order to be merged". With #2 ready → `merged`, and both #2 and #3
+  merged into `main` from that one request. #4 was then retargeted at `main`
+  (`automatic_base_change_succeeded`) as `s1b` was auto-deleted.
+- `GET …/stacks?pull_request=6` returned stack #10 with #5 as `closed` (merged); for the
+  never-stacked #8 it returned `[]`.
+
+**Documentation read** (docs.github.com, 2026-10-25): "About stacked pull requests", the
+`gh stack` CLI reference, the Stacks REST reference, and "Stacked pull requests APIs and
+webhooks", plus the `github/gh-stack` README. The docs state that branch protection applies to
+every PR in a stack; the probe had none, so that is unverified here.
+
+**Review.** A separate agent instance re-read the probe repository read-only (timelines, SHAs,
+blobs, runs, stacks) and desk-checked S7 and Case 98 against S6. It confirmed the observations
+above and found ten defects, all fixed: the "registered anyway" paragraph claimed every rebased
+PR targets the default branch (only the new bottom does) and hid the rejected-push gap, now a
+Known limit; S7 stated the add/add conflict without the later edit it needs; criterion 56 named
+the wrong branch as rewritten; "a human who merges from the CLI is blocked" overclaimed (only
+`gh pr merge` refuses); `base_ref_force_pushed` on #4 was attributed to the wrong merge; the
+`base_ref` diff consequence was an inference under an "observed" heading; Case 98's review
+could have been human, which S6 would report; and a retarget without deletion was cited to the
+probe, which only isucon-template supports. Event order also shows
+`automatic_base_change_succeeded` about a second before the base's `head_ref_deleted`, so the
+retarget is attributed to the deletion setting, not to an observed sequence. The reviewer could
+not re-observe the error strings, the merge refs' parents (the PRs have since merged) or the
+tool versions; those come from this session's command output.
+
+**Not verified:** rebase merging; a stack under branch protection or a merge queue; the web UI's
+merge button (only the API and `gh` were used); `gh stack sync`/`rebase`, which the skill would
+never run.
