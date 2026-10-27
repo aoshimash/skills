@@ -8,6 +8,7 @@ covers a change (see AGENTS.md "Repository Checks"):
   frontmatter     every SKILL.md frontmatter meets the Agent Skills spec caps
   skill-md-lines  every SKILL.md is under 500 lines
   links           every relative markdown link and heading anchor resolves
+                  (markdown files outside dot-directories)
   claude-paths    no `.claude/` path in skill instructions outside an
                   "On Claude Code, ..." note or a Claude Code-bound skill
 
@@ -38,10 +39,12 @@ DESCRIPTION_MAX = 1024
 COMPATIBILITY_MAX = 500
 NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
-# Over-cap descriptions already on main when this check landed, as a ratchet:
-# skill -> the length recorded then. The description may shrink, never grow, and
-# the entry must be deleted once it is back under the cap (a stale entry fails).
-# A waived violation is printed but does not fail the run.
+# Over-cap descriptions already on main when this check landed: skill -> a
+# length the description may not exceed. The check only compares against this
+# number, so lower it by hand when a description shrinks; nothing stops a
+# shrunk description growing back up to it. The entry must be deleted once the
+# description is under the cap (a stale entry fails). A waived violation is
+# printed but does not fail the run.
 DESCRIPTION_WAIVERS: dict[str, int] = {
     "merge-renovate-prs": 1074,
 }
@@ -131,13 +134,31 @@ def parse_frontmatter(lines: list[str]) -> dict[str, str]:
                 out[key] = "\n".join(folded).strip("\n")
         elif value[:1] in ('"', "'") and value[-1:] == value[:1] and len(value) > 1:
             inner = value[1:-1]
-            out[key] = inner.replace("''", "'") if value[0] == "'" else json.loads(value)
+            out[key] = inner.replace("''", "'") if value[0] == "'" else yaml_double_quoted(inner)
         else:
             out[key] = " ".join([value] + [c.strip() for c in cont if c.strip()]).strip()
     return out
 
 
+YAML_ESCAPES = {"0": "\0", "a": "\a", "b": "\b", "t": "\t", "\t": "\t", "n": "\n", "v": "\v",
+                "f": "\f", "r": "\r", "e": "\x1b", " ": " ", '"': '"', "/": "/", "\\": "\\",
+                "N": "\x85", "_": "\xa0", "L": "\u2028", "P": "\u2029"}
+
+
+def yaml_double_quoted(inner: str) -> str:
+    """Decode a YAML double-quoted scalar body; ValueError on an invalid escape."""
+    def sub(m: re.Match) -> str:
+        e = m.group(1)
+        if e[0] in "xuU":
+            return chr(int(e[1:], 16))
+        if e in YAML_ESCAPES:
+            return YAML_ESCAPES[e]
+        raise ValueError(f"invalid escape \\{e} in a double-quoted scalar")
+    return re.sub(r"\\(x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|.)", sub, inner)
+
+
 def read_frontmatter(skill_md: Path) -> dict[str, str] | None:
+    """Parsed frontmatter, None when absent; ValueError when it cannot be parsed."""
     lines, _ = split_frontmatter(skill_md.read_text(encoding="utf-8"))
     return None if lines is None else parse_frontmatter(lines)
 
@@ -213,7 +234,11 @@ def check_frontmatter(root: Path) -> list[str]:
         if not skill_md.is_file():
             errors.append(f"{rel(root, d)}: skill directory has no SKILL.md")
             continue
-        fm = read_frontmatter(skill_md)
+        try:
+            fm = read_frontmatter(skill_md)
+        except ValueError as e:
+            errors.append(f"{where}: frontmatter could not be parsed: {e}")
+            continue
         if fm is None:
             errors.append(f"{where}: no `---` delimited YAML frontmatter")
             continue
@@ -234,9 +259,9 @@ def check_frontmatter(root: Path) -> list[str]:
         elif len(desc) > DESCRIPTION_MAX:
             msg = f"{where}: `description` is {len(desc)} characters (max {DESCRIPTION_MAX})"
             if waiver is not None and len(desc) <= waiver:
-                errors.append(f"{WAIVED}{msg}; recorded at {waiver} in DESCRIPTION_WAIVERS, may only shrink")
+                errors.append(f"{WAIVED}{msg}; within its DESCRIPTION_WAIVERS limit of {waiver}")
             else:
-                errors.append(msg + (f"; grew past its waiver of {waiver}" if waiver is not None else ""))
+                errors.append(msg + (f"; exceeds its DESCRIPTION_WAIVERS limit of {waiver}" if waiver is not None else ""))
         elif waiver is not None:
             errors.append(f"{where}: `description` is back under {DESCRIPTION_MAX}; delete its DESCRIPTION_WAIVERS entry")
         if "compatibility" in fm:
@@ -264,34 +289,62 @@ def check_skill_md_lines(root: Path) -> list[str]:
 # --------------------------------------------------------------------------
 
 FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")  # any indent: fences nested in list items are common here
+CODE_SPAN_RE = re.compile(r"(`+)(.+?)\1")
+CODE_SPAN_ML_RE = re.compile(r"(`+)([\s\S]+?)\1")  # a code span may wrap within a paragraph
+HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
 
 
-def prose_lines(text: str) -> list[tuple[int, str]]:
-    """(line number, line) for lines outside fenced code blocks and frontmatter."""
+def body_lines(text: str) -> list[str]:
+    """The file's lines with frontmatter blanked, so line numbers are kept."""
     lines = text.split("\n")
-    start = 0
     fm, _ = split_frontmatter(text)
     if fm is not None:
-        start = len(fm) + 2
-    out, fence = [], None
-    for i in range(start, len(lines)):
-        line = lines[i]
+        for i in range(len(fm) + 2):
+            lines[i] = ""
+    return lines
+
+
+def closes_fence(line: str, fence: str) -> bool:
+    m = FENCE_RE.match(line)
+    return bool(m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence)
+                and not line.strip()[len(m.group(1)):].strip())
+
+
+def prose_blocks(text: str) -> list[tuple[int, str]]:
+    """(first line number, text) for each run of non-blank lines outside fences.
+
+    Lines are joined with newlines, so a link or code span that wraps inside a
+    paragraph is seen whole and a match offset maps back to its line.
+    """
+    out, cur, cur_start, fence = [], [], 0, None
+    for i, line in enumerate(body_lines(text), start=1):
+        if fence is not None:
+            if closes_fence(line, fence):
+                fence = None
+            continue
         m = FENCE_RE.match(line)
-        if fence is None:
+        if m or not line.strip():
+            if cur:
+                out.append((cur_start, "\n".join(cur)))
+            cur = []
             if m:
                 fence = m.group(1)
-                continue
-            out.append((i + 1, line))
-        elif m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not line.strip()[len(m.group(1)):].strip():
-            fence = None
+            continue
+        if not cur:
+            cur_start = i
+        cur.append(line)
+    if cur:
+        out.append((cur_start, "\n".join(cur)))
     return out
 
 
-CODE_SPAN_RE = re.compile(r"(`+)(.+?)\1")
+def blank_out(pattern: re.Pattern, text: str) -> str:
+    """Replace each match with spaces, keeping newlines (and so line offsets)."""
+    return pattern.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
 
 
 def strip_code_spans(line: str) -> str:
-    return CODE_SPAN_RE.sub(lambda m: " " * len(m.group(0)), line)
+    return blank_out(CODE_SPAN_RE, line)
 
 
 # --------------------------------------------------------------------------
@@ -299,14 +352,21 @@ def strip_code_spans(line: str) -> str:
 # --------------------------------------------------------------------------
 
 HEADING_RE = re.compile(r"^\s{0,3}(#{1,6})\s+(.*?)\s*$")
-INLINE_LINK_RE = re.compile(r"!?\[(?:[^\[\]]|\[[^\[\]]*\])*\]\(\s*(<[^>]*>|[^)\s]+)(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)")
-REF_DEF_RE = re.compile(r"^\s{0,3}\[[^\]]+\]:\s*(<[^>]*>|\S+)")
+SETEXT_RE = re.compile(r"^\s{0,3}(=+|-+)\s*$")
+NOT_PARAGRAPH_RE = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|>|\||#{1,6}\s|<)")
+# [text](target "title"): the target may hold one level of balanced parentheses.
+INLINE_LINK_RE = re.compile(
+    r"!?\[(?:[^\[\]]|\[[^\[\]]*\])*\]\(\s*"
+    r"(<[^>\n]*>|(?:[^()\s]|\([^()\s]*\))+)"
+    r"(?:\s+(?:\"[^\"]*\"|'[^']*'|\([^()]*\)))?\s*\)")
+# [label]: target -- the target may sit on the next line; [^note]: is a footnote.
+REF_DEF_RE = re.compile(r"^[ \t]{0,3}\[(?!\^)[^\]]+\]:[ \t]*\n?[ \t]*(<[^>\n]*>|\S+)", re.M)
 SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 HTML_ID_RE = re.compile(r"<a\s+[^>]*(?:name|id)=[\"']([^\"']+)[\"']", re.I)
 
 
 def heading_text(raw: str) -> str:
-    """Approximate the rendered text of an ATX heading."""
+    """Approximate the rendered text of a heading."""
     raw = re.sub(r"\s+#+\s*$", "", raw)
     if re.fullmatch(r"#+", raw):
         raw = ""
@@ -339,30 +399,48 @@ def github_slug(text: str) -> str:
     return "".join(kept).replace(" ", "-")
 
 
+def heading_texts(text: str) -> list[str]:
+    """Raw heading text in document order: ATX headings and setext headings."""
+    out = []
+    for _, block in prose_blocks(text):
+        para: list[str] = []
+        for line in block.split("\n"):
+            m = HEADING_RE.match(line)
+            if m:
+                out.append(m.group(2))
+                para = []
+            elif SETEXT_RE.match(line) and para:
+                out.append(" ".join(p.strip() for p in para))
+                para = []
+            elif NOT_PARAGRAPH_RE.match(line):
+                para = []
+            else:
+                para.append(line)
+    return out
+
+
 def anchors_of(path: Path, cache: dict[Path, set[str]]) -> set[str]:
     if path not in cache:
         seen: dict[str, int] = {}
         anchors = set()
         text = path.read_text(encoding="utf-8")
-        for _, line in prose_lines(text):
-            m = HEADING_RE.match(line)
-            if m:
-                base = github_slug(heading_text(m.group(2)))
-                n = seen.get(base, 0)
-                anchors.add(base if n == 0 else f"{base}-{n}")
-                seen[base] = n + 1
-            for hid in HTML_ID_RE.findall(line):
-                anchors.add(hid)
+        for raw in heading_texts(text):
+            base = github_slug(heading_text(raw))
+            n = seen.get(base, 0)
+            anchors.add(base if n == 0 else f"{base}-{n}")
+            seen[base] = n + 1
+        for _, block in prose_blocks(text):
+            anchors.update(HTML_ID_RE.findall(block))
         cache[path] = anchors
     return cache[path]
 
 
 def exists_exact_case(root: Path, target: Path) -> bool:
-    """Path exists with this exact case (CI runs on a case-sensitive filesystem)."""
+    """Path exists inside root with this exact case (CI's filesystem is case-sensitive)."""
     try:
         parts = target.resolve().relative_to(root.resolve()).parts
     except ValueError:
-        return target.exists()
+        return False
     cur = root.resolve()
     for part in parts:
         if not cur.is_dir() or part not in os.listdir(cur):
@@ -371,29 +449,41 @@ def exists_exact_case(root: Path, target: Path) -> bool:
     return True
 
 
+def link_targets(block: str) -> list[tuple[int, str]]:
+    """(line offset within block, target) for inline links and reference definitions.
+
+    Code spans and HTML comments are blanked first; neither is a link.
+    """
+    scan = blank_out(HTML_COMMENT_RE, blank_out(CODE_SPAN_ML_RE, block))
+    found = [(m.start(1), m.group(1)) for m in INLINE_LINK_RE.finditer(scan)]
+    found += [(m.start(1), m.group(1)) for m in REF_DEF_RE.finditer(scan)]
+    return [(scan.count("\n", 0, pos), t) for pos, t in sorted(found)]
+
+
 def check_links(root: Path) -> list[str]:
     errors = []
     cache: dict[Path, set[str]] = {}
     for md in walk_files(root, ".md"):
         where = rel(root, md)
-        for lineno, line in prose_lines(md.read_text(encoding="utf-8")):
-            scan = strip_code_spans(line)
-            targets = [m.group(1) for m in INLINE_LINK_RE.finditer(scan)]
-            m = REF_DEF_RE.match(scan)
-            if m:
-                targets.append(m.group(1))
-            for target in targets:
+        for start, block in prose_blocks(md.read_text(encoding="utf-8")):
+            for off, target in link_targets(block):
+                lineno = start + off
                 target = target.strip("<>")
                 if not target or SCHEME_RE.match(target) or target.startswith("//"):
                     continue
                 path_part, _, frag = target.partition("#")
-                path_part = unquote(path_part)
+                path_part = unquote(path_part.split("?", 1)[0])
                 if path_part.startswith("/"):
                     dest = root / path_part.lstrip("/")
                 elif path_part:
                     dest = md.parent / path_part
                 else:
                     dest = md
+                try:
+                    dest.resolve().relative_to(root.resolve())
+                except ValueError:
+                    errors.append(f"{where}:{lineno}: link target outside the repository: {target}")
+                    continue
                 if not exists_exact_case(root, dest):
                     errors.append(f"{where}:{lineno}: link target not found: {target}")
                     continue
@@ -408,8 +498,13 @@ def check_links(root: Path) -> list[str]:
 # --------------------------------------------------------------------------
 
 CLAUDE_PATH_RE = re.compile(r"\.claude/")
-ON_CLAUDE_CODE_RE = re.compile(r"\b[Oo]n Claude Code\b")
+# A note opens with "On Claude Code" at the start of a block or a sentence
+# (emphasis allowed): "On Claude Code, ...", "**On Claude Code specifically:**".
+NOTE_OPENER_RE = re.compile(r"(?:^|[.!?:]\s+)[*_]*On Claude Code\b")
+# A parenthetical example naming the product: "(e.g. `~/.claude/x` on Claude Code)".
+NOTE_PAREN_RE = re.compile(r"\([^()]*\b[Oo]n Claude Code\b[^()]*\)")
 BLOCK_START_RE = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|\||#{1,6}\s)")
+LIST_PREFIX_RE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+|>\s*)*")
 
 
 def blocks(text: str) -> list[tuple[int, str]]:
@@ -417,7 +512,8 @@ def blocks(text: str) -> list[tuple[int, str]]:
 
     A block is a paragraph, a list item, a table row, or a heading. Fenced
     code is its own block, so a code block never inherits a neighbouring
-    note's exemption.
+    note's exemption. Frontmatter is blanked first, so a paragraph that
+    starts right after the closing `---` is still scanned.
     """
     out, cur, cur_start, fence = [], [], 0, None
 
@@ -427,11 +523,11 @@ def blocks(text: str) -> list[tuple[int, str]]:
             out.append((cur_start, "\n".join(cur)))
         cur = []
 
-    for i, line in enumerate(text.split("\n"), start=1):
+    for i, line in enumerate(body_lines(text), start=1):
         m = FENCE_RE.match(line)
         if fence is not None:
             cur.append(line)
-            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
+            if closes_fence(line, fence):
                 fence = None
                 flush()
             continue
@@ -450,26 +546,47 @@ def blocks(text: str) -> list[tuple[int, str]]:
     return out
 
 
+def exempt_spans(segment: str) -> list[tuple[int, int]]:
+    """Character ranges of `segment` that sit inside an "On Claude Code" note."""
+    if FENCE_RE.match(segment):
+        return []  # code is never a note
+    spans = [(m.start(), m.end()) for m in NOTE_PAREN_RE.finditer(segment)]
+    opener = NOTE_OPENER_RE.search(LIST_PREFIX_RE.sub("", segment, count=1))
+    if opener:
+        offset = len(segment) - len(LIST_PREFIX_RE.sub("", segment, count=1))
+        spans.append((offset + opener.start(), len(segment)))  # from the opener to the block's end
+    return spans
+
+
 def check_claude_paths(root: Path) -> list[str]:
     errors = []
     for d in skill_dirs(root):
-        fm = read_frontmatter(d / "SKILL.md") if (d / "SKILL.md").is_file() else None
+        try:
+            fm = read_frontmatter(d / "SKILL.md") if (d / "SKILL.md").is_file() else None
+        except ValueError:
+            fm = None  # reported by the frontmatter check; grants no exemption
         if fm and "Claude Code" in fm.get("compatibility", ""):
             continue  # product-bound skill: AGENTS.md exception (b)
         for md in walk_files(d, ".md"):
             if md.name == "eval-cases.md":
                 continue  # evaluation records, not instructions an agent executes
-            text = md.read_text(encoding="utf-8")
-            fm_lines, _ = split_frontmatter(text)
-            skip_until = len(fm_lines) + 2 if fm_lines is not None else 0
-            for start, block in blocks(text):
-                if start <= skip_until or not CLAUDE_PATH_RE.search(block):
+            for start, block in blocks(md.read_text(encoding="utf-8")):
+                if not CLAUDE_PATH_RE.search(block):
                     continue
-                if ON_CLAUDE_CODE_RE.search(block):
-                    continue  # inside an "On Claude Code, ..." note: exception (a)
-                for off, line in enumerate(block.split("\n")):
-                    if CLAUDE_PATH_RE.search(line):
-                        errors.append(f"{rel(root, md)}:{start + off}: `.claude/` path outside an \"On Claude Code, ...\" note")
+                # A table row is judged cell by cell; anything else as one segment.
+                if block.lstrip().startswith("|"):
+                    segments, pos = [], 0
+                    for cell in block.split("|"):
+                        segments.append((pos, cell))
+                        pos += len(cell) + 1
+                else:
+                    segments = [(0, block)]
+                for base, seg in segments:
+                    spans = exempt_spans(seg)
+                    for m in CLAUDE_PATH_RE.finditer(seg):
+                        if not any(a <= m.start() < b for a, b in spans):
+                            line = start + block.count("\n", 0, base + m.start())
+                            errors.append(f"{rel(root, md)}:{line}: `.claude/` path outside an \"On Claude Code, ...\" note")
     return errors
 
 
@@ -512,22 +629,59 @@ GOOD_SKILL = """---
 name: demo
 description: >
   A demo skill used only by the self-test.
+license: "Apache-2.0 \\u00e9"
 ---
 
 # Demo
 
 See [the reference](references/guide.md#the-section) and [below](#usage).
 
+| Capability | Example |
+|---|---|
+| Config | Instruction file (e.g. `~/.claude/CLAUDE.md` on Claude Code) |
+
 ## Usage
 
 On Claude Code, settings live in `.claude/settings.json`.
 """
 
+# Everything below "Not links" must be ignored, and everything below
+# "Resolved" must resolve: the clean tree passing proves no false red.
 GOOD_GUIDE = """# Guide
 
 ## The Section
 
 Back to [the skill](../SKILL.md#demo).
+
+## Usage
+
+## Usage
+
+Setext Title
+============
+
+Not links: `[code](missing.md)`, a span that `wraps [across](missing.md)
+a line`, and
+
+```
+[fenced](missing.md)
+```
+
+  ~~~
+  [indented fence](missing.md)
+  ~~~
+
+<!-- [commented](missing.md) -->
+
+Resolved: [titled](guide.md "A title"), [spaced](my%20notes.md),
+[parens](notes_(v2).md), [query](guide.md?plain=1#the-section), [a wrapped
+link](../SKILL.md#usage), [duplicate](#usage-1), [setext](#setext-title),
+[reference][r], [next-line reference][r2], and a footnote[^1].
+
+[r]: guide.md#the-section
+[r2]:
+  ../SKILL.md#demo
+[^1]: Some footnote text.
 """
 
 GOOD_EVALS = {
@@ -560,7 +714,16 @@ VIOLATIONS = {
     "wrong-case link": ("links", lambda r: _guide(r, "../SKILL.md#demo", "../skill.md")),
     "broken cross-file anchor": ("links", lambda r: _guide(r, "../SKILL.md#demo", "../SKILL.md#nope")),
     "broken same-file anchor": ("links", lambda r: _skill(r, "(#usage)", "(#usages)")),
+    "invalid double-quoted escape": ("frontmatter", lambda r: _skill(r, "name: demo", 'name: "de\\qmo"')),
+    "wrapped link to a missing anchor": ("links", lambda r: _guide(r, "link](../SKILL.md#usage)", "link](../SKILL.md#no-such)")),
+    "next-line reference definition broken": ("links", lambda r: _guide(r, "[r2]:\n  ../SKILL.md#demo", "[r2]:\n  ../MISSING.md")),
+    "parenthesised path broken": ("links", lambda r: _guide(r, "notes_(v2).md", "notes_(v3).md")),
+    "percent-encoded path broken": ("links", lambda r: _guide(r, "my%20notes.md", "my%20note.md")),
+    "link escaping the repository": ("links", lambda r: _guide(r, "../SKILL.md#demo", "../" * 12 + "etc/hosts")),
     ".claude/ path outside a note": ("claude-paths", lambda r: _guide(r, "Back to", "Edit `.claude/settings.json`. Back to")),
+    "mid-sentence 'on Claude Code' is not a note": ("claude-paths", lambda r: _guide(r, "Back to", "Works on Claude Code and Codex; edit `.claude/x`. Back to")),
+    ".claude/ path right after frontmatter": ("claude-paths", lambda r: _skill(r, "---\n\n# Demo", "---\nEdit `.claude/x`.\n\n# Demo")),
+    ".claude/ path in a table cell without a note": ("claude-paths", lambda r: _skill(r, "| Config |", "| `.claude/x` |")),
     ".claude/ path in code after a note": ("claude-paths", lambda r: _skill(r, "`.claude/settings.json`.\n", "`.claude/settings.json`:\n\n```\ncat .claude/x\n```\n")),
 }
 
@@ -590,6 +753,8 @@ def build_clean_tree(root: Path) -> None:
     (skill / "evals").mkdir()
     (skill / "SKILL.md").write_text(GOOD_SKILL, encoding="utf-8")
     (skill / "references/guide.md").write_text(GOOD_GUIDE, encoding="utf-8")
+    (skill / "references/my notes.md").write_text("# Notes\n", encoding="utf-8")
+    (skill / "references/notes_(v2).md").write_text("# Notes v2\n", encoding="utf-8")
     (skill / "evals/evals.json").write_text(json.dumps(GOOD_EVALS), encoding="utf-8")
     (root / "S").symlink_to(skill, target_is_directory=True)
 
