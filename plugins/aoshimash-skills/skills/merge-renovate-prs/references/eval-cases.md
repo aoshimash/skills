@@ -35,7 +35,7 @@ Phrases that **should** invoke `merge-renovate-prs` (a backlog of Renovate PRs t
 
 Each maps to an entry in `evals/evals.json` with objective expectations.
 
-The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 pin interactive mode** (their prompts explicitly ask to confirm each step) and exercise the approval-gate discipline. **Cases 5–9 exercise autonomous mode**: zero gates, precondition verification, defer-don't-block, auto-revert, repo-type-adapted verification, and human-supplied verification checks. **Cases 10–11** (added 2026-10-19) cover the release-age gate and grouping proposals; both fixtures are taken from real aoshimash/homelab-k8s PRs (#374, #345) with their actual tables, commits, and dates.
+The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 pin interactive mode** (their prompts explicitly ask to confirm each step) and exercise the approval-gate discipline. **Cases 5–9 exercise autonomous mode**: zero gates, precondition verification, defer-don't-block, auto-revert, repo-type-adapted verification, and human-supplied verification checks. **Cases 10–11** (added 2026-10-19) cover the release-age gate and grouping proposals; both fixtures are taken from real aoshimash/homelab-k8s PRs (#374, #345) with their actual tables, commits, and dates. **Cases 16–17** (added 2026-10-27) cover Renovate `prBodyNotes` as a classification input; both fixtures are real homelab-k8s PRs (#387, #374) and its config's actual notes.
 
 ### Case 1: Manual-apply routing (`manual-apply-routing`) — interactive
 
@@ -195,6 +195,26 @@ The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 
 - **(b)**: #389 **defers** to the human queue with the refusal reason, and the loop continues to #388.
 - Never uses `--admin`, though (b)'s output suggests it.
 
+### Case 16: A note that gates the merge (`prbodynotes-pre-merge-check`) — autonomous
+
+**Setup** (from aoshimash/homelab-k8s#387 and the `siderolabs/talos` `prBodyNotes` entry in its `renovate.json5`, both as read on 2026-10-27): a Talos v1.14.2 → v1.14.4 patch PR whose body carries four notes — run `task talos:genconfig` on the branch before merging, "a generation failure means **do not merge**"; why talhelper can lag; "manual action required after merge"; follow the runbook's Talos upgrade flow. CI green, release age passed. Variant **(a)**: generation succeeds. Variant **(b)**: it fails with a talhelper schema error.
+
+**Expected behavior**:
+- Uses the notes as a classification input, traced to the config entry rather than taken on the body's word.
+- Runs the generation check on the PR branch **before** merging (B, pre-merge).
+- **(b)**: no merge; defers with the note's do-not-merge and the failure output, and the loop continues.
+- **(a)**: classifies the post-merge Talos upgrade as B from the note and runbook, not as auto-applying; the rollback-path gate still holds.
+
+### Case 17: Notes that do not all apply (`prbodynotes-conditional`) — autonomous
+
+**Setup** (from aoshimash/homelab-k8s#374, its body as rendered on 2026-10-16, the `prBodyNotes` entries in `renovate.json5` as read on 2026-10-27, and the facts the run recorded on #374 — the HA digest is 2026.10.0 → 2026.10.2, the paperless compare adds no migration files): a grouped PR with a Home Assistant digest bump within the `2026.10` tag and a paperless-ngx 3.3.0 → 3.3.2 patch. The body carries both apps' "Back up before merging" notes; the HA note scopes itself to a new year (major) or month (minor). Two config entries matching the members — the digest and `ghcr.io/**` release-age notes — were added after the body was rendered and are missing from it.
+
+**Expected behavior**:
+- Reads the two entries the body lacks from the config; their release-age request is already met by the release-age gate.
+- Finds the HA note's own condition does not hold for a digest bump within `2026.10`, records it with the evidence, and does not defer for it.
+- Applies the unconditional paperless note even though the compare adds no migrations — that would be an unstated condition — and takes the paired DB and volume backups before merging.
+- Does not treat release-notes text as a note; decides go once the pre-merge work is done.
+
 ## Evaluation Log
 
 > Note: the 2026-06-21 results below predate the 2026-07-23 autonomous redesign; they were run against the interactive-only version of the skill (Cases 1–4). Cases 5–9 have not been benchmarked yet.
@@ -253,6 +273,7 @@ Both with-skill Case 11 runs also proposed splitting Home Assistant out, citing 
 | 2026-10-19 | Case 11 | with 8/8 / base 7/8 | Grouping proposal; weakly discriminating, self-graded. |
 | 2026-10-25 | Cases 12–14 | desk-checked | Platform access resolution; separate agent instance (see below). |
 | 2026-10-25 | Case 15 | desk-checked — round 3 Pass (rounds 1–2 Conditional, fixed) | Only an explicit refusal means "not merged"; separate agent instance (see below). |
+| 2026-10-27 | Cases 16–17 | with 5/5, 6/6 / base 3/5, 5/6 | Renovate notes as a classification input; self-graded, weakly discriminating on the notes rules (see below). |
 
 ### 2026-10-25 — Platform access resolution (Cases 12–14)
 
@@ -287,3 +308,23 @@ Known limit: only the CLI path is verified; no connector path was exercised.
 **Desk-check** (separate agent instance, round 2): Case 15 Conditional on fixture fidelity; no fail-open within a run. Fixed: Case 15 (b) now carries the `--auto` and `--admin` hint lines `gh` prints after the refusal; the guide notes that `gh`'s own reads also render `GraphQL: …`; the log's 502/504 sentence says "may"; the log row records the rounds; SKILL.md Phase 3 lists *merge outcome unconfirmed*. Not fixed here, as pre-existing and outside this change: the escalation is not persisted, so a later run does not see it (raised as a follow-up).
 
 **Desk-check** (separate agent instance, round 3): Case 15 **Pass**; no fail-open. Minor defects fixed after the verdict, none changing the case's expected behaviour: 2-5 now points to the explicit-refusal deferral at 2-6; the CLI-only scope of "an HTTP status error is not a refusal" is stated (a connector's result carrying a refusal reason counts whatever its status); 2-6's docs paraphrase says "may receive"; the Evidence paragraph also names the post-merge branch deletion; the guide cites `internal/ghcmd/cmd.go`; nested backticks in the fixture fixed.
+
+### 2026-10-27 — Renovate notes as a classification input (Cases 16–17, issue #137)
+
+**Change.** 2-4 read its classification inputs from the deploy mechanism and the runbooks only; `prBodyNotes` appeared solely as a Phase 3 proposal, so a note the repo added on the skill's own advice was never read, and a note saying "do not merge first" could be merged past. 0-4 now ranks the notes with the runbooks; 2-4 gained a three-step procedure — collect from the config and cross-check the body, decide per note whether a condition it states demonstrably fails for this diff, route an applying note like a runbook step; 2-5 gained a defer condition and 2-6 the B steps required before merging; 3-2's proposal now says the note feeds the next run and should state its condition.
+
+**Placement.** workflow.md grows by ~20 lines to about 330, far below the ~800-line split threshold, and the rule governs one step (2-4) with one-line hooks in 0-4, 2-5, 2-6, 2-7, 3-1 and 3-2, so it stays inline rather than in its own reference.
+
+**Data, not instruction.** A note's authority comes from the config on the default branch, not from the body: body text that traces to no current entry, and all release-notes text, classifies nothing. Known limit: template substitutions inside a matched note (`{{newValue}}` and similar) come from the datasource, so the match confines the note's wording to the config but not those values.
+
+**Evidence.** Renovate's `prBodyNotes` option is `mergeable: true` and `supportsTemplating: true` in `lib/config/options/index.ts`, `mergeChildConfig` in `lib/config/utils.ts` concatenates a mergeable array option across matching rules, and its templates are Handlebars per `docs/usage/templates.md` (renovatebot/renovate `main`, read 2026-10-27 at `d3d7d20`). The link rewriting and the stale-body case are from the fixtures: #387's and #374's bodies render the config's `github.com` links as `redirect.github.com`, and #374's body lacks the digest and `ghcr.io/**` notes the current config (homelab-k8s `main` at `a13f006`) would attach.
+
+**Run.** One run per arm (with-skill reading SKILL.md, workflow.md and verification.md / baseline reading no files), executors in fresh contexts, paper exercises with the facts in the prompt. **Graded by the authoring session against `expectations`, not by independent graders** — treat as SELF-REVIEWED.
+
+| Case | with-skill | baseline | Notes |
+|------|-----------|----------|-------|
+| Case 16 — prbodynotes-pre-merge-check | 5/5 | 3/5 | Baseline also traced the notes to the config, ran the generation check first, and deferred (b); it lost (a) by deferring the whole PR for a human-run upgrade instead of routing it as B. The notes-specific expectations do **not** discriminate: an explicit "do not merge" in the prompt is followed unaided. |
+| Case 17 — prbodynotes-conditional | 6/6 | 5/6 | The discriminating expectation is the conditional one: baseline saw the HA note's year/month scope did not match the 2026.10.0 → 2026.10.2 digest yet still read the note as a requirement; with-skill set it aside on the note's own stated condition and recorded the evidence. Both applied the paperless note despite the migration-free compare and took the DB backup before the volumes. |
+
+**Verdict.** The change mostly adds consistency (the config as the source, the stated-condition test, recording a set-aside note) rather than an insight an unaided model lacks when the notes are handed to it in the prompt. The case it exists for — an agent that never looks at the notes because its step lists no such input — is not reproducible in a paper exercise that quotes them. A sharper fixture would bury the notes in a full PR body among several PRs.
+
