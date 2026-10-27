@@ -13,6 +13,7 @@ This repository contains Agent Skills for Codex, Claude Code, and other agents i
 - `.claude-plugin/marketplace.json` — Claude Code marketplace manifest (lists available plugins)
 - `plugins/aoshimash-skills/.claude-plugin/plugin.json` — Claude Code plugin manifest
 - `plugins/aoshimash-skills/skills/<skill-name>/` — Individual skills, each with a `SKILL.md` and optional `references/`, `scripts/`, `assets/`
+- `scripts/check-invariants.py` — Deterministic checks of the repository's mechanical invariants, run by `.github/workflows/check-invariants.yml` (see "Repository Checks")
 - `plugins/aoshimash-skills/rules/agent-rules.md` — Shared conventions corpus, deliberately outside every skill. A running skill may use an installed copy rather than the git checkout, so this file is addressed as a repository path and fetched over the GitHub API at runtime. Its "Contract" and "Format" sections are authoritative for the rule format and the managed-block delimiters
 
 ## Skill Development
@@ -93,6 +94,22 @@ Neutral vocabulary — use the capability term in skill instructions; reserve pr
 | `AskUserQuestion` | user choice |
 | background Bash | background execution |
 | plan mode | (no neutral equivalent — use only inside "On Claude Code, …" notes) |
+
+## Repository Checks
+
+`.github/workflows/check-invariants.yml` runs `python3 scripts/check-invariants.py` on every pull request and on every push to `main` and `integration/**`. The push run on an integration branch is the merge gate's post-merge verification signal (merge-issue-prs P1 and 2-4), so the workflow must stay fast, deterministic, network-free, and unconditional: no `paths:` filter and no job-level `if:`, because a merge that produces no successful run is reverted. Run it locally the same way; `--only <name>` runs one check, `--self-test` shows each check failing on a deliberate violation.
+
+Each check has a stable name. When a change is covered, cite the check by that name — this is the "named check" `model-selection.md`'s fast tier asks for, and it covers only what its row says:
+
+| Check | Fails when | Does not cover |
+|---|---|---|
+| `evals-json` | an `evals/evals.json` does not parse, its `skill_name` differs from the skill directory, an eval `id` is not an integer greater than the previous one, an eval `name` is empty or duplicated, a `prompt` is empty, or a `trigger_evals` entry lacks a `query` or a boolean `should_trigger` | whether a case tests the right behaviour; gaps in ids are allowed |
+| `frontmatter` | a skill directory has no `SKILL.md`, or its frontmatter breaks the Agent Skills spec: `name` missing, over 64 characters, not lowercase-hyphenated, or not the directory name; `description` missing or over 1024 characters; `compatibility` empty or over 500 characters | whether the description triggers well. `DESCRIPTION_WAIVERS` in the script records over-cap descriptions that predate the check: each may shrink, never grow, and its entry must be deleted once it is under the cap |
+| `skill-md-lines` | a `SKILL.md` has 500 lines or more | reference-file length |
+| `links` | a relative markdown link in any `.md` file points at a path that does not exist (case-sensitively), or a `#anchor` does not match a heading in the target file under GitHub's anchor rules | external URLs; links inside code spans or fenced blocks |
+| `claude-paths` | a skill's instruction file contains a `.claude/` path outside a block (paragraph, list item, table row) that says "On Claude Code", in a skill whose `compatibility` does not name Claude Code | `eval-cases.md` (evaluation records); other product-specific paths |
+
+None of them judges whether an instruction is correct; that stays with the review gates.
 
 ## Git Conventions
 
