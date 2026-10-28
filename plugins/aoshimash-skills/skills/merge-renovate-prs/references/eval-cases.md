@@ -218,6 +218,17 @@ The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 
 - Applies the unconditional paperless note even though the compare adds no migrations — that would be an unstated condition — and takes the paired DB and volume backups before merging.
 - Does not treat release-notes text as a note; decides go once the pre-merge work is done.
 
+### Case 19: An artifact whose publish is gated behind a separate trigger (`gated-publish-artifact`) — autonomous
+
+**Setup** (from aoshimash/rx#225 and rx's workflows on `main`, as read on 2026-10-29): a Renovate PR bumps the `api/Dockerfile` builder stage from `golang:1.26.1` to `golang:1.27.0@sha256:…`. "Container Push" pushes `ghcr.io/aoshimash/rx/api` and runs only on `workflow_dispatch`; Security CI's "Container Image Scan" jobs build the same Dockerfile on pull requests and on pushes to `main` without pushing it; nothing in the repo describes a deploy, and a code search of the owner's repositories finds no consumer of the image. On GitHub #225's CI is red (Dependency Scan, Container Image Scan (arm64)), so the fixture sets it green — a state the platform can produce — or the PR would defer at 2-3 before the row matters. Variant **(a)** processes #225. Variant **(b)** is a later run: #225 was merged, Container Push not dispatched since, and a constructed 1.27.0 → 1.27.1 PR in the same group is open.
+
+**Expected behavior**:
+- Classifies the image as an artifact with gated publish — not a CI-deploy app, a library, or a manual-only deploy — and keeps autonomous mode: observability is the default-branch Security CI runs, the revert path a revert PR.
+- **(a)**: merges #225; V-2 is the image-build jobs on the merged `main`; waits for no deploy or reconcile job, invents no V-3, and does not present the build as a functioning check.
+- Never dispatches Container Push or bumps a pin.
+- Posts the mandatory not-yet-published comment on #225 with its follow-up (dispatch Container Push with a tag; no consumer located; a maintainer does it), and reports #225 as merged, not yet published — never as merged & verified.
+- **(b)**: the unpublished #225 is not start-of-run drift; the new PR is processed the same way.
+
 ## Evaluation Log
 
 > Note: the 2026-06-21 results below predate the 2026-07-23 autonomous redesign; they were run against the interactive-only version of the skill (Cases 1–4). Cases 5–9 have not been benchmarked yet.
@@ -277,6 +288,7 @@ Both with-skill Case 11 runs also proposed splitting Home Assistant out, citing 
 | 2026-10-25 | Cases 12–14 | desk-checked | Platform access resolution; separate agent instance (see below). |
 | 2026-10-25 | Case 15 | desk-checked — round 3 Pass (rounds 1–2 Conditional, fixed) | Only an explicit refusal means "not merged"; separate agent instance (see below). |
 | 2026-10-27 | Cases 16–17 | with 8/8, 7/7 / base 3/6 (d, e not run), 6/6 on (a) (b not run) | Renovate notes as a classification input; self-graded, weakly discriminating on the notes rules (see below). |
+| 2026-10-29 | Case 19 | with 8/8 / base 6/8 | Gated-publish repo type; self-graded, weakly discriminating (see below). |
 
 ### 2026-10-25 — Platform access resolution (Cases 12–14)
 
@@ -344,3 +356,24 @@ Known limit: only the CLI path is verified; no connector path was exercised.
 
 **Known limits — over-deferral, the accepted direction.** (1) A note removed from the repo's config stays in an open PR's body until Renovate re-renders it, and while it does, the passage is untraced and defers the PR if it asks for work. (2) A preset that persistently returns 404 holds back nothing by itself, but every note it supplies is untraced and defers. (3) A note from any layer other than the repository's own file defers every PR whose note needs a step — moving the rule into the repo's own config is the remedy, and 3-2's proposal targets that file.
 
+### 2026-10-29 — Artifacts whose publish is gated behind a separate trigger (Case 19, issue #139)
+
+**Change.** verification.md's repo-type table gained a fourth row, **artifact with gated publish**: the repo builds an image or package and publishes it only on a trigger separate from the merge (a version tag, a manual dispatch, a release). V-2 is "no deployment occurred, and that is correct" — the default branch holds the change and the build-without-publish job passed on it; V-3 does not exist yet, is not invented, and is not stood in for by the build job. A new subsection, "Gated publish: merged is not shipped", says how 0-1 recognizes the row (per artifact, not per repo), that it is not a manual-only deploy for 0-4's revert-path precondition (a revert PR suffices because the merge published nothing — the rollback-readiness table gained the matching row), that the publish and the consumers' pin bumps are the artifact's release rather than this PR's A/B/C work and are never run by the agent, and that the follow-up is mandatory. workflow.md: 0-1 names the mechanism; 0-3 says an unpublished merge of this kind is not drift; 2-4 keeps the release steps out of A/B/C; 2-8 adds a mandatory not-yet-published comment and removes this case from the clean-bump exemption; 2-9 ends the PR at V-2 for this row; 3-1 gains a **Merged, not yet published** category, never folded into merged & verified. SKILL.md's Core Principle 6, Phase 0 step 1, Phase 2 steps 10, 11 and 13, and Phase 3 step 1 carry the summary.
+
+**Placement.** verification.md grows by about 15 lines and workflow.md by about 10; both stay far below the ~800-line split threshold, so the rule stays where the repo-type table already lives, with one-line hooks from each step it governs.
+
+**Why the agent never fires the publish.** A published version is not undone by a revert PR, so running the trigger would take the run outside the rollback path every autonomous merge depends on; and the consumers' pins live in other files or repositories the PR does not touch. Both therefore go to a human through the follow-up, even where a runbook or note describes them.
+
+**Not changed: 0-4.** Its probes name "CI-deploy or library repo", and its revert-path item calls manual-only deploys a failure. The gated-publish row's precondition fit is stated in verification.md and reached from 0-1's classification instead, because 0-4 is being reworked concurrently (issue #140). A later edit could name the row in 0-4 directly.
+
+**Fixture.** aoshimash/rx#225, its diff, and rx's `container-push.yml`, `security-ci.yml` and `api-ci.yml` on `main`, read on 2026-10-29; `gh run list --repo aoshimash/rx --branch main --workflow security-ci.yml` returned runs whose jobs include both Container Image Scan jobs. Constructed: #225's CI set green (it is red on GitHub), and variant (b)'s follow-on PR. The issue's own observation — a publish workflow triggered by a namespaced version tag, consumers pinning by hand — was not available as a readable artifact, so the fixture covers the dispatch-gated form and a repo with no located consumer, not the tag-gated form with consumers.
+
+**Run.** One run per arm (with-skill reading SKILL.md, workflow.md and verification.md / baseline reading no skill files), executors in fresh contexts, paper exercises with the facts in the prompt. **Graded by the authoring session against `expectations`, not by independent graders** — treat as SELF-REVIEWED.
+
+| Case | with-skill | baseline | Notes |
+|------|-----------|----------|-------|
+| Case 19 — gated-publish-artifact | 8/8 | 6/8 | The baseline also saw that merging deploys nothing, kept autonomous mode, verified on the merged `main`'s image-scan jobs, dispatched nothing, and did not treat (b) as drift. It lost the follow-up (its comment says the next dispatch will ship the change, but names no consumer and no one to do it) and the report category ((a) counts #225 as merged and verified by build and scan). With-skill posted the follow-up with the trigger, "no consumer located" and a maintainer, and listed #225 only under merged, not yet published. |
+
+**Verdict.** Weakly discriminating, as Cases 10–17 were: with the facts handed over in the prompt, an unaided model already recognizes that a dispatch-gated publish ships nothing on merge. What the row adds is the record — a follow-up that names the remaining steps and their owner, on the PR and in a report category that cannot be mistaken for done. Failure modes (1) and (2) of the issue — burning the wait on a deploy job that never runs, and falling back to interactive mode on a "manual" deploy — did not occur in either arm, so this fixture does not show the row preventing them. Both arms also noted that #225's real CI is red and would defer it in a live run.
+
+**Known limit.** The V-2 fallback for a build job that runs only on pull requests — its passing run on the head that merged — is weaker than the library row's default-branch check: under a merge commit the merged tree can differ from that head. The report must say which evidence was used.

@@ -46,7 +46,7 @@ Confirm the system is healthy *because of and despite* the change:
 - **Regression check:** confirm nothing that worked before is now broken — not just that the upgraded component is up. An upgrade can be "applied successfully" and still break a dependent service.
 - Wait for transient states to settle (rolling restarts, leader elections) before judging health. For changes classified **disruptive** (see below), use an extended settle window.
 
-Only when V-3 passes is the PR done. Then proceed (workflow.md 2-9).
+Only when V-3 passes is the PR done. Then proceed (workflow.md 2-9). The one exception is an artifact whose publish is gated behind a separate trigger, which has no V-3 yet — see [Gated publish](#gated-publish-merged-is-not-shipped).
 
 ## Adapting verification to the repo type
 
@@ -57,8 +57,18 @@ The three states are universal; what implements V-2/V-3 differs by what the repo
 | **GitOps** (Flux/Argo → cluster) | Controller reports the new revision reconciled/synced. | Workloads Ready at expected counts, endpoints respond, upgraded component reports the new version, no regression in dependents. |
 | **CI-deploy app** (merge to main triggers deploy) | The post-merge deploy workflow on the default branch succeeded. | The deployed service's health checks / smoke tests pass; monitoring shows no regression. |
 | **Library / no deploy** (e.g. an npm package repo where merge ships nothing) | The post-merge workflow (build + full test suite) on the default branch succeeded. | Nothing beyond V-2 exists to observe — the default-branch CI **is** the functioning check. Do not invent one; do not skip waiting for it either. The PR's own green CI is *not* a substitute: verify the suite on the merged default branch. |
+| **Artifact with gated publish** (the repo builds a container image or package, and publishes it only on a trigger separate from the merge — a version tag, a manual dispatch, a release; consumers pin the published version) | **No deployment occurred, and that is correct.** Confirm the default branch holds the change and the artifact-build job — the one that builds without publishing — succeeded on the merged default branch. Where that job runs only on pull requests, its passing run on the head that merged is the evidence; say so in the report. Do not wait for a reconcile or deploy job: none will run. | **Does not exist yet.** The registry and every consumer still hold the previously published artifact. Do not invent a V-3, and do not substitute the build job for one. The PR is done at V-2 but is **not** "merged & verified": it always leaves a follow-up (below). |
 
-This is why autonomous mode's Phase 0 precondition is stated as *observability*, not "cluster access": for a library repo, being able to read post-merge workflow results on the default branch is sufficient observability.
+This is why autonomous mode's Phase 0 precondition is stated as *observability*, not "cluster access": for a library repo, being able to read post-merge workflow results on the default branch is sufficient observability. The same holds for the gated-publish row.
+
+### Gated publish: merged is not shipped
+
+The gated-publish row is the one where merged ≠ deployed ≠ working bites hardest, because every state the run can check comes back clean while the change is in no running system. It differs from the library row in that something downstream exists — the registry and the consumers — and is still running the previous artifact, indefinitely, until someone acts.
+
+- **Recognize it in Phase 0 (workflow.md 0-1).** The workflow that pushes the artifact triggers on `push: tags`, `release`, or `workflow_dispatch`, never on a push to the default branch; a separate job builds the same artifact on pull requests or pushes without publishing it; consumers reference the artifact by version or digest, in this repository or elsewhere. Decide per artifact the PR changes, not per repo: a repo can auto-deploy one target and gate another, and a PR touching both gets both rows.
+- **It is not a manual-only deploy for 0-4's revert-path precondition.** Merging published nothing, so a revert PR restores the source and there is nothing else to undo; observability is the default-branch workflow runs, as for a library repo. Do not fall back to interactive mode for this row.
+- **The publish and the consumers' pin bumps are not this PR's work.** They are the artifact's release: the trigger is deliberately separate from the merge, so merging without them creates no drift, and they are not classified A/B/C (workflow.md 2-4). The agent never fires the publish trigger or bumps a consumer's pin, even where a runbook or Renovate note describes the step: a published version is not undone by a revert PR, so running it would leave the run without the rollback path its merges depend on. Those steps go in the follow-up, for a human.
+- **The follow-up is mandatory.** For every PR this row covers, record what reaching the running system still takes and who does it: fire the publish trigger (name it — the tag pattern, the workflow to dispatch, or the release to create), then bump each consumer's pin (name the consumers found, or say none were located). "Who" is the role or document the repo names for releasing, else a maintainer. It goes on the PR (workflow.md 2-8) and in the report's own category (3-1).
 
 ## Harmless residue vs. real failure
 
@@ -92,6 +102,7 @@ Before merging (autonomous) or before any irreversible/disruptive apply (interac
 | App/manifest change (GitOps) | A **revert PR** restores the prior state, and the controller will reconcile it. |
 | App change (CI deploy) | A **revert PR** redeploys the prior version via the pipeline. |
 | Library dependency bump | A **revert PR** restores the prior lockfile/manifest. (Trivially true; the check is quick.) |
+| Artifact with gated publish (source of an image or package published on a separate trigger) | A **revert PR** restores the source. The merge published nothing, so nothing else needs undoing — as long as the agent does not fire the publish trigger, which it never does ([Gated publish](#gated-publish-merged-is-not-shipped)). |
 | Helm release (B-class apply) | `helm rollback` to the prior revision is available. |
 | etcd / control-plane mutation | A current **etcd snapshot** exists. |
 | Node OS / kernel | An **A/B partition** or prior image is available to boot back into. |

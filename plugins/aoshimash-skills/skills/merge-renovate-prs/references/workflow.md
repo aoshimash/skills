@@ -43,7 +43,7 @@ Extract:
 
 | What | Why it matters |
 |---|---|
-| **Deploy mechanism** — GitOps (Flux/Argo reconcile) vs. CI pipeline deploy vs. manual apply | Determines whether a merge auto-applies (taxonomy A) or needs a follow-up step (B/C), and what "revert PR → system restored" means here. |
+| **Deploy mechanism** — GitOps (Flux/Argo reconcile) vs. CI pipeline deploy vs. manual apply — or, for an artifact the repo builds, a **publish gated behind a separate trigger** (a version tag, a manual dispatch, a release) | Determines whether a merge auto-applies (taxonomy A) or needs a follow-up step (B/C), and what "revert PR → system restored" means here. A gated publish is its own repo type, not a manual-only deploy: see [verification.md](verification.md) "Gated publish". |
 | **Merge method** — merge / squash / rebase | Some repos require a specific method; respect it when merging. It also determines how to build a revert commit (see platform-github.md). Check repo settings if docs are silent. |
 | **Upgrade runbooks / "merge ≠ apply" cases** — e.g. `talosctl upgrade-k8s` after a K8s bump, a console-only Terraform runtime change | These are the manual steps you must route in Phase 2. Miss them and a PR is "merged" but the cluster never changed. |
 
@@ -63,6 +63,8 @@ Note on native automerge: which packages Renovate automerges itself is the **use
 ### 0-3: Detect start-of-run drift
 
 Look for changes already merged but **not yet applied** to the live environment — for example a K8s-version PR merged last week with no record of the `talosctl` apply having run. This is unfinished business that can interact dangerously with new merges.
+
+A merged change to an artifact whose publish is gated behind a separate trigger, not yet published, is **not** drift: unpublished is that repo type's designed state, and the run that merged it left the follow-up on the PR ([verification.md](verification.md) "Gated publish").
 
 - **Autonomous:** do not try to resolve the drift (its failure would not map to a change made this run). **Exclude PRs touching the drifted component** from this run — defer them to the human queue with the drift as the reason — and report the drift prominently. PRs unrelated to the drifted component may proceed.
 - **Interactive:** flag it prominently and ask the user whether to resolve it first.
@@ -175,6 +177,8 @@ Using Phase 0's deploy mechanism, any runbook the PR references, and the PR's **
 
 If a step's class is unclear, treat it as the more cautious class (prefer C over B, B over A). In interactive mode confirm with the user; in autonomous mode the C treatment means the PR defers.
 
+**A gated publish is not pre/post work.** For an artifact whose publish is gated behind a separate trigger ([verification.md](verification.md) "Gated publish"), firing that trigger and bumping the consumers' pins are the artifact's release, not steps of this PR: do not classify them A/B/C, do not defer the PR for them, and never run them. They become the PR's mandatory follow-up (2-8, 3-1). Steps the repo requires before or at the merge itself are classified as usual.
+
 **Renovate notes are an input, not an override.** A repo writes per-package instructions for whoever merges into its Renovate config as `prBodyNotes`, and Renovate renders them into the PR body. Read them before classifying — a note may be the only place a required step, or a "do not merge first", is written down.
 
 1. **Collect them from the config, cross-checked against the body.** For each member of the PR, take the `prBodyNotes` entries (0-2) whose package rule matches it; when you cannot tell whether a rule matches a member, treat it as matching. The config is the source: it also shows any template condition the rendered text hides. Then compare with the PR body's notes region — under Renovate's default `prBodyTemplate`, the text after the update table and any Renovate warnings and before the release notes; a repo that sets its own template places it where that template says. Allow for template substitutions and for links rendering differently from the config (homelab-k8s PR bodies show the config's `github.com` links as `redirect.github.com`), and pass over Renovate's own fixed hints there (e.g. the ones naming the `:disableDigestUpdates` or `:preserveSemverRanges` presets). An entry the body lacks — for example one held back by its template condition, which Renovate drops when it renders empty — is read all the same, and step 2 decides whether it applies. A passage in the notes region that traces to no entry read in 0-2 is **untraced**, whatever 0-2 recorded as unread — its origin is not established, so do not assert one:
@@ -266,11 +270,12 @@ Put the durable record on the PR itself so humans and future agents see it — i
 - **Pre-comment (manual steps):** when the PR requires B or C work, post the exact steps **before/at merge** so a human following along (or a future agent) knows what to do. This doubles as the C hand-off in interactive mode.
 - **Post-comment (result):** after verification passes, post a closing "applied & verified" comment summarizing what was applied and the verification result.
 - **Cooldown-wait comment:** the first time a PR waits on the lower bound at the release-age gate (1-3), one comment with the marker and earliest eligible date — the cross-run record [release-age.md](release-age.md) relies on. Not repeated on later waits.
+- **Not-yet-published comment (gated publish):** when a PR to an artifact whose publish is gated behind a separate trigger passes V-2, post that it is merged and built but nothing was published, the build run that confirmed it, and the follow-up — the publish trigger to fire, the consumers whose pins to bump (or that none were located), and who does it ([verification.md](verification.md) "Gated publish"). This one is **mandatory**: the diff cannot show a future reader why nothing happened.
 - **Revert comment (autonomous failures):** when a PR is auto-reverted, post on the original PR what failed, what was reverted, and the recovery state — and link the revert PR. This one is **mandatory**, not optional: an unattended revert without a durable explanation is how trust in automation dies.
 
 Discipline:
 
-- **Only when real steps, risk, a revert, or a cooldown-wait record exist.** A trivial auto-applying digest bump that verified clean needs no comment — commenting on every PR is spam and trains people to ignore the comments. (The end-of-run report covers the quiet successes.)
+- **Only when real steps, risk, a revert, a cooldown-wait record, or a gated publish exist.** A trivial auto-applying digest bump that verified clean needs no comment — commenting on every PR is spam and trains people to ignore the comments. (The end-of-run report covers the quiet successes.) A bump to a gated-publish artifact is never that case, however clean it verified.
 - **English**, regardless of conversation language (repo convention for PR comments).
 - **Doc drift is surfaced, not auto-fixed.** If you notice a runbook is stale or a comment is wrong, note it for Phase 3; do not edit it as a drive-by.
 
@@ -279,6 +284,7 @@ Discipline:
 Run three-state verification (see [verification.md](verification.md)): merged → applied/reconciled → functioning, with async-wait and regression check, adapted to the repo type, and distinguish harmless residue from real failure. For disruptive changes, use the extended settle time from 2-5.
 
 - **Functioning check passes** → post the result comment (2-8), then **proceed to the next PR**.
+- **Gated publish, V-2 passes** → there is no V-3 yet ([verification.md](verification.md) "Gated publish"): post the not-yet-published comment (2-8), report the PR as merged, not yet published (3-1), then **proceed to the next PR**.
 - **Apply or verify fails** (or residue resolves to a real failure) — **fail closed when uncertain**: if you cannot tell whether it is working, treat it as not working. Then:
   - **Autonomous: auto-revert.** Execute the revert procedure in [verification.md](verification.md): create a revert PR → approve & merge it → if a B-class apply ran, execute its verified inverse → re-run three-state verification on the *recovery*. Then **stop the line**: even after a clean recovery, do not process further PRs this run — one failure means the pre-check missed something, and the remaining queue deserves human eyes. Post the revert comment (2-8) and report. If the revert itself fails, cannot be merged, or the system does not recover: **escalate to the human immediately** with the full state — this is the one place autonomous mode always comes back to a person.
   - **Interactive: stop the line.** Do **not** proceed to the next PR. Surface the problem, offer rollback (using the path confirmed in 2-5) as a proposal, and get user direction.
@@ -292,6 +298,7 @@ Never fabricate a passing result to keep the loop moving. A truthful "this faile
 Present what happened across the run:
 
 - **Merged & verified** — the PRs that completed all three states.
+- **Merged, not yet published** — PRs to an artifact whose publish is gated behind a separate trigger: merged and built, in no running system. Each with the build run that confirmed V-2 and its follow-up — the publish trigger to fire, the consumers whose pins to bump (or that none were located), and who does it. Never listed under merged & verified.
 - **Reverted** — auto-reverted PRs (autonomous), each with the failure cause, the revert PR link, and the recovery state.
 - **Cooldown wait** — PRs not yet old enough under the configured `minimumReleaseAge`, each with the member that set its age, the source (upstream release date or the lower bound from Renovate's commit), and the date it becomes eligible ("earliest" for a lower-bound date). These need no human action; the next run picks them up.
 - **Deferred / human queue** — PRs held, each with its reason (C-class step, CI red, no rollback path, manual conflicts, undecidable risk, a Renovate note's do-not-merge, an untraceable note asking for work or saying not to merge, a note's check that cannot be read, a failed pre-merge step, drift-blocked, ambiguous candidate, merge explicitly refused by the platform) and what a human needs to do.
