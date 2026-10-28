@@ -7,6 +7,8 @@ GitHub-only for v1. The commands are written for the `gh` CLI and are the refere
 - [Access Method](#access-method)
 - [List and filter Renovate PRs](#list-and-filter-renovate-prs)
 - [Read a PR: diff, files, body, branch, labels](#read-a-pr-diff-files-body-branch-labels)
+- [Read an upstream file at a tag](#read-an-upstream-file-at-a-tag)
+- [Compare two upstream tags](#compare-two-upstream-tags)
 - [Release age (the cooldown gate)](#release-age-the-cooldown-gate)
 - [CI status (the merge gate)](#ci-status-the-merge-gate)
 - [Merge (respect the repo merge method)](#merge-respect-the-repo-merge-method)
@@ -26,9 +28,11 @@ Resolved once per run as SKILL.md "Platform Access" describes: a connector for G
   - **The CI gate** is covered only when the connector's tools — one or several — return every entry of the rollup the reference reads: every check run **and** every commit status on the PR's head, each with its own settled state, complete by the test above. Check runs alone, or one combined state without the individual statuses, do not cover it: a failing commit status, or a failing check hidden inside a summary, would read as green.
   - **The lower-bound read** (release-age.md) is covered only by a tool returning the PR's commits with each commit's author login and `committedDate`, newest included. A list that may stop short of the newest commits gives an older bound, which makes a release look older than it is — the unsafe direction.
   - **Upstream release lookups** are covered only by a tool that reads a release **by exact tag** from a repository other than the target, with its `published_at`. A tool confined to the target repository does not cover them.
+  - **Upstream file reads** (workflow.md 2-5) are covered only by a tool that reads a file's full contents at an exact tag from a repository other than the target, including files over 1 MB. A tool that returns an empty or truncated body for a large file does not cover them.
+  - **Upstream tag compares** (workflow.md 2-5) are covered only by a tool that compares two tags of a repository other than the target and returns the changed-file list with its filenames, so that the 300-file cap can be checked. A commit list alone, or a summary without filenames, does not cover them.
   - **The merge** is covered only by a tool that takes the repo's merge method, and the post-approval `mergeStateStatus` read only by one that returns it — without it a `BLOCKED` PR cannot be told from a mergeable one.
   - **Writes** — approving a review, merging, updating a branch with the merge or the rebase form, creating, approving and merging the revert PR, closing with a comment, commenting — are covered by a tool that performs that write and reports whether it succeeded.
-- **Outside this choice**: local git (fetch, branches, revert, push) and the deploy tooling the verification plan uses (`kubectl`, Flux/Argo CLIs, `talosctl`, …) always run as written, whatever the method.
+- **Outside this choice**: local git (fetch, branches, revert, push) and the deploy tooling the verification plan uses (`kubectl`, Flux/Argo CLIs, `talosctl`, …) always run as written, whatever the method. So does chart rendering (`helm show chart`, `helm template` against the chart repository; workflow.md 2-5), which is not a GitHub operation. When it is unavailable, 2-5 falls back to reading the templates, and leaves unresolved anything only a render settles.
 
 ## List and filter Renovate PRs
 
@@ -85,6 +89,27 @@ release directly (primary source):
 gh release view vX.Y.Z -R {upstream_owner}/{upstream_repo}
 gh api repos/{upstream_owner}/{upstream_repo}/releases/tags/vX.Y.Z --jq '.body'
 ```
+
+## Read an upstream file at a tag
+
+For the disruption resolution (workflow.md 2-5): a chart's `values.yaml` and templates, or an operator's source, at an exact release tag of the upstream repository.
+
+```bash
+gh api -H 'Accept: application/vnd.github.raw+json' 'repos/{upstream_owner}/{upstream_repo}/contents/{path}?ref={tag}'
+```
+
+The raw media type returns the file body itself. The default JSON form leaves `content` empty for files between 1 and 100 MB, and the endpoint does not serve files over 100 MB. A file that cannot be read this way leaves the default it holds unresolved. A chart's source tree can differ from the published chart: the tailscale-operator chart's source `Chart.yaml` has `appVersion: "stable"`, a placeholder set at release time. Read such values from the published chart (workflow.md 2-5).
+
+## Compare two upstream tags
+
+For the replaced-controller check (workflow.md 2-5): whether the code that generates a controller's workloads changed between the controller's two source tags. Filter to the generating code's path, and print the total file count with it:
+
+```bash
+gh api 'repos/{upstream_owner}/{upstream_repo}/compare/{old_tag}...{new_tag}' \
+  --jq '{files: (.files | length), under_path: [.files[].filename | select(startswith("{path}/"))]}'
+```
+
+The changed-file list covers at most 300 files for the whole comparison, per the endpoint's documentation ("Compare two commits", *Working with large comparisons*). If `files` is 300, the list may be truncated, so an empty `under_path` proves nothing: the check is not established. Only a `files` count below 300 with an empty `under_path` shows the path unchanged.
 
 ## Release age (the cooldown gate)
 
