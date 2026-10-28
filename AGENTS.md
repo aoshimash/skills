@@ -101,4 +101,4 @@ Neutral vocabulary — use the capability term in skill instructions; reserve pr
 
 ## Automated Reviewers
 
-- `claude-review` — GitHub Actions workflow `.github/workflows/claude-code-review.yml`, running `/code-review:code-review` on `opened` / `synchronize` / `ready_for_review` / `reopened`; posts on drafts: yes
+- `claude-review` — GitHub Actions workflow `.github/workflows/claude-code-review.yml`, running `/code-review:code-review` on `opened` / `synchronize` / `ready_for_review` / `reopened`; the command stops on draft PRs, and because the workflow invokes it without `--comment` it posts no PR comments at all (findings reach only the Actions log); posts on drafts: no
