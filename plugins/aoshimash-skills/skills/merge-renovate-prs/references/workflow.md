@@ -162,6 +162,8 @@ Make the repo's configured cooldown hold for every update, including those Renov
 
 Order **low → high blast radius**: digests/patches of leaf tooling first, control-plane / CNI / database / runtime changes last. Surface the conflicts and ordering constraints inline so the reasoning is visible.
 
+The blast radius here is an **estimate**, made from package names, update types and changed files before any release notes or upstream defaults are read — so it is provisional. It sets the order and nothing else. The disruption class that decides how a PR is handled is recomputed in 2-5, after the primary-source review, and can come out higher or lower than this estimate; the plan report says the estimate is provisional.
+
 Interactive mode may additionally offer to scope the set: security-only, skip majors, only a subset of packages. Autonomous mode processes the full detected set unless the user scoped it in their request.
 
 ### 1-5: Plan gate (interactive) / plan report (autonomous)
@@ -183,11 +185,15 @@ Identify the dependency, the update type, and the changed files. Scale review ef
 | minor | **Medium** — read the release notes for new behavior, deprecations, default changes. |
 | major | **Deep** — breaking changes, migration guides, config-schema changes; read the actual diff against your usage. |
 
+Rigor scales how deeply the release notes are read, not whether disruption is resolved. A patch or digest bump of a dependency that ships defaults can move a default image as readily as a major can, so 2-2's read of those defaults and 2-5's resolution run at every rigor.
+
 ### 2-2: Primary-source review
 
 Fetch release notes from the **primary source**: the bot PR body if it included them, otherwise the upstream GitHub Releases page or `CHANGELOG`. Renovate sometimes omits inline notes, so do not assume their absence means "nothing changed".
 
 Then read the **actual diff/config** in the PR — what literally changed in this repo — not just the upstream prose. The changelog tells you what *could* matter; the diff tells you what *does* change here.
+
+For a dependency that ships **defaults the repo can override** — a Helm chart's values, an operator's default images and settings — the diff is often a single version line, and what changes here is decided by the defaults this repo does not override. Read those defaults at **both** release tags (for a chart, its `values.yaml` and the templates that consume them), along with every place this repo sets them. 2-5 resolves them into the disruption class.
 
 ### 2-3: CI gate
 
@@ -231,8 +237,17 @@ Assemble the same package in both modes:
 
 - Dependency + update type + a one-line "what changed".
 - Risk summary (scaled to rigor): breaking changes, behavior changes, blast radius.
+- The **disruption class, recomputed** (below), with the workloads that restart and the values that move them.
 - Required pre/post work, each tagged A/B/C.
 - Rollback plan (see [verification.md](verification.md) for the rollback-readiness check).
+
+**Recompute the disruption class from the resolved spec.** Phase 1's blast-radius estimate (1-4) was made before 2-2 and is provisional. The class that both modes act on below — and that 2-9's settle time and the report use — is decided here, against [verification.md](verification.md)'s classes, from what changes in *this repo's* running spec. Disruption is not a property of the release notes: they say what moved upstream, and whether anything moves here depends on what this repo pins. For a dependency that ships defaults the repo can override:
+
+1. **Resolve each default against this repo's pins, at both versions.** For each value whose default the new release changes (2-2), find whether this repo sets it — in the release's values, in `valuesFrom` sources, or in a resource that overrides the default (a custom resource that sets a component's image). A value the repo pins resolves to the pin, as the new release treats it: if the new release keeps the pinned entry unchanged, nothing moves; if it drops or rewrites that entry, the pin no longer holds it still. A value the repo leaves unset resolves to the upstream default and moves with it.
+2. **Diff the resolved spec, and follow each value to the workloads it reaches.** Rendering both versions with the repo's values and diffing (for a Helm chart, `helm template` at each version) shows what the dependency deploys itself. It does not show what a controller creates *from* a value. When a changed value is passed to a controller that stamps it into workloads it manages — a default image an operator uses for the proxies, database pods or other workloads it creates — those workloads change too, though no rendered diff shows them. Classify by what restarts. A workload whose resolved pod spec is unchanged does not restart, whatever the changelog announces. One whose spec changes restarts, whatever the changelog omits.
+3. **The changelog is never evidence of non-disruption for a floating default.** When this repo leaves a value at the upstream default, release notes that announce no restart — or say nothing, or only point elsewhere — and a diff that changes nothing but the version line say nothing about whether the workloads behind that default restart. Only the resolution does. When the resolution cannot be completed — a default set in code that cannot be read, a consumer of the value that cannot be found, a chain that cannot be followed to an unchanged spec — the class is disruptive, under verification.md's when-in-doubt rule.
+
+Record the recomputed class in the package and, when it differs from the Phase 1 estimate, the estimate it replaced. The order is not reshuffled: it decides only when a PR runs, while how the PR is handled follows the recomputed class. A timing constraint from the user's request applies to that class, so a PR that recomputes as disruptive defers when the constraint cannot be honored now, however it was estimated.
 
 **Autonomous — decide go/defer by rule.** *Go* means proceed to merge. *Defer* means do **not** merge; record the PR + reason in the human queue and continue with the next PR. Defer when **any** of these holds:
 
@@ -245,9 +260,9 @@ Assemble the same package in both modes:
 
 Two more deferrals arise later, at the merge itself (2-6): a step required before merging that fails, and a merge the platform **explicitly** refuses. A merge call that ends any other way is never a deferral.
 
-**Downtime is not a gate in autonomous mode — but it is not ignored.** Classify disruption per [verification.md](verification.md). A disruptive change (node reboots, single-replica restart, DB failover, CNI restart) proceeds, with: extended settle time before judging health in 2-9, and a **prominent entry in the final report**. If the user's request constrained timing ("only during the maintenance window"), respect it — defer the disruptive PR if the constraint cannot be honored now.
+**Downtime is not a gate in autonomous mode — but it is not ignored.** Use the recomputed class above. A disruptive change (node reboots, single-replica restart, DB failover, CNI restart) proceeds, with: extended settle time before judging health in 2-9, and a **prominent entry in the final report**. If the user's request constrained timing ("only during the maintenance window"), respect it — defer the disruptive PR if the constraint cannot be honored now.
 
-**Interactive — approval gate: never merge without explicit user approval.** Even with a batch-approved plan, the merge itself is the mutating action that needs a yes. **Downtime is first-class:** if the change is disruptive, do not fold it into a routine approval — surface a prominent, explicit confirmation that spells out blast radius and expected downtime, and ask about maintenance-window timing. This holds even if the plan was batch-approved in Phase 1: batch approval covered *order*, not *"yes, take production down now"*.
+**Interactive — approval gate: never merge without explicit user approval.** Even with a batch-approved plan, the merge itself is the mutating action that needs a yes. **Downtime is first-class:** if the recomputed class is disruptive, do not fold it into a routine approval — surface a prominent, explicit confirmation that spells out blast radius and expected downtime, and ask about maintenance-window timing. This holds even if the plan was batch-approved in Phase 1: batch approval covered *order*, not *"yes, take production down now"*.
 
 ### 2-6: Merge and main-divergence
 
