@@ -64,7 +64,7 @@ Note on native automerge: which packages Renovate automerges itself is the **use
 
 Look for changes already merged but **not yet applied** to the live environment — for example a K8s-version PR merged last week with no record of the `talosctl` apply having run. This is unfinished business that can interact dangerously with new merges.
 
-A merged change to an artifact whose publish is gated behind a separate trigger, not yet published, is **not** drift: unpublished is that repo type's designed state, and the run that merged it left the follow-up on the PR ([verification.md](verification.md) "Gated publish").
+A merged change to an artifact whose publish is gated behind a separate trigger, not yet published, is **not** drift: unpublished is that repo type's designed state ([verification.md](verification.md) "Gated publish"). A run of this skill that merges one posts the follow-up on the PR (2-8); where the PR carries no such comment — a human, Renovate's automerge, or an earlier version of this skill merged it — list the merge under the report's follow-ups (3-1) with the same content: the publish trigger, the consumers, and who does it.
 
 - **Autonomous:** do not try to resolve the drift (its failure would not map to a change made this run). **Exclude PRs touching the drifted component** from this run — defer them to the human queue with the drift as the reason — and report the drift prominently. PRs unrelated to the drifted component may proceed.
 - **Interactive:** flag it prominently and ask the user whether to resolve it first.
@@ -284,7 +284,7 @@ Discipline:
 Run three-state verification (see [verification.md](verification.md)): merged → applied/reconciled → functioning, with async-wait and regression check, adapted to the repo type, and distinguish harmless residue from real failure. For disruptive changes, use the extended settle time from 2-5.
 
 - **Functioning check passes** → post the result comment (2-8), then **proceed to the next PR**.
-- **Gated publish, V-2 passes** → there is no V-3 yet ([verification.md](verification.md) "Gated publish"): post the not-yet-published comment (2-8), report the PR as merged, not yet published (3-1), then **proceed to the next PR**.
+- **Gated publish, V-2 passes** → there is no V-3 yet for the gated artifact ([verification.md](verification.md) "Gated publish"). If the PR also changes a target under another row, that target's V-2 and V-3 must pass too — a failure there is a verification failure as below. Then post the not-yet-published comment (2-8), report the PR as merged, not yet published (3-1), and **proceed to the next PR**. A publish run that started after the merge is not a pass: it escalates (verification.md).
 - **Apply or verify fails** (or residue resolves to a real failure) — **fail closed when uncertain**: if you cannot tell whether it is working, treat it as not working. Then:
   - **Autonomous: auto-revert.** Execute the revert procedure in [verification.md](verification.md): create a revert PR → approve & merge it → if a B-class apply ran, execute its verified inverse → re-run three-state verification on the *recovery*. Then **stop the line**: even after a clean recovery, do not process further PRs this run — one failure means the pre-check missed something, and the remaining queue deserves human eyes. Post the revert comment (2-8) and report. If the revert itself fails, cannot be merged, or the system does not recover: **escalate to the human immediately** with the full state — this is the one place autonomous mode always comes back to a person.
   - **Interactive: stop the line.** Do **not** proceed to the next PR. Surface the problem, offer rollback (using the path confirmed in 2-5) as a proposal, and get user direction.
@@ -298,14 +298,14 @@ Never fabricate a passing result to keep the loop moving. A truthful "this faile
 Present what happened across the run:
 
 - **Merged & verified** — the PRs that completed all three states.
-- **Merged, not yet published** — PRs to an artifact whose publish is gated behind a separate trigger: merged and built, in no running system. Each with the build run that confirmed V-2 and its follow-up — the publish trigger to fire, the consumers whose pins to bump (or that none were located), and who does it. Never listed under merged & verified.
+- **Merged, not yet published** — PRs to an artifact whose publish is gated behind a separate trigger: merged and built, in no running system. Each with the build run that confirmed V-2 (or that the build job runs only on pull requests) and its follow-up — the publish trigger to fire, the consumers whose pins to bump (or that none were located), and who does it. A PR that also changed a target under another row is listed here, with that target's verification named. Never listed under merged & verified.
 - **Reverted** — auto-reverted PRs (autonomous), each with the failure cause, the revert PR link, and the recovery state.
 - **Cooldown wait** — PRs not yet old enough under the configured `minimumReleaseAge`, each with the member that set its age, the source (upstream release date or the lower bound from Renovate's commit), and the date it becomes eligible ("earliest" for a lower-bound date). These need no human action; the next run picks them up.
 - **Deferred / human queue** — PRs held, each with its reason (C-class step, CI red, no rollback path, manual conflicts, undecidable risk, a Renovate note's do-not-merge, an untraceable note asking for work or saying not to merge, a note's check that cannot be read, a failed pre-merge step, drift-blocked, ambiguous candidate, merge explicitly refused by the platform) and what a human needs to do.
 - **Merge outcome unconfirmed** — the PR whose merge call ended without an explicit refusal and did not read as merged (2-6), with the call's result, the PR read, and the default branch's head: why the line stopped, and that a human must establish whether the merge landed before the next run.
 - **Renovate notes** — notes set aside because a condition they state does not hold (with the condition and evidence), untraced notes-region passages and what became of each, and the config layers 0-2 could not read.
 - **Disruptive changes executed** — flagged prominently with what downtime occurred.
-- **Follow-ups** — anything that needs a human later.
+- **Follow-ups** — anything that needs a human later, including a gated-publish merge 0-3 found without its not-yet-published comment.
 - **Platform access** — the method the run used (SKILL.md "Platform Access"), and any operation whose failure under it deferred a PR, stopped the line, or escalated.
 
 ### 3-2: Surface improvements (do not auto-fix)
