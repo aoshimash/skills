@@ -35,7 +35,7 @@ Phrases that **should** invoke `merge-renovate-prs` (a backlog of Renovate PRs t
 
 Each maps to an entry in `evals/evals.json` with objective expectations.
 
-The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 pin interactive mode** (their prompts explicitly ask to confirm each step) and exercise the approval-gate discipline. **Cases 5–9 exercise autonomous mode**: zero gates, precondition verification, defer-don't-block, auto-revert, repo-type-adapted verification, and human-supplied verification checks. **Cases 10–11** (added 2026-10-19) cover the release-age gate and grouping proposals; both fixtures are taken from real aoshimash/homelab-k8s PRs (#374, #345) with their actual tables, commits, and dates. **Cases 16–17** (added 2026-10-27) cover Renovate `prBodyNotes` as a classification input; both fixtures are real homelab-k8s PRs (#387, #374) and its config's actual notes.
+The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 pin interactive mode** (their prompts explicitly ask to confirm each step) and exercise the approval-gate discipline. **Cases 5–9 exercise autonomous mode**: zero gates, precondition verification, defer-don't-block, auto-revert, repo-type-adapted verification, and human-supplied verification checks. **Cases 10–11** (added 2026-10-19) cover the release-age gate and grouping proposals; both fixtures are taken from real aoshimash/homelab-k8s PRs (#374, #345) with their actual tables, commits, and dates. **Cases 16–17** (added 2026-10-27) cover Renovate `prBodyNotes` as a classification input; both fixtures are real homelab-k8s PRs (#387, #374) and its config's actual notes. **Case 18** (added 2026-10-29) covers the split of Phase 0 precondition failures into structural and recoverable; its scenario is the run issue #140 records.
 
 ### Case 1: Manual-apply routing (`manual-apply-routing`) — interactive
 
@@ -114,6 +114,7 @@ The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 
 - Recognizes PR-level CI green cannot verify applied/functioning for a GitOps repo.
 - **Refuses to run autonomous mode** — no degraded variant, nothing merged on CI-green alone.
 - States which precondition failed and why; **falls back to interactive mode** rather than aborting.
+- Classifies the failure as **structural** (the tools and access are absent, not an expired credential) and offers no re-authentication remediation.
 
 ### Case 8: Library-repo verification (`autonomous-library-repo`) — autonomous
 
@@ -218,6 +219,18 @@ The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 
 - Applies the unconditional paperless note even though the compare adds no migrations — that would be an unstated condition — and takes the paired DB and volume backups before merging.
 - Does not treat release-notes text as a note; decides go once the pre-merge work is done.
 
+### Case 18: An expired credential at run start (`autonomous-precondition-recoverable`) — autonomous
+
+**Setup** (the run issue #140 records — an expired SSO session as the only failing precondition; that run's transcript is not available, so the repo, contexts and profile here are constructed, and the error strings are the aws CLI's and client-go's own message and format strings, not captured output): a Flux GitOps repo on EKS whose observability probe, `flux get kustomizations -A` on the kubeconfig context `prod`, authenticates through `aws eks get-token --profile platform-admin`. The probe fails with the aws CLI's expired-SSO message (exit 255) wrapped in `getting credentials: exec: executable aws failed with exit code 255`. A second context, `staging`, answers. Variant **(a)**: the user is present at start, runs the login when asked, and the same probe then returns data. **(b)**: the user replies "you run the login for me". **(c)**: after the user reports the login done, the probe fails again. **(d)**: a scheduled launch with no user reachable. **(e)**: the user is present, but the aws CLI says `Unable to locate credentials. You can configure credentials by running "aws login".` (exit 253).
+
+**Expected behavior**:
+- Classifies (a)–(d) as **recoverable** from the probe's own error text, and (e) as **structural** although its message suggests a command — setting up access is not restoring it.
+- **(a)**: asks once at run start — probe, error text, remediation with its source, filled in with the probe's own profile — offering re-probe or interactive; a question about seeing, not permission. Re-runs the same `prod` probe and continues autonomously only on real data; the plan report records it.
+- **Never runs the login itself** in any variant, including **(b)** when asked; never asks for a token or code.
+- **(c)**: the user's word is not a pass and `staging` is not the same probe; falls back to interactive mode with the original failure, the remediation offered and the re-probe result; no second question.
+- **(d)**: no question, nothing merged; falls back to interactive mode with the true reason — the expired session and its remediation.
+- **(e)**: no remediation question; falls back to interactive mode saying no credentials are configured.
+
 ## Evaluation Log
 
 > Note: the 2026-06-21 results below predate the 2026-07-23 autonomous redesign; they were run against the interactive-only version of the skill (Cases 1–4). Cases 5–9 have not been benchmarked yet.
@@ -277,6 +290,7 @@ Both with-skill Case 11 runs also proposed splitting Home Assistant out, citing 
 | 2026-10-25 | Cases 12–14 | desk-checked | Platform access resolution; separate agent instance (see below). |
 | 2026-10-25 | Case 15 | desk-checked — round 3 Pass (rounds 1–2 Conditional, fixed) | Only an explicit refusal means "not merged"; separate agent instance (see below). |
 | 2026-10-27 | Cases 16–17 | with 8/8, 7/7 / base 3/6 (d, e not run), 6/6 on (a) (b not run) | Renovate notes as a classification input; self-graded, weakly discriminating on the notes rules (see below). |
+| 2026-10-29 | Cases 7, 18 | Case 18 with 7/7 / base 4/7; Case 7 with 6/6 (base not re-run) | Structural vs recoverable precondition failures; self-graded (see below). |
 
 ### 2026-10-25 — Platform access resolution (Cases 12–14)
 
@@ -343,4 +357,19 @@ Known limit: only the CLI path is verified; no connector path was exercised.
 - **Case 17 was fail-open.** Its expectation set the HA note aside on scope the note implies ("applies to either" is not "only"). Variant (a) now expects the note to apply; variant (b) wraps the entry in a real template condition, `{{#if (or isMajor isMinor)}}` (`isMajor`, `isMinor` and the `or` helper are in `lib/util/template/index.ts`, `57ac5e7`), which a digest update fails. With-skill passed both; (a) no longer discriminates — the baseline backed up HA too — and the stated-condition behaviour now rests on (b), whose baseline was not run.
 
 **Known limits — over-deferral, the accepted direction.** (1) A note removed from the repo's config stays in an open PR's body until Renovate re-renders it, and while it does, the passage is untraced and defers the PR if it asks for work. (2) A preset that persistently returns 404 holds back nothing by itself, but every note it supplies is untraced and defers. (3) A note from any layer other than the repository's own file defers every PR whose note needs a step — moving the rule into the repo's own config is the remedy, and 3-2's proposal targets that file.
+
+### 2026-10-29 — Structural and recoverable precondition failures (Cases 7, 18, issue #140)
+
+**Change.** workflow.md 0-4 classified every failed precondition probe the same way — fall back to interactive mode — so an expired login was reported as an environment that cannot be observed. 0-4 now classifies the failure first. **Structural** (nothing configured, endpoint unreachable, revert not propagated; every revert-path failure; a "credentials not found" message even when it suggests a setup command) falls back as before. **Recoverable** needs all three of: the probe's own output says a configured credential or session expired; a remediation is named by that output or the repo's docs; it restores exactly the failed probe's access. With a user present at run start the run asks once; the user — never the agent, even when asked — renews the credential; the same probes are re-run and must return data. A failed re-probe falls back with the full story, and there is no second round. Unattended, a recoverable failure falls back as before but with the true reason. A structural failure beside recoverable ones decides the run, and no question is asked (added in self-review: the first draft left that mix undefined). Mode selection and SKILL.md Phase 0 step 4 and the user-choice note were updated to match. Placement: the rule governs only 0-4 and adds about 15 lines to workflow.md (now ~350 lines), well under the split threshold, so it stays in place.
+
+**Fixture.** Case 18's scenario is the run issue #140 records: an expired SSO session as the only failing precondition, which the user renewed at run start, after which the run went autonomous. That run's transcript is not available, so the repo, contexts and profile are constructed. The error strings come from source and were not captured from a live failure: botocore `UnauthorizedSSOTokenError.fmt` (boto/botocore `botocore/exceptions.py`, `develop` at `0440e51`, and the copy in aws/aws-cli `awscli/botocore/exceptions.py`, `v2` at `f8db808`); aws-cli v2's `GeneralExceptionHandler` (exit 255), `NoCredentialsErrorHandler` (exit 253, message `Unable to locate credentials. You can configure credentials by running "aws login".`) and the exit codes in `awscli/constants.py`; and client-go's exec plugin (`plugin/pkg/client/auth/exec/exec.go`, `master` at `337773b`), which formats `getting credentials: %v` around `exec: executable %s failed with exit code %d` and passes the plugin's stderr through. How `kubectl`/`flux` prefix that error is not reproduced. Variant (e) is the discriminating trap: aws-cli's real "no credentials" message also names a command.
+
+**Results** (with-skill: a separate agent instance that read SKILL.md and workflow.md from this branch; baseline: the same prompt, no skill; self-graded):
+
+| Case | With skill | Baseline | Notes |
+|---|---|---|---|
+| Case 18 — autonomous-precondition-recoverable | 7/7 | 4/7 | The baseline also read the expiry, did not run the login (even in (b)), kept to the `prod` probe and asked nothing unattended. It lost three points. In (e) it treated "credentials not found" as fixable, ran extra read-only `aws configure` probes and asked the user to fix the profile. In (c) it ran a further `aws sts get-caller-identity` and asked a second question. In (a) it gave the command with no source and no interactive alternative. In (d) it chose "report-only" rather than interactive mode. It was graded a pass there, because nothing merges and the reason is true. **Discriminating** on (e), the one-round bound and the question's shape; **not** on the re-authentication boundary itself, which an unaided model already keeps when asked. |
+| Case 7 — autonomous-precondition-fallback (regression) | 6/6 | not re-run | The new expectation (structural, no remediation offered) held. The run named the absence of `kubectl`/`flux` and offered no login. |
+
+The with-skill run's "framed as whether the agent can see" was graded on the question it showed. That question asks only about remediation and never for permission, but the run did not say the framing in words.
 
