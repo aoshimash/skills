@@ -9,6 +9,7 @@ GitHub-only for v1. The commands are written for the `gh` CLI and are the refere
 - [Read a PR: diff, files, body, branch, labels](#read-a-pr-diff-files-body-branch-labels)
 - [Release age (the cooldown gate)](#release-age-the-cooldown-gate)
 - [CI status (the merge gate)](#ci-status-the-merge-gate)
+- [Workflow files (gated-publish recognition)](#workflow-files-gated-publish-recognition)
 - [Workflow runs (gated-publish V-2)](#workflow-runs-gated-publish-v-2)
 - [Merge (respect the repo merge method)](#merge-respect-the-repo-merge-method)
 - [Create and merge a revert PR (auto-revert)](#create-and-merge-a-revert-pr-auto-revert)
@@ -27,7 +28,8 @@ Resolved once per run as SKILL.md "Platform Access" describes: a connector for G
   - **The CI gate** is covered only when the connector's tools — one or several — return every entry of the rollup the reference reads: every check run **and** every commit status on the PR's head, each with its own settled state, complete by the test above. Check runs alone, or one combined state without the individual statuses, do not cover it: a failing commit status, or a failing check hidden inside a summary, would read as green.
   - **The lower-bound read** (release-age.md) is covered only by a tool returning the PR's commits with each commit's author login and `committedDate`, newest included. A list that may stop short of the newest commits gives an older bound, which makes a release look older than it is — the unsafe direction.
   - **Upstream release lookups** are covered only by a tool that reads a release **by exact tag** from a repository other than the target, with its `published_at`. A tool confined to the target repository does not cover them.
-  - **The workflow-run reads** of gated-publish V-2 (below) are covered only by tools that return, for the settle read, every run on a given commit with each run's status, complete by the test above; and, for the publish-run read, the runs of a given workflow created at or after a given time on **every** branch and tag and for every event, with each run's creation time. A tool confined to the default branch, or to one event, does not cover the publish-run read: it would return no rows for a tag-triggered or dispatched publish on another ref, which reads as a pass.
+  - **The workflow-file enumeration** of gated-publish recognition (below) is covered only by tools that return every file in a directory at a given ref with a signal that the listing is complete, read each file's content at that ref, and list every workflow with its state. A listing with no completeness signal does not cover it: a publishing workflow missing from it reads as "every publishing workflow is gated".
+  - **The workflow-run reads** of gated-publish V-2 (below) are covered only by tools that return, for the settle read, every run on a given commit with each run's workflow path and status, complete by the test above; and, for the publish-run read, the runs of a given workflow created at or after a given time on **every** branch and tag and for every event, with each run's creation time. A tool confined to the default branch, or to one event, does not cover the publish-run read: it would return no rows for a tag-triggered or dispatched publish on another ref, which reads as a pass.
   - **The merge** is covered only by a tool that takes the repo's merge method, and the post-approval `mergeStateStatus` read only by one that returns it — without it a `BLOCKED` PR cannot be told from a mergeable one.
   - **Writes** — approving a review, merging, updating a branch with the merge or the rebase form, creating, approving and merging the revert PR, closing with a comment, commenting — are covered by a tool that performs that write and reports whether it succeeded.
 - **Outside this choice**: local git (fetch, branches, revert, push) and the deploy tooling the verification plan uses (`kubectl`, Flux/Argo CLIs, `talosctl`, …) always run as written, whatever the method.
@@ -114,27 +116,49 @@ Decision:
 - `PENDING`/`IN_PROGRESS` → wait, then re-check.
 - An **empty** rollup, or any other value (`ERROR`, `ACTION_REQUIRED`, `STARTUP_FAILURE`, `STALE`, …) → not green: **do not merge**.
 
+## Workflow files (gated-publish recognition)
+
+Recognition of an artifact whose publish is gated behind a separate trigger ([verification.md](verification.md) "Gated publish", condition (1)) reads **every** workflow file on the default branch, not just the release workflow. List them:
+
+```bash
+gh api "repos/{owner}/{repo}/git/trees/{default_branch}:.github/workflows" \
+  --jq '{truncated, files: [.tree[] | select(.type == "blob") | .path]}'
+```
+
+`truncated: false` on a read that succeeded → the listing is complete. `truncated: true`, or a read that fails (a 404 included) → the listing may be incomplete, and the row does not apply. Then read each listed file at the same ref:
+
+```bash
+gh api "repos/{owner}/{repo}/contents/.github/workflows/{file}?ref={default_branch}" --jq .content | base64 -d
+```
+
+A file that cannot be read is a workflow whose publishing cannot be determined: the row does not apply. Record from each file its triggers — for a `push` trigger, its branch and `paths` / `paths-ignore` filters — since the settle read below derives its expected runs from them. Which workflows can start runs at all:
+
+```bash
+gh api --paginate "repos/{owner}/{repo}/actions/workflows?per_page=100" \
+  --jq '.workflows[] | {path, state}'
+```
+
 ## Workflow runs (gated-publish V-2)
 
 Two reads for an artifact whose publish is gated behind a separate trigger ([verification.md](verification.md) "Gated publish"), taken after the merge, in this order.
 
-**Settle read** — every run on the merge commit has completed:
+**Settle read** — every run the merge is expected to start exists on the merge commit and has completed:
 
 ```bash
-gh run list --commit {merge_commit_sha} --limit 100 \
-  --json databaseId,workflowName,event,status,conclusion
+gh api --paginate "repos/{owner}/{repo}/actions/runs?head_sha={merge_commit_sha}&per_page=100" \
+  --jq '.workflow_runs[] | {id, path, event, status, conclusion}'
 ```
 
-Re-read until every row's `status` is `completed`. If the number of rows returned equals the limit, the list may be short — raise the limit and re-read. Until then the publish-run read is not taken. A run that does not complete within the wait V-2 allows, or a read that fails, is verification that cannot be completed (SKILL.md "Platform Access").
+Settled is positive evidence, never an empty list. The **expected set** is every workflow from the enumeration above whose `push` trigger admits the default branch and whose `paths` / `paths-ignore` filters, if any, admit a file the merge changed — a filter you cannot evaluate counts as admitting — less any the workflows list shows in a state other than `active`, since those start no run. Settled means both: every workflow in the expected set has a row (matched on `path`), and every row's `status` is `completed`. An empty result is settled only when the expected set is empty. GitHub creates runs asynchronously after the merge, so before then an empty or partial result means "not yet": re-read, within the wait V-2 allows. `--paginate` with `per_page=100` returns every page, so no limit comparison applies. An expected run that has not appeared, or a run that has not completed, when that wait runs out, or a read that fails, is verification that cannot be completed (SKILL.md "Platform Access"), and the publish-run reads are not taken.
 
-**Publish-run read** — no run of the publishing workflow started at or after the merge, on any branch or tag, from any event:
+**Publish-run read** — no run of a publishing workflow started at or after the merge, on any branch or tag, from any event. Take it **once for each** workflow recognition found publishing the artifact:
 
 ```bash
 gh run list --all --workflow {publishing_workflow_file} --created ">={merge_time}" \
   --json databaseId,event,status,createdAt,headBranch,url
 ```
 
-`--all` keeps a disabled workflow from erroring the read. No rows → the check passes. Any row fails it, so a short list cannot hide a failure and no limit comparison applies. A read that fails is not a pass: it is verification that cannot be completed, and the report says whether a publish ran is unknown.
+`--all` keeps a disabled workflow from erroring the read. No rows from every one of them → the check passes. Any row from any of them fails it, so a short list cannot hide a failure and no limit comparison applies. A read that fails is not a pass: it is verification that cannot be completed, and the report says whether a publish ran is unknown.
 
 ## Approve before merge
 
