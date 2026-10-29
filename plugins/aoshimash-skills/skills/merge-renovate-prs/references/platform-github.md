@@ -126,7 +126,7 @@ gh api "repos/{owner}/{repo}/git/trees/{default_branch}:.github/workflows" \
   --jq '{truncated, files: [.tree[] | select(.type == "blob") | .path]}'
 ```
 
-`truncated: false` on a read that succeeded → the listing is complete. `truncated: true`, or a read that fails (a 404 included) → the listing may be incomplete, and the row does not apply. Then read each listed file at the same ref:
+`truncated: false` on a read that succeeded → the listing is complete. `truncated: true`, or a read that fails (a 404 included) → the listing may be incomplete, and the row does not apply. The listing returns names relative to the directory (`container-push.yml`), while the workflows list and the settle read below return each workflow's `path` from the repository root (`.github/workflows/container-push.yml`): prefix each listed name with `.github/workflows/` when building the expected set and matching it against those reads. Then read each listed file at the same ref:
 
 ```bash
 gh api "repos/{owner}/{repo}/contents/.github/workflows/{file}?ref={default_branch}" --jq .content | base64 -d

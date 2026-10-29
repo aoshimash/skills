@@ -43,7 +43,7 @@ Extract:
 
 | What | Why it matters |
 |---|---|
-| **Deploy mechanism** — GitOps (Flux/Argo reconcile) vs. CI pipeline deploy vs. manual apply — or, for an artifact the repo builds, a **publish gated behind a separate trigger** (a version tag, a manual dispatch, a release) | Determines whether a merge auto-applies (taxonomy A) or needs a follow-up step (B/C), and what "revert PR → system restored" means here. A gated publish is its own repo type, not a manual-only deploy: see [verification.md](verification.md) "Gated publish". |
+| **Deploy mechanism** — GitOps (Flux/Argo reconcile) vs. CI pipeline deploy vs. manual apply — or, for an artifact the repo builds, a **publish gated behind a separate trigger** (a version tag, a manual workflow dispatch, a release) | Determines whether a merge auto-applies (taxonomy A) or needs a follow-up step (B/C), and what "revert PR → system restored" means here. A gated publish is its own repo type, not a manual-only deploy: see [verification.md](verification.md) "Gated publish". |
 | **Merge method** — merge / squash / rebase | Some repos require a specific method; respect it when merging. It also determines how to build a revert commit (see platform-github.md). Check repo settings if docs are silent. |
 | **Upgrade runbooks / "merge ≠ apply" cases** — e.g. `talosctl upgrade-k8s` after a K8s bump, a console-only Terraform runtime change | These are the manual steps you must route in Phase 2. Miss them and a PR is "merged" but the cluster never changed. |
 
