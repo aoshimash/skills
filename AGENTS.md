@@ -28,12 +28,14 @@ Skills follow the [skill-creator](https://github.com/anthropics/skills) best pra
 
 ### Writing instructions that hold up
 
-A skill is executed, not read. These four rules exist because each was learned from a defect that shipped past a review round.
+A skill is executed, not read. These six rules exist because each was learned from a defect that shipped past a review round.
 
 - **Do not write a claim the mechanism does not deliver.** Any sentence asserting that something guarantees, confines, enforces, or catches — and any sentence calling something verified — must be checkable against the instruction or command beside it. Two forms recur: an evidence citation ("verified live") for something not actually observed in this session, and a capability claim ("X enforces Y") where X does not. Where the mechanism is partial, name the part it covers and record the rest as a known limit; never round up.
 - **Run every command as written before recording it as verified.** Extract it from the file and run *that*, not a retyped copy. A verification that exercises a differently-typed command proves nothing about the one that ships.
 - **A list read a policy depends on must be complete.** Pass `--paginate` with `per_page=100` on paginated API reads. Where a command takes a `--limit`, compare the number of rows actually **fetched** against that limit — a client-side-filtered count checks nothing — and raise the limit until the fetched count is strictly below it. A read that may be short is an unknown, and an unknown resolves the way that policy's failures resolve.
 - **Model eval fixtures on real artifacts from this repository.** A fixture that hands the agent the classification under test — a pre-labelled input, an idealized body, a state the platform cannot produce — grades recall of the case rather than the behaviour. At least one fixture per behavioural rule should come from a real PR, issue, or branch.
+- **Run shipped shell commands on both userlands.** A bash block a skill ships is run, as extracted from the file, on macOS (BSD tools; bash and zsh) and in a Linux container (GNU tools) before the evaluation log calls it verified, and the log names both runs.
+- **A convention and its check change together.** When a rule in this file gains or loses an exemption, the check in `scripts/check-invariants.py` that enforces it and its row in Repository Checks change in the same PR, with a self-test case for the new boundary.
 
 ## Issue Skill Design Axis
 
