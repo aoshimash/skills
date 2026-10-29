@@ -30,6 +30,7 @@ Resolved once per run as SKILL.md "Platform Access" describes: a connector for G
   - **Upstream release lookups** are covered only by a tool that reads a release **by exact tag** from a repository other than the target, with its `published_at`. A tool confined to the target repository does not cover them.
   - **Upstream file reads** (workflow.md 2-5) are covered only by a tool that reads a file's full contents at an exact tag from a repository other than the target, including files over 1 MB. A tool that returns an empty or truncated body for a large file does not cover them.
   - **Upstream tag compares** (workflow.md 2-5) are covered only by a tool that compares two tags of a repository other than the target and returns the changed-file list with its filenames, so that the 300-file cap can be checked. A commit list alone, or a summary without filenames, does not cover them.
+  - **Upstream tree listings** (workflow.md 2-5, the in-repo import set) are covered only by a tool that lists every file path at an exact tag of a repository other than the target and reports whether that listing was truncated. A listing that may stop short without saying so does not cover them.
   - **The merge** is covered only by a tool that takes the repo's merge method, and the post-approval `mergeStateStatus` read only by one that returns it — without it a `BLOCKED` PR cannot be told from a mergeable one.
   - **Writes** — approving a review, merging, updating a branch with the merge or the rebase form, creating, approving and merging the revert PR, closing with a comment, commenting — are covered by a tool that performs that write and reports whether it succeeded.
 - **Outside this choice**: local git (fetch, branches, revert, push) and the deploy tooling the verification plan uses (`kubectl`, Flux/Argo CLIs, `talosctl`, …) always run as written, whatever the method. So does chart rendering (`helm show chart`, `helm template` against the chart repository; workflow.md 2-5), which is not a GitHub operation. When it is unavailable, 2-5 falls back to reading the templates, and leaves unresolved anything only a render settles.
@@ -98,18 +99,61 @@ For the disruption resolution (workflow.md 2-5): a chart's `values.yaml` and tem
 gh api -H 'Accept: application/vnd.github.raw+json' 'repos/{upstream_owner}/{upstream_repo}/contents/{path}?ref={tag}'
 ```
 
-The raw media type returns the file body itself. The default JSON form leaves `content` empty for files between 1 and 100 MB, and the endpoint does not serve files over 100 MB. A file that cannot be read this way leaves the default it holds unresolved. A chart's source tree can differ from the published chart: the tailscale-operator chart's source `Chart.yaml` has `appVersion: "stable"`, a placeholder set at release time. Read such values from the published chart (workflow.md 2-5).
+The raw media type returns the file body itself. The default JSON form leaves `content` empty for files between 1 and 100 MB, and the endpoint does not serve files over 100 MB. A read that does not return the file — one over 100 MB, or a 404, which this command cannot tell apart from a missing repository or a denied read — is the access method failing or proving unable, so its result is an unknown under SKILL.md "Platform Access" (workflow.md 2-5 step 4), not an unresolved default. A chart's source tree can differ from the published chart: the tailscale-operator chart's source `Chart.yaml` has `appVersion: "stable"`, a placeholder set at release time. Read such values from the published chart (workflow.md 2-5).
 
 ## Compare two upstream tags
 
-For the replaced-controller check (workflow.md 2-5): whether the code that generates a controller's workloads changed between the controller's two source tags. Filter to the generating code's path, and print the total file count with it:
+For the replaced-controller check (workflow.md 2-5): whether the code that generates a controller's workloads changed between the controller's two source tags. That code is the generating package **and every in-repo package it imports, transitively**. The tailscale operator's `cmd/k8s-operator` imports `k8s-operator/apis/v1alpha1`, `kube/kubetypes`, `kube/egressservices` and `kube/ingressservices`, among others, and a change there changes the generated spec as surely as one in the operator's own directory. So the check has two parts: list that package set at the old tag, then filter the compare to it. Run both blocks in one shell; the second uses the first's variables.
+
+**1. The in-repo import set — Go modules only.** Start from the generating package's directory, read the import blocks of its non-test `.go` files at the old tag, keep the imports under the module path that the root `go.mod` declares, and repeat for each package found:
 
 ```bash
-gh api 'repos/{upstream_owner}/{upstream_repo}/compare/{old_tag}...{new_tag}' \
-  --jq '{files: (.files | length), under_path: [.files[].filename | select(startswith("{path}/"))]}'
+repo={upstream_owner}/{upstream_repo} tag={old_tag} start={path} work=$(mktemp -d)
+raw() { for try in 1 2 3; do  # retry transient network errors; output only from a successful try
+  out=$(gh api -H 'Accept: application/vnd.github.raw+json' "repos/$repo/contents/$1?ref=$tag" < /dev/null) \
+    && { printf '%s\n' "$out"; return 0; }; done; return 1; }
+raw go.mod > "$work/go.mod" || touch "$work/failed"
+mod=$(awk '$1 == "module" {print $2; exit}' "$work/go.mod")
+gh api "repos/$repo/git/trees/$tag?recursive=1" \
+  --jq '.truncated, (.tree[] | select(.type == "blob") | .path)' > "$work/tree" || touch "$work/failed"
+{ [ -n "$mod" ] && [ "$(head -n 1 "$work/tree")" = false ] \
+  && grep -qE "^$start/[^/]+\.go\$" "$work/tree"; } || touch "$work/unestablished"
+echo "$start" > "$work/closure"; i=1
+while d=$(sed -n "${i}p" "$work/closure"); [ -n "$d" ]; do
+  if [ "$d" = . ]; then pat='^[^/]+\.go$'; else pat="^$d/[^/]+\\.go\$"; fi
+  grep -E "$pat" "$work/tree" | grep -v '_test\.go$' | while read -r f; do
+    raw "$f" || touch "$work/failed"
+  done | awk '/^import \(/ {b = 1; next} b && /^\)/ {b = 0} b || /^import [^(]/' \
+    | grep -oE "\"$mod(/[^\"]*)?\"" | tr -d '"' | sed -e "s|^$mod/||" -e "s|^$mod\$|.|" \
+    | while read -r p; do grep -qxF "$p" "$work/closure" || echo "$p" >> "$work/closure"; done
+  i=$((i + 1))
+done
+echo "work=$work packages=$(wc -l < "$work/closure") $(ls "$work" | grep -E '^(failed|unestablished)$')"
 ```
 
-The changed-file list covers at most 300 files for the whole comparison, per the endpoint's documentation ("Compare two commits", *Working with large comparisons*). If `files` is 300, the list may be truncated, so an empty `under_path` proves nothing: the check is not established. Only a `files` count below 300 with an empty `under_path` shows the path unchanged.
+**2. The compare, filtered to that set.** A changed file is a hit when it sits in a package directory of the set or below one (embedded files, cgo sources), or when it is a `go.mod` or `go.sum` anywhere, because this method does not follow modules outside the repository:
+
+```bash
+gh api "repos/$repo/compare/{old_tag}...{new_tag}" \
+  --jq '(.files | length), .files[].filename' > "$work/changed" || touch "$work/failed"
+awk -v failed="$([ -e "$work/failed" ] && echo 1)" -v unest="$([ -e "$work/unestablished" ] && echo 1)" '
+  NR == FNR {c[$0]; next}
+  FNR == 1 {n = $0; next}
+  $0 ~ /(^|\/)go\.(mod|sum)$/ {print "hit: " $0; hits++; next}
+  {d = $0; if (d !~ /\//) d = "."; else sub(/\/[^\/]*$/, "", d)
+   while (1) {if (d in c) {print "hit: " $0; hits++; break}; if (d !~ /\//) break; sub(/\/[^\/]*$/, "", d)}}
+  END {print "files: " n
+       print (failed ? "method failure" : (unest || n == "" || n >= 300 || hits ? "not established" : "unchanged"))}' \
+  "$work/closure" "$work/changed"
+```
+
+Read the last line:
+
+- `unchanged` — the compare is complete (fewer than 300 files), the import set was listed completely, and no hit. Only this establishes the generating code unchanged.
+- `not established` — a read completed but cannot show the code unchanged: the changed-file list has 300 files and may be truncated (the endpoint's documentation, "Compare two commits", *Working with large comparisons*, caps it at 300 for the whole comparison), the tree listing reported itself truncated, the root `go.mod` declares no module, the start path holds no `.go` file, or a hit. 2-5 counts the workloads as changing.
+- `method failure` — a `gh api` call errored (an error response of any kind, a 404 included, or a network failure; a file read counts only after three tries). That is the access method failing, an **unknown** under SKILL.md "Platform Access", not a result about the code.
+
+The set is listed at the old tag only, which is enough: an import added or removed at the new tag edits a file already in the set, or adds one to a directory in it, and the compare shows that edit as a hit. It over-approximates: every non-test `.go` file counts, whatever its build constraints, and every changed file in a package directory is a hit, not only `.go` files — so when the set includes the repository's root package, as the tailscale operator's does, any changed root-level file (`VERSION.txt`, `flake.nix`) is a hit. What it does not cover: generating code in any language other than Go has no listing method here, so its in-repo imports cannot be listed and the check is **not established** without running the blocks (on a repository with no root `go.mod` they would only report the 404 as a `method failure`); and dependencies outside the repository are not followed, which is why any `go.mod` or `go.sum` change is a hit. It is also costly: one API call per `.go` file in the set. For the tailscale operator at `v1.104.1` that was 239 packages and about 1,000 calls, roughly 7 minutes, against the authenticated rate limit of 5,000 calls an hour.
 
 ## Release age (the cooldown gate)
 
