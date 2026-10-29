@@ -311,11 +311,31 @@ the refresh from Phase 7 step 2. Do not present the catalog.
 Only reached when Phase 4 left the target undecided and Phase 5 did not cancel —
 that is, only once something is actually going to be written.
 
+Which agents load which file is a product fact, and the two agents this
+repository targets differ on it (confirmed against each product's documentation
+on 2026-10-29 — Codex: `learn.chatgpt.com/docs/agent-configuration/agents-md`;
+Claude Code: `code.claude.com/docs/en/memory`, "AGENTS.md"):
+
+- **Codex** reads `AGENTS.override.md`, then `AGENTS.md`, then any name listed
+  in its `project_doc_fallback_filenames` setting, from its home directory and
+  from the project root down to the working directory. It does not read
+  `CLAUDE.md` unless a user has added that name to the fallback list.
+- **Claude Code** reads `CLAUDE.md` files, and reads `AGENTS.md` natively (v2.1.277
+  or later) **only when no `CLAUDE.md` or `CLAUDE.local.md` exists in the working
+  directory or above it**; with a `CLAUDE.md` present it reads `AGENTS.md` only
+  through an `@AGENTS.md` import in that file, or when the user has changed its
+  "Project instructions" setting to load both.
+
+So an `AGENTS.md` is never "a file no agent reads": Codex reads it in every
+case, and whether Claude Code does depends on `CLAUDE.md`. State the loading
+consequence per agent, and let the user decide which agents matter here —
+never infer the repository's agent set from one file's presence.
+
 | Situation | Action |
 |---|---|
-| Neither `AGENTS.md` nor `CLAUDE.md` exists | Target `AGENTS.md`, to be created in Phase 10 with the block as its entire contents. Mention in the pull request that a `CLAUDE.md` importing it (`@AGENTS.md`) is the convention, but do not create one. |
-| `CLAUDE.md` exists and already imports `AGENTS.md` (contains `@AGENTS.md`) | Target `AGENTS.md`, to be created in Phase 10. `CLAUDE.md` needs no change — the import already picks it up. |
-| `CLAUDE.md` exists and does **not** import `AGENTS.md` | Writing a fresh `AGENTS.md` here would land the rules in a file no agent reads. Do not guess — ask the user to choose (see Environment Adaptation): **(1) Target `AGENTS.md` and add an `@AGENTS.md` import line to `CLAUDE.md`** (recommended; matches the convention) / **(2) Target `CLAUDE.md` instead** / **(3) Target `AGENTS.md` only, no import** — warn that nothing will load it until something imports it / **(4) Abort**. |
+| Neither `AGENTS.md` nor `CLAUDE.md` exists | Target `AGENTS.md`, to be created in Phase 10 with the block as its entire contents. Both agents load it as it stands — Codex natively, Claude Code (v2.1.277 or later, default setting) because no `CLAUDE.md` is present. State in the pull request that adding a `CLAUDE.md` later stops Claude Code reading `AGENTS.md` unless that `CLAUDE.md` imports it (`@AGENTS.md`); do not create a `CLAUDE.md`. |
+| `CLAUDE.md` exists and already imports `AGENTS.md` (contains `@AGENTS.md`) | Target `AGENTS.md`, to be created in Phase 10. `CLAUDE.md` needs no change — Codex reads `AGENTS.md` directly and Claude Code reads it through the import. |
+| `CLAUDE.md` exists and does **not** import `AGENTS.md` | The agents differ here, so do not guess — ask the user to choose (see Environment Adaptation), with each option's loading consequence spelled out: **(1) Target `AGENTS.md` and add an `@AGENTS.md` import line to `CLAUDE.md`** (recommended: loaded by Codex and by Claude Code; matches the convention) / **(2) Target `CLAUDE.md` instead** (loaded by Claude Code; not read by Codex) / **(3) Target `AGENTS.md` only, no import** (loaded by Codex; not read by Claude Code while this `CLAUDE.md` exists, unless its "Project instructions" setting loads both — the right choice for a repository used with Codex only) / **(4) Abort**. |
 
 Option 1 is the only case where a second file is touched; it is a one-line
 addition to a file that already exists, it happens only on the user's explicit

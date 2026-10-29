@@ -125,14 +125,24 @@ only. The prompt also asks what happens on cancellation.
 
 ### Case 5: `CLAUDE.md`-only target (`claude-md-only-target`)
 
-**Setup**: No `AGENTS.md`; a hand-written 200-line `CLAUDE.md` that does **not**
-import `AGENTS.md`. Two rules detected.
+**Setup**: No `AGENTS.md`; a hand-written `CLAUDE.md` that does **not** import
+`AGENTS.md`. Two rules detected. Real fixture: this repository from commit
+`649448d` (2026-03-05, "docs: add CLAUDE.md with project conventions") up to
+`526d4f0^` — a `CLAUDE.md` of project conventions, no `AGENTS.md`, no import:
+the state every repository that started on Claude Code is in.
 
 **Expected behavior**:
-- Recognizes that a fresh `AGENTS.md` here would not be loaded by anything.
-- **Asks** rather than guessing: target `AGENTS.md` + add the `@AGENTS.md`
-  import to `CLAUDE.md` (recommended) / write into `CLAUDE.md` / `AGENTS.md`
-  only with an explicit warning / abort.
+- States the loading facts per agent instead of calling a fresh `AGENTS.md`
+  unread: Codex reads `AGENTS.md` regardless of `CLAUDE.md`, which it does not
+  read; Claude Code with this `CLAUDE.md` present reads `AGENTS.md` only
+  through an import or its "Project instructions" setting.
+- **Asks** rather than guessing, each option carrying its consequence: target
+  `AGENTS.md` + add the `@AGENTS.md` import to `CLAUDE.md` (recommended —
+  loaded by both agents) / write into `CLAUDE.md` (Claude Code only) /
+  `AGENTS.md` only, no import (Codex; not Claude Code while this `CLAUDE.md`
+  exists) / abort.
+- Never says "no agent reads it" or "nothing will load it" about `AGENTS.md`,
+  and never infers which agents the repository is used with from the files.
 - The answer **only decides the target** — the file is created in the write
   phase, so aborting leaves the repository untouched.
 - `CLAUDE.md` is touched only on an explicit selection, and only by one line.
@@ -263,6 +273,36 @@ corpus are rules and which are not.
 Unlike every other case, this one needs no special fixture: the corpus ships the
 fenced template, so **every** run of the skill exercises this path.
 
+### Case 13: Codex-only repository, no import wanted (`codex-only-no-import`)
+
+**Setup**: The Case 5 files — a `CLAUDE.md` without an import, no `AGENTS.md`
+(fixture: this repository at `526d4f0^`) — and the user states the repository
+is used with Codex only, then picks option 3 (`AGENTS.md` only, no import).
+
+**Expected behavior**:
+- Accepts option 3 without a "nothing will load it" warning. The consequence
+  stated with the option is the accurate one: Codex reads `AGENTS.md`
+  natively, and Claude Code would not while this `CLAUDE.md` exists — which is
+  fine for a Codex-only repository.
+- Targets `AGENTS.md`, created in Phase 10; `CLAUDE.md` is not touched.
+- Does not add the import "to be safe" — the user's selection decides.
+
+### Case 14: Neither instruction file exists (`neither-file-both-agents-load`)
+
+**Setup**: A repository with no `AGENTS.md` and no `CLAUDE.md`; two rules
+detected. Fixture: this repository before commit `649448d` (2026-03-05), whose
+tree holds neither file.
+
+**Expected behavior**:
+- Targets `AGENTS.md` without asking (Phase 6, first row).
+- The pull request body says both agents load it as created — Codex natively,
+  Claude Code because no `CLAUDE.md` is present — and that adding a
+  `CLAUDE.md` later stops Claude Code reading it unless that `CLAUDE.md`
+  imports it.
+- Does not say an import is required now, and does not create a `CLAUDE.md`.
+
+---
+
 ## Evaluation Log
 
 ### 2026-07-26 — Mechanism verification (issue #82, review fix round 1)
@@ -321,3 +361,24 @@ skips the fence is exactly the unmeasured part.
 | 2026-07-26 | M1–M5 mechanism checks (round 2) | 5/5 pass | Executed against the real corpus file and synthetic target files; the untrimmed-entry growth defect was reproduced and the fix verified. |
 | 2026-07-26 | Trigger evals (20) | not run | Accepted deviation — harness unavailable. |
 | 2026-07-26 | Behavioral cases 1–12 | not run | Accepted deviation — harness unavailable. |
+
+### 2026-10-29 — Phase 6 per-agent loading facts (Refs #135)
+
+**What changed.** Phase 6 no longer calls a fresh `AGENTS.md` "a file no agent
+reads" when `CLAUDE.md` lacks an import. It states each agent's loading rule
+and spells out the consequence of every option, so the target and its
+explanation match for a Codex-only, a Claude Code-only, and a mixed
+repository. Facts confirmed on 2026-10-29 by fetching the product pages in the
+session: Codex reads `AGENTS.override.md`, then `AGENTS.md`, then the names in
+`project_doc_fallback_filenames`, and does not read `CLAUDE.md`
+(learn.chatgpt.com/docs/agent-configuration/agents-md); Claude Code reads
+`AGENTS.md` natively only when no `CLAUDE.md` or `CLAUDE.local.md` is in the
+working directory or above it (v2.1.277+), and otherwise through an
+`@AGENTS.md` import or its "Project instructions" setting
+(code.claude.com/docs/en/memory, "AGENTS.md").
+
+| Date | Case | Result | Notes |
+|------|------|--------|-------|
+| 2026-10-29 | Documentation fetches | executed | Both product pages fetched in the session; the rules above were read from them, not from memory. |
+| 2026-10-29 | Git fixtures | executed | `git ls-tree 526d4f0^ -- AGENTS.md CLAUDE.md` lists `CLAUDE.md` only, and that `CLAUDE.md` contains no `@AGENTS.md`; the tree before `649448d` holds neither file. |
+| 2026-10-29 | 5 (rewritten), 13, 14 | desk-checked | Static inspection against the shipped Phase 6 text, by the implementing agent. Not benchmarked — the accepted deviation above still applies. |

@@ -1,26 +1,86 @@
 {
   "skill_name": "sync-agent-rules",
   "trigger_evals": [
-    { "query": "sync the shared agent rules into this repo's AGENTS.md", "should_trigger": true },
-    { "query": "apply my standard conventions to this repository — only the ones that actually apply here", "should_trigger": true },
-    { "query": "共通ルールをこのリポジトリに同期して", "should_trigger": true },
-    { "query": "AGENTS.md に共通の規約を反映して。使ってないツールのルールは入れなくていい", "should_trigger": true },
-    { "query": "add my usual project rules to AGENTS.md and open a PR", "should_trigger": true },
-    { "query": "この新しいリポジトリに標準のルールを入れたい", "should_trigger": true },
-    { "query": "distribute the shared conventions from aoshimash/skills into this repo", "should_trigger": true },
-    { "query": "エージェントルールを同期して、PR 作って", "should_trigger": true },
-    { "query": "pull down my shared rule set and write the relevant ones into AGENTS.md", "should_trigger": true },
-    { "query": "collect the hand-written rules from my other repos and add the good ones to the shared corpus", "should_trigger": false },
-    { "query": "add a rule to the shared corpus saying we always use go-task instead of Make", "should_trigger": false },
-    { "query": "write an AGENTS.md for this repo describing its architecture, directory layout, and test commands", "should_trigger": false },
-    { "query": "this repo's Dockerfile uses alpine — switch it to a debian slim base and rebuild", "should_trigger": false },
-    { "query": "sync my fork with upstream main and resolve the conflicts", "should_trigger": false },
-    { "query": "what conventions do I usually use for Python projects?", "should_trigger": false },
-    { "query": "create an issue to centralize our project conventions across repos", "should_trigger": false },
-    { "query": "review the dependency PRs on this repo and merge the safe ones", "should_trigger": false },
-    { "query": "analyze my recent sessions and propose improvements to my skills", "should_trigger": false },
-    { "query": "pin all the GitHub Actions in .github/workflows to commit SHAs", "should_trigger": false },
-    { "query": "respond to the review comments on PR #12", "should_trigger": false }
+    {
+      "query": "sync the shared agent rules into this repo's AGENTS.md",
+      "should_trigger": true
+    },
+    {
+      "query": "apply my standard conventions to this repository — only the ones that actually apply here",
+      "should_trigger": true
+    },
+    {
+      "query": "共通ルールをこのリポジトリに同期して",
+      "should_trigger": true
+    },
+    {
+      "query": "AGENTS.md に共通の規約を反映して。使ってないツールのルールは入れなくていい",
+      "should_trigger": true
+    },
+    {
+      "query": "add my usual project rules to AGENTS.md and open a PR",
+      "should_trigger": true
+    },
+    {
+      "query": "この新しいリポジトリに標準のルールを入れたい",
+      "should_trigger": true
+    },
+    {
+      "query": "distribute the shared conventions from aoshimash/skills into this repo",
+      "should_trigger": true
+    },
+    {
+      "query": "エージェントルールを同期して、PR 作って",
+      "should_trigger": true
+    },
+    {
+      "query": "pull down my shared rule set and write the relevant ones into AGENTS.md",
+      "should_trigger": true
+    },
+    {
+      "query": "collect the hand-written rules from my other repos and add the good ones to the shared corpus",
+      "should_trigger": false
+    },
+    {
+      "query": "add a rule to the shared corpus saying we always use go-task instead of Make",
+      "should_trigger": false
+    },
+    {
+      "query": "write an AGENTS.md for this repo describing its architecture, directory layout, and test commands",
+      "should_trigger": false
+    },
+    {
+      "query": "this repo's Dockerfile uses alpine — switch it to a debian slim base and rebuild",
+      "should_trigger": false
+    },
+    {
+      "query": "sync my fork with upstream main and resolve the conflicts",
+      "should_trigger": false
+    },
+    {
+      "query": "what conventions do I usually use for Python projects?",
+      "should_trigger": false
+    },
+    {
+      "query": "create an issue to centralize our project conventions across repos",
+      "should_trigger": false
+    },
+    {
+      "query": "review the dependency PRs on this repo and merge the safe ones",
+      "should_trigger": false
+    },
+    {
+      "query": "analyze my recent sessions and propose improvements to my skills",
+      "should_trigger": false
+    },
+    {
+      "query": "pin all the GitHub Actions in .github/workflows to commit SHAs",
+      "should_trigger": false
+    },
+    {
+      "query": "respond to the review comments on PR #12",
+      "should_trigger": false
+    }
   ],
   "evals": [
     {
@@ -94,13 +154,14 @@
       "id": 5,
       "name": "claude-md-only-target",
       "prompt": "Sync the shared agent rules into this repository. Note that this repo has no AGENTS.md — it has a 200-line CLAUDE.md written by hand, and that CLAUDE.md does not reference or import AGENTS.md anywhere. Detection matches the container image rule and the GitHub Actions pinning rule. Paper exercise: what do you do about the target file, and when exactly do you create it?",
-      "expected_output": "The skill recognizes that silently creating a fresh AGENTS.md here would put the rules in a file no agent actually loads, since this CLAUDE.md does not import AGENTS.md. It does not guess. It asks the user to choose between: targeting AGENTS.md and adding a one-line `@AGENTS.md` import to the existing CLAUDE.md (recommended, matching the convention); writing the managed block into CLAUDE.md instead; targeting AGENTS.md only, with an explicit warning that nothing will load it until something imports it; or aborting. Crucially the question only DECIDES the target — no file is created at that point. All writes happen in the final phase, so aborting leaves the repository untouched. It creates no file other than AGENTS.md, touches CLAUDE.md only if the user explicitly picks an option that does so, and does not rewrite, reorganize, or reformat the rest of CLAUDE.md. A newly created AGENTS.md begins with the BEGIN delimiter on line 1, with no leading blank line.",
+      "expected_output": "The skill states what each agent would load: Codex reads AGENTS.md natively (AGENTS.override.md, then AGENTS.md, then its configured fallback names) and does not read CLAUDE.md, while Claude Code with this CLAUDE.md present reads AGENTS.md only through an `@AGENTS.md` import or its Project-instructions setting. It never claims that a fresh AGENTS.md would be read by no agent. It does not guess which agents the repository is used with; it asks the user to choose, each option carrying its consequence: targeting AGENTS.md and adding a one-line `@AGENTS.md` import to the existing CLAUDE.md (recommended, loaded by both agents, matching the convention); writing the managed block into CLAUDE.md instead (Claude Code only, not read by Codex); targeting AGENTS.md only, no import (Codex, and not Claude Code while this CLAUDE.md exists); or aborting. Crucially the question only DECIDES the target — no file is created at that point. All writes happen in the final phase, so aborting leaves the repository untouched. It creates no file other than AGENTS.md, touches CLAUDE.md only if the user explicitly picks an option that does so, and does not rewrite, reorganize, or reformat the rest of CLAUDE.md. A newly created AGENTS.md begins with the BEGIN delimiter on line 1, with no leading blank line.",
       "files": [],
       "expectations": [
         "Detects that AGENTS.md is absent and that CLAUDE.md does not import it",
-        "Does not silently create an AGENTS.md that nothing loads",
-        "Asks the user to choose, offering at minimum the AGENTS.md-plus-import option and the write-into-CLAUDE.md option",
-        "Marks the create-AGENTS.md-plus-import option as the recommended one (it matches the established convention)",
+        "States that Codex reads AGENTS.md regardless of CLAUDE.md and that Claude Code reads it only through an import or its Project-instructions setting while CLAUDE.md exists",
+        "Does not claim that a fresh AGENTS.md would be read by no agent, and does not infer the repository's agent set from the files present",
+        "Asks the user to choose, offering at minimum the AGENTS.md-plus-import option, the write-into-CLAUDE.md option, and the AGENTS.md-only option, each with its loading consequence",
+        "Marks the create-AGENTS.md-plus-import option as the recommended one (loaded by both agents; matches the established convention)",
         "Treats the answer as a decision about the target and defers the actual file creation to the write phase, so aborting leaves the repository untouched",
         "Touches CLAUDE.md only as a result of an explicit user selection, and then only to add the import line",
         "Creates no file in the repository other than AGENTS.md",
@@ -220,6 +281,33 @@
         "Offers no phantom catalog entry with the placeholder id `<id>` or the placeholder detect pattern `<glob>`",
         "Presents the bootstrap catalog containing exactly the four real rules for explicit selection",
         "Never writes the fenced template's placeholder text into the target repository"
+      ]
+    },
+    {
+      "id": 13,
+      "name": "codex-only-no-import",
+      "prompt": "Sync the shared agent rules into this repository. The repo has a hand-written CLAUDE.md that does not import AGENTS.md, and no AGENTS.md. Two rules are detected. We only use Codex here, never Claude Code, so when you ask about the target file I will pick: create AGENTS.md only, with no import added to CLAUDE.md. Paper exercise: what do you say when you offer that option, and what do you do once I pick it?",
+      "expected_output": "The option is offered with its real consequence rather than a warning that nothing will load the file: Codex reads AGENTS.md natively, and Claude Code would not read it while this CLAUDE.md exists — which is the right outcome for a Codex-only repository. Once the user picks it, the skill targets AGENTS.md, creates it in the write phase with the block as its entire contents, leaves CLAUDE.md untouched, and does not add the import anyway. The pull request body records the choice.",
+      "files": [],
+      "expectations": [
+        "Offers the AGENTS.md-only option with its accurate consequence (Codex reads it; Claude Code does not while CLAUDE.md exists) and without claiming nothing will load it",
+        "Targets AGENTS.md after the selection and creates it only in the write phase",
+        "Leaves CLAUDE.md untouched and does not add the import against the user's selection",
+        "Records the target decision in the pull request body"
+      ]
+    },
+    {
+      "id": 14,
+      "name": "neither-file-both-agents-load",
+      "prompt": "Sync the shared agent rules into this repository. There is no AGENTS.md and no CLAUDE.md anywhere in the repo. Two rules are detected. Paper exercise: which file do you target, do you ask me anything about it, and what does the pull request say about how agents will load it?",
+      "expected_output": "The skill targets AGENTS.md without asking, creating it in the write phase with the managed block as its entire contents. The pull request body states that both agents load the file as created — Codex reads AGENTS.md natively, and Claude Code reads it because no CLAUDE.md is present — and that adding a CLAUDE.md later would stop Claude Code reading AGENTS.md unless that CLAUDE.md imports it with `@AGENTS.md`. It does not say an import is required now and does not create a CLAUDE.md.",
+      "files": [],
+      "expectations": [
+        "Targets AGENTS.md without a user question",
+        "Creates the file only in the write phase, with the block as its entire contents",
+        "States in the pull request that Codex reads AGENTS.md natively and that Claude Code reads it because no CLAUDE.md is present",
+        "States that a later CLAUDE.md stops Claude Code reading AGENTS.md unless it imports it, without claiming an import is required now",
+        "Does not create a CLAUDE.md"
       ]
     }
   ]

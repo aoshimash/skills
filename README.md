@@ -1,6 +1,6 @@
 # aoshimash/skills
 
-Personal [Agent Skills](https://agentskills.io) collection for **development workflow** — issues, pull requests, dependency updates, and the shared conventions behind them. Use with **Codex or Claude Code**: install individual skill directories in Codex, or the bundled plugin in Claude Code. Skills target any compliant agent unless their `compatibility` frontmatter declares a product requirement; `analyze-sessions` is Claude Code-specific.
+Personal [Agent Skills](https://agentskills.io) collection for **development workflow** — issues, pull requests, dependency updates, and the shared conventions behind them. Use with **Codex or Claude Code**: install individual skill directories in Codex, or the bundled plugin in Claude Code. Every skill targets any compliant agent: native tools — subagents, structured questions, a product's session history or settings — are used where they exist and improve the result, and each skill states its fallback where they do not. `compatibility` frontmatter declares tool, network, or repository requirements only, never a product.
 
 ## Installation
 
@@ -12,7 +12,7 @@ Ask Codex to install a skill from this repository using its built-in installer. 
 $skill-installer Install the skill at plugins/aoshimash-skills/skills/implement-issue from the GitHub repository aoshimash/skills.
 ```
 
-Replace `implement-issue` with a skill from the [Skills list](#skills). For the full issue workflow, install `create-issue`, `implement-issue`, and `merge-issue-prs`. Skip `analyze-sessions`: it reads Claude Code session files and configuration, not Codex history. If an installed skill does not appear, restart Codex. See the [official Codex skills documentation](https://learn.chatgpt.com/docs/build-skills).
+Replace `implement-issue` with a skill from the [Skills list](#skills). For the full issue workflow, install `create-issue`, `implement-issue`, and `merge-issue-prs`. `analyze-sessions` reads the history of the agent it runs in — Codex's own session rollouts here — or a history export you point it at; see its [history sources](plugins/aoshimash-skills/skills/analyze-sessions/references/history-sources.md) for what is confirmed per agent (its Codex path has been exercised against a real Codex store, not yet from inside a Codex session — the skill's evaluation log says which). If an installed skill does not appear, restart Codex. See the [official Codex skills documentation](https://learn.chatgpt.com/docs/build-skills).
 
 For a local checkout, copy or symlink each desired skill directory into `~/.agents/skills/<skill-name>` for personal use, or `<target-repository>/.agents/skills/<skill-name>` for repository use. Include the entire directory, including references and scripts. Codex supports symlinked skill folders; links follow checkout changes, while copies need refreshing. Avoid installing duplicate copies of the same skill. These discovery locations are documented in [Where Codex loads local skills](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills).
 
@@ -38,7 +38,7 @@ Each skill under `plugins/aoshimash-skills/skills/` is a plain [Agent Skills](ht
 
 Run development skills in the target repository with the required CLI tools, authentication, and network access for its issue/PR platform. Installation provides instructions; it does not configure credentials or grant permissions. `collect-agent-rules` instead runs in a checkout of this repository, as its compatibility declaration requires.
 
-Follow each skill's **Environment Adaptation** section. Use available native capabilities for separate agent instances, background execution, and scheduling; when unavailable, follow the stated fallback. Separate-agent verification falls back to sequential self-review marked `SELF-REVIEWED`, and model selection falls back to the session default. Product-specific commands in Claude Code examples apply only in that environment.
+Follow each skill's **Environment Adaptation** section — every skill has one. It lists each capability the skill uses, the native path, the fallback, and what the fallback loses: no skill requires a specific agent's native tool, and none is prevented from using one that is available. Use available native capabilities for separate agent instances, background execution, and scheduling; when unavailable, follow the stated fallback. Separate-agent verification falls back to sequential self-review marked `SELF-REVIEWED`, and model selection falls back to the session default. Product-specific commands in Claude Code examples apply only in that environment, and a product-specific fact a skill relies on (a history location, a settings key) is used only where the skill records it as confirmed for that product.
 
 ## Issue Workflow
 
@@ -194,7 +194,7 @@ superpowers also contributed a staged workflow with hard approval gates, and bot
 | [create-issue](plugins/aoshimash-skills/skills/create-issue/) | Create well-structured issues on GitHub or Backlog with codebase analysis — from a quick single issue (one batched question round, one approval) to a designed issue hierarchy (one annotated plan file → parent + sub-issues, research kept as an issue comment) |
 | [implement-issue](plugins/aoshimash-skills/skills/implement-issue/) | Read issues, implement autonomously, and open review-first draft PRs — two-stage review, pre-push security review, automated-reviewer response, flip to ready, then post-PR decision harvesting; batch mode (dependency graph, worktrees, parallel agents on content-based model tiers) for parent issues / milestones / labels / lists — or, with no issue named, the user's own assigned issues ranked by priority — with an optional integration mode that bases every PR on one integration branch, hands the ready ones to `merge-issue-prs`, and resumes across sessions from the tracker and git |
 | [go](plugins/aoshimash-skills/skills/go/) | Finish a change at a consistent verification bar — derive what the change claims to make true, exercise those claims end to end in the project's own environment, run only the checks no project automation already covers, remove verification residue, and end with an explicit `VERIFIED` / `PARTIALLY VERIFIED` / `NOT VERIFIED` report; never silent success |
-| [analyze-sessions](plugins/aoshimash-skills/skills/analyze-sessions/) | **Claude Code only.** Analyze Claude Code session history to detect recurring patterns and propose improvements to skills and settings.json |
+| [analyze-sessions](plugins/aoshimash-skills/skills/analyze-sessions/) | Analyze the running agent's session history — Codex or Claude Code, or a history export you provide — to detect recurring patterns in skill executions and propose improvements to skills and, where that agent's configuration surface is confirmed, to its settings or hooks; reports an unreachable, unreadable, or empty history as exactly that, never as "no patterns" |
 | [respond-to-pr-review](plugins/aoshimash-skills/skills/respond-to-pr-review/) | Process PR review comments one by one — explain, confirm actions, implement fixes, and post reply comments |
 | [merge-issue-prs](plugins/aoshimash-skills/skills/merge-issue-prs/) | Merge the pipeline's own per-issue implementation PRs into a per-milestone integration branch without per-PR human review — a fail-closed eligibility policy (pipeline-created PR, write-access issue author, gates passed, CI green, no human comment) rules each PR eligible or deferred, merges run strictly serially with post-merge verification and auto-revert, and one integration→main PR carries the human review |
 | [merge-renovate-prs](plugins/aoshimash-skills/skills/merge-renovate-prs/) | Merge Renovate PRs one at a time, autonomously by default — verify monitoring/revert preconditions, LLM pre-check, merge, post-merge verification, and auto-revert on failure; interactive per-PR-approval mode available |
@@ -225,7 +225,7 @@ an installed skill or plugin to update.
 
 ## Contributing
 
-[AGENTS.md](AGENTS.md) is the canonical repository guide for Codex, other coding agents, and humans. [CLAUDE.md](CLAUDE.md) imports it for Claude Code. Keep shared guidance in `AGENTS.md` and skill instructions portable, with product-specific behavior clearly scoped by compatibility declarations or conditional notes.
+[AGENTS.md](AGENTS.md) is the canonical repository guide for Codex, other coding agents, and humans. [CLAUDE.md](CLAUDE.md) imports it for Claude Code. Keep shared guidance in `AGENTS.md` and skill instructions portable: product-specific behavior lives in conditional notes ("On Claude Code, …", "On Codex, …"), every product fact a skill relies on is confirmed against that product's documentation or source, and no skill is declared product-only.
 
 ## License
 

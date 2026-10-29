@@ -225,6 +225,7 @@ account. The current branch has an open PR with review comments.
 | 2026-04-08 | Case 2-3, 5-8 | Not tested | Require specific PR scenarios (out-of-scope comments, informational-only, verification gate mismatch, GitLab MR) not available in current environment |
 | 2026-07-27 | Case 8 (GitLab MR) | Desk-check — Fail → Fixed | Every documented `glab api ... --jq` invocation would have exited with "unknown flag"; corrected to `jq` pipes (see below) |
 | 2026-10-25 | Case 10 (unauthenticated connector) | Desk-check — Pass | Platform access resolution added (see below); separate agent instance |
+| 2026-10-29 | All cases | Desk-check — no behavioral change | `platform-github.md`'s config-example heading renamed from `CLAUDE.md Config Example` to `Agent Instructions Config Example`, with the "project's agent instructions (e.g. CLAUDE.md, AGENTS.md)" lead-in the other platform guides use (Refs #135). No inbound links to the old anchor (`links` check green). |
 
 ### 2026-07-27 — `glab api` has no `--jq` flag (fact correction)
 

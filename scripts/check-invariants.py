@@ -10,7 +10,7 @@ covers a change (see AGENTS.md "Repository Checks"):
   links           every relative markdown link and heading anchor resolves
                   (markdown files outside dot-directories)
   claude-paths    no `.claude/` path in skill instructions outside an
-                  "On Claude Code, ..." note or a Claude Code-bound skill
+                  "On Claude Code, ..." note, in any skill
 
 Standard library only, no network, no clock: the same tree always gives the
 same result. This is what lets the workflow serve as the merge gate's
@@ -561,12 +561,8 @@ def exempt_spans(segment: str) -> list[tuple[int, int]]:
 def check_claude_paths(root: Path) -> list[str]:
     errors = []
     for d in skill_dirs(root):
-        try:
-            fm = read_frontmatter(d / "SKILL.md") if (d / "SKILL.md").is_file() else None
-        except ValueError:
-            fm = None  # reported by the frontmatter check; grants no exemption
-        if fm and "Claude Code" in fm.get("compatibility", ""):
-            continue  # product-bound skill: AGENTS.md exception (b)
+        # No skill is exempt: `compatibility` names tools, never a product
+        # (AGENTS.md "Agent Portability").
         for md in walk_files(d, ".md"):
             if md.name == "eval-cases.md":
                 continue  # evaluation records, not instructions an agent executes
@@ -725,6 +721,7 @@ VIOLATIONS = {
     ".claude/ path right after frontmatter": ("claude-paths", lambda r: _skill(r, "---\n\n# Demo", "---\nEdit `.claude/x`.\n\n# Demo")),
     ".claude/ path in a table cell without a note": ("claude-paths", lambda r: _skill(r, "| Config |", "| `.claude/x` |")),
     ".claude/ path in code after a note": ("claude-paths", lambda r: _skill(r, "`.claude/settings.json`.\n", "`.claude/settings.json`:\n\n```\ncat .claude/x\n```\n")),
+    "compatibility naming Claude Code grants no exemption": ("claude-paths", lambda r: _skill(r, "---\n\n# Demo", "compatibility: Designed for Claude Code\n---\nEdit `.claude/x`.\n\n# Demo")),
 }
 
 

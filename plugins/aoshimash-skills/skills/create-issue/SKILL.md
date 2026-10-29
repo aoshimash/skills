@@ -91,6 +91,7 @@ below use capability terms; map them to your environment as follows.
 |---|---|---|
 | **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`, which can carry several questions in one round) | Numbered options as plain text, all questions in one message; wait for the user's reply |
 | **Platform access** — read and write the issue tracker | A connector or MCP server for the platform, preferred when it covers the operations the flow uses (see [Platform Access](#platform-access)) | The platform guide's CLI (`gh`, `bee`); with neither, ask how to reach the platform, and failing that output Markdown to paste manually |
+| **User-level configuration** — a durable instruction store belonging to the user, outside any repository, offered as a home for a durable convention an answer states (L2 "Write answers back") | User-level instruction file (e.g. `~/.claude/CLAUDE.md` on Claude Code) | No such store: offer the repository's agent instructions only, and say that the narrower home is why |
 
 ## Step 1: Detect Platform and Templates
 

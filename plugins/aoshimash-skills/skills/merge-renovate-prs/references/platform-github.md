@@ -429,7 +429,9 @@ gh api repos/{owner}/{repo}/contents/.github/renovate.json -H "Accept: applicati
 (Reading the files locally from the checked-out repo is equally fine and usually
 simpler.)
 
-## CLAUDE.md Config Example
+## Agent Instructions Config Example
+
+Add to the project's agent instructions (e.g. CLAUDE.md, AGENTS.md):
 
 ```markdown
 ## Code Hosting
