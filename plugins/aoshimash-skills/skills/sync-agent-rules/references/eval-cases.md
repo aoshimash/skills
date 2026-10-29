@@ -301,6 +301,28 @@ tree holds neither file.
   imports it.
 - Does not say an import is required now, and does not create a `CLAUDE.md`.
 
+### Case 15: Claude Code-only repository writes into `CLAUDE.md` (`claude-code-only-into-claude-md`)
+
+**Setup**: The Case 5 files — a `CLAUDE.md` without an import, no `AGENTS.md`
+(fixture: this repository at `526d4f0^`, whose `CLAUDE.md` opened with "This
+file provides guidance to Claude Code") — and the user states the repository
+is used with Claude Code only, then picks option 2 (write into `CLAUDE.md`).
+
+**Expected behavior**:
+- Offers option 2 with its accurate consequence — loaded by Claude Code, not
+  read by Codex — and without presenting it as a mistake for a repository used
+  with Claude Code only.
+- Still marks option 1 (import) as the recommended default: one line keeps the
+  rules readable by both agents.
+- On the selection, targets `CLAUDE.md`: validates it and records its line
+  ending (Phase 6's "apply Phase 4 steps 1–4 to the resolved file"), appends
+  the block in the write phase, and creates no `AGENTS.md`.
+- A later run finds the `BEGIN` delimiter in `CLAUDE.md` and reuses that
+  target without asking again (Phase 4, second row).
+
+Cases 13–15 are the three agent sets AC5 of issue #135 names — Codex only,
+both, Claude Code only — against one real fixture.
+
 ---
 
 ## Evaluation Log
@@ -381,4 +403,4 @@ working directory or above it (v2.1.277+), and otherwise through an
 |------|------|--------|-------|
 | 2026-10-29 | Documentation fetches | executed | Both product pages fetched in the session; the rules above were read from them, not from memory. |
 | 2026-10-29 | Git fixtures | executed | `git ls-tree 526d4f0^ -- AGENTS.md CLAUDE.md` lists `CLAUDE.md` only, and that `CLAUDE.md` contains no `@AGENTS.md`; the tree before `649448d` holds neither file. |
-| 2026-10-29 | 5 (rewritten), 13, 14 | desk-checked | Static inspection against the shipped Phase 6 text, by the implementing agent. Not benchmarked — the accepted deviation above still applies. |
+| 2026-10-29 | 5 (rewritten), 13–15 | desk-checked | Static inspection against the shipped Phase 6 text, by the implementing agent; Case 15 added after the Stage 1 review asked for the Claude Code-only counterpart of Case 13. Not benchmarked — the accepted deviation above still applies. |

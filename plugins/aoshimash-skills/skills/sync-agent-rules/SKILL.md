@@ -318,8 +318,10 @@ Claude Code: `code.claude.com/docs/en/memory`, "AGENTS.md"):
 
 - **Codex** reads `AGENTS.override.md`, then `AGENTS.md`, then any name listed
   in its `project_doc_fallback_filenames` setting, from its home directory and
-  from the project root down to the working directory. It does not read
-  `CLAUDE.md` unless a user has added that name to the fallback list.
+  from the project root down to the working directory. The page names no
+  other file and says names not on that list are ignored, so a `CLAUDE.md` is
+  read only if a user has added it to the fallback list — a consequence of
+  the documented list, not a statement the page makes about `CLAUDE.md`.
 - **Claude Code** reads `CLAUDE.md` files, and reads `AGENTS.md` natively (v2.1.277
   or later) **only when no `CLAUDE.md` or `CLAUDE.local.md` exists in the working
   directory or above it**; with a `CLAUDE.md` present it reads `AGENTS.md` only

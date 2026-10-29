@@ -64,6 +64,13 @@ User choice is used in three places: selecting the skill to analyze (Step 2),
 choosing the output method (Step 5), and approving each improvement (Step 6).
 Nothing is written anywhere without the third.
 
+**Platform access** is resolved once, before Step 6's first write, in the
+order the other skills in this plugin use: a method the user named, then a
+connector or MCP server whose own tool descriptions show it creates issues and
+pull requests in this repository, then the `gh` CLI, then — with neither — the
+drafted body as Markdown for the user to submit. Keep the method for the rest
+of the run, and name it in the report.
+
 ## Workflow
 
 ### 1. Resolve the History Source

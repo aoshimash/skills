@@ -12,7 +12,8 @@ skill may do with it:
 |---|---|---|
 | **documented** | Stated in the product's own documentation or source, fetched on the date given | Rely on it; cite it in the report when it matters |
 | **observed** | Seen on a real installation on the date given, not found in documentation | Rely on it only after the verification step beside it passes on the machine at hand, and label it observed in the report |
-| **unconfirmed** | Neither | Do not act on it: report the pattern without a snippet, and point at the documentation to consult |
+| **heuristic** | A detection rule inferred from observation where the product documents no marker | Use it for discovery only, label the detection heuristic in every report that relies on it, and never let it drive a configuration snippet |
+| **unconfirmed** | Neither documented nor observed | Do not act on it: report the pattern without a snippet, and point at the documentation to consult |
 
 A product changes before this file does. A verification step that fails on
 the machine at hand outranks this file: report what was found, and do not
@@ -234,7 +235,7 @@ conversation turns are `response_item` records whose `payload.type` is
 documentation on 2026-10-29. Parse check: the first line is a JSON object with
 `type` equal to `session_meta`. A file that fails it is unsupported.
 
-### Invocation marker — heuristic (unconfirmed)
+### Invocation marker — heuristic
 
 Codex documents how a skill is invoked — `$<skill-name>` in a prompt, or
 implicitly by description (learn.chatgpt.com/docs/build-skills, fetched

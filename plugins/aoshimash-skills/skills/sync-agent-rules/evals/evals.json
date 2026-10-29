@@ -1,86 +1,26 @@
 {
   "skill_name": "sync-agent-rules",
   "trigger_evals": [
-    {
-      "query": "sync the shared agent rules into this repo's AGENTS.md",
-      "should_trigger": true
-    },
-    {
-      "query": "apply my standard conventions to this repository — only the ones that actually apply here",
-      "should_trigger": true
-    },
-    {
-      "query": "共通ルールをこのリポジトリに同期して",
-      "should_trigger": true
-    },
-    {
-      "query": "AGENTS.md に共通の規約を反映して。使ってないツールのルールは入れなくていい",
-      "should_trigger": true
-    },
-    {
-      "query": "add my usual project rules to AGENTS.md and open a PR",
-      "should_trigger": true
-    },
-    {
-      "query": "この新しいリポジトリに標準のルールを入れたい",
-      "should_trigger": true
-    },
-    {
-      "query": "distribute the shared conventions from aoshimash/skills into this repo",
-      "should_trigger": true
-    },
-    {
-      "query": "エージェントルールを同期して、PR 作って",
-      "should_trigger": true
-    },
-    {
-      "query": "pull down my shared rule set and write the relevant ones into AGENTS.md",
-      "should_trigger": true
-    },
-    {
-      "query": "collect the hand-written rules from my other repos and add the good ones to the shared corpus",
-      "should_trigger": false
-    },
-    {
-      "query": "add a rule to the shared corpus saying we always use go-task instead of Make",
-      "should_trigger": false
-    },
-    {
-      "query": "write an AGENTS.md for this repo describing its architecture, directory layout, and test commands",
-      "should_trigger": false
-    },
-    {
-      "query": "this repo's Dockerfile uses alpine — switch it to a debian slim base and rebuild",
-      "should_trigger": false
-    },
-    {
-      "query": "sync my fork with upstream main and resolve the conflicts",
-      "should_trigger": false
-    },
-    {
-      "query": "what conventions do I usually use for Python projects?",
-      "should_trigger": false
-    },
-    {
-      "query": "create an issue to centralize our project conventions across repos",
-      "should_trigger": false
-    },
-    {
-      "query": "review the dependency PRs on this repo and merge the safe ones",
-      "should_trigger": false
-    },
-    {
-      "query": "analyze my recent sessions and propose improvements to my skills",
-      "should_trigger": false
-    },
-    {
-      "query": "pin all the GitHub Actions in .github/workflows to commit SHAs",
-      "should_trigger": false
-    },
-    {
-      "query": "respond to the review comments on PR #12",
-      "should_trigger": false
-    }
+    { "query": "sync the shared agent rules into this repo's AGENTS.md", "should_trigger": true },
+    { "query": "apply my standard conventions to this repository — only the ones that actually apply here", "should_trigger": true },
+    { "query": "共通ルールをこのリポジトリに同期して", "should_trigger": true },
+    { "query": "AGENTS.md に共通の規約を反映して。使ってないツールのルールは入れなくていい", "should_trigger": true },
+    { "query": "add my usual project rules to AGENTS.md and open a PR", "should_trigger": true },
+    { "query": "この新しいリポジトリに標準のルールを入れたい", "should_trigger": true },
+    { "query": "distribute the shared conventions from aoshimash/skills into this repo", "should_trigger": true },
+    { "query": "エージェントルールを同期して、PR 作って", "should_trigger": true },
+    { "query": "pull down my shared rule set and write the relevant ones into AGENTS.md", "should_trigger": true },
+    { "query": "collect the hand-written rules from my other repos and add the good ones to the shared corpus", "should_trigger": false },
+    { "query": "add a rule to the shared corpus saying we always use go-task instead of Make", "should_trigger": false },
+    { "query": "write an AGENTS.md for this repo describing its architecture, directory layout, and test commands", "should_trigger": false },
+    { "query": "this repo's Dockerfile uses alpine — switch it to a debian slim base and rebuild", "should_trigger": false },
+    { "query": "sync my fork with upstream main and resolve the conflicts", "should_trigger": false },
+    { "query": "what conventions do I usually use for Python projects?", "should_trigger": false },
+    { "query": "create an issue to centralize our project conventions across repos", "should_trigger": false },
+    { "query": "review the dependency PRs on this repo and merge the safe ones", "should_trigger": false },
+    { "query": "analyze my recent sessions and propose improvements to my skills", "should_trigger": false },
+    { "query": "pin all the GitHub Actions in .github/workflows to commit SHAs", "should_trigger": false },
+    { "query": "respond to the review comments on PR #12", "should_trigger": false }
   ],
   "evals": [
     {
@@ -308,6 +248,20 @@
         "States in the pull request that Codex reads AGENTS.md natively and that Claude Code reads it because no CLAUDE.md is present",
         "States that a later CLAUDE.md stops Claude Code reading AGENTS.md unless it imports it, without claiming an import is required now",
         "Does not create a CLAUDE.md"
+      ]
+    },
+    {
+      "id": 15,
+      "name": "claude-code-only-into-claude-md",
+      "prompt": "Sync the shared agent rules into this repository. The repo has a hand-written CLAUDE.md that does not import AGENTS.md, and no AGENTS.md. Two rules are detected. This repository is used with Claude Code only, and when you ask about the target file I will pick: write the block into CLAUDE.md. Paper exercise: what do you say when you offer that option, what do you do once I pick it, and what happens on the next run?",
+      "expected_output": "The option is offered with its real consequence — loaded by Claude Code, not read by Codex — which is fine for a Claude Code-only repository, while the import option stays the recommended default because one line keeps the rules readable by both agents. Once the user picks it, the skill targets CLAUDE.md, validates it and records its line ending as Phase 4 prescribes, appends the managed block in the write phase, and creates no AGENTS.md. On the next run Phase 4 finds the BEGIN delimiter in CLAUDE.md and reuses that target without asking again.",
+      "files": [],
+      "expectations": [
+        "Offers the write-into-CLAUDE.md option with its accurate consequence (loaded by Claude Code; not read by Codex) and without presenting it as wrong for a Claude Code-only repository",
+        "Keeps the AGENTS.md-plus-import option marked as the recommended default",
+        "Targets CLAUDE.md after the selection, applying the Phase 4 validate-and-measure steps to it before writing",
+        "Appends the block only in the write phase and creates no AGENTS.md",
+        "States that a later run reuses CLAUDE.md as the target because the BEGIN delimiter is found there, without asking again"
       ]
     }
   ]
