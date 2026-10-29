@@ -140,7 +140,9 @@ git log --oneline -1
 # URL: https://github.com/{owner}/{repo}/commit/abc1234
 ```
 
-## CLAUDE.md Config Example
+## Agent Instructions Config Example
+
+Add to the project's agent instructions (e.g. CLAUDE.md, AGENTS.md):
 
 ```markdown
 ## Code Hosting

@@ -330,6 +330,7 @@ Both with-skill Case 11 runs also proposed splitting Home Assistant out, citing 
 | 2026-10-29 | Cases 7, 18 | Case 18 v2 with 7/7 / base 2/7 (v1: 7/7 / 4/7); Case 7 with 6/6 (base not re-run) | Structural vs recoverable precondition failures; self-graded; v2 after the Stage 1 fix round (see below). |
 | 2026-10-29 | Case 19 | with 8/8; after Stage 2 7/9 as first written, 9/9 with expectations scoped per variant (re-graded, not re-run); (d) added in round 4, (e) in round 5, (f) in round 6, (g) in round 8, (h) in round 9, none run / base 6/8, 1/1 on (c) | Gated-publish repo type; self-graded, weakly discriminating (see below). |
 | 2026-10-29 | Case 20 | with 5/5 / base 4/5 (v1, both variants; 4/5 / 3/5 re-graded after Stage 2 round 2); (a)-only v2: both defer | Disruption recomputed from the resolved spec; self-graded; **not discriminating** (see below). |
+| 2026-10-29 | All cases | desk-checked — no behavioral change | `platform-github.md`'s config-example heading renamed from `CLAUDE.md Config Example` to `Agent Instructions Config Example`, with the "project's agent instructions (e.g. CLAUDE.md, AGENTS.md)" lead-in (Refs #135). No inbound links to the old anchor (`links` check green). |
 
 ### 2026-10-25 — Platform access resolution (Cases 12–14)
 
