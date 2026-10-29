@@ -29,7 +29,7 @@ Resolved once per run as SKILL.md "Platform Access" describes: a connector for G
   - **The lower-bound read** (release-age.md) is covered only by a tool returning the PR's commits with each commit's author login and `committedDate`, newest included. A list that may stop short of the newest commits gives an older bound, which makes a release look older than it is — the unsafe direction.
   - **Upstream release lookups** are covered only by a tool that reads a release **by exact tag** from a repository other than the target, with its `published_at`. A tool confined to the target repository does not cover them.
   - **Upstream file reads** (workflow.md 2-5) are covered only by a tool that reads a file's full contents at an exact tag from a repository other than the target, including files over 1 MB. A tool that returns an empty or truncated body for a large file does not cover them.
-  - **Upstream tag compares** (workflow.md 2-5) are covered only by a tool that compares two tags of a repository other than the target and returns the changed-file list with its filenames, so that the 300-file cap can be checked. A commit list alone, or a summary without filenames, does not cover them.
+  - **Upstream tag compares** (workflow.md 2-5) are covered only by a tool that compares two tags of a repository other than the target, in either order, and returns the changed-file list with its filenames and each renamed file's previous name, so that the 300-file cap can be checked for each direction. A commit list alone, or a summary without filenames, does not cover them.
   - **Upstream tree listings** (workflow.md 2-5, the in-repo import set) are covered only by a tool that lists every file path at an exact tag of a repository other than the target and reports whether that listing was truncated. A listing that may stop short without saying so does not cover them.
   - **The merge** is covered only by a tool that takes the repo's merge method, and the post-approval `mergeStateStatus` read only by one that returns it — without it a `BLOCKED` PR cannot be told from a mergeable one.
   - **Writes** — approving a review, merging, updating a branch with the merge or the rebase form, creating, approving and merging the revert PR, closing with a comment, commenting — are covered by a tool that performs that write and reports whether it succeeded.
@@ -112,10 +112,11 @@ repo={upstream_owner}/{upstream_repo} tag={old_tag} start={path} work=$(mktemp -
 raw() { for try in 1 2 3; do  # retry transient network errors; output only from a successful try
   out=$(gh api -H 'Accept: application/vnd.github.raw+json' "repos/$repo/contents/$1?ref=$tag" < /dev/null) \
     && { printf '%s\n' "$out"; return 0; }; done; return 1; }
-raw go.mod > "$work/go.mod" || touch "$work/failed"
-mod=$(awk '$1 == "module" {print $2; exit}' "$work/go.mod")
 gh api "repos/$repo/git/trees/$tag?recursive=1" \
   --jq '.truncated, (.tree[] | select(.type == "blob") | .path)' > "$work/tree" || touch "$work/failed"
+: > "$work/go.mod"  # read only when the tree has a root go.mod; with none, $mod stays empty
+grep -qx go.mod "$work/tree" && { raw go.mod > "$work/go.mod" || touch "$work/failed"; }
+mod=$(awk '$1 == "module" {gsub(/["`]/, "", $2); print $2; exit}' "$work/go.mod")
 { [ -n "$mod" ] && [ "$(head -n 1 "$work/tree")" = false ] \
   && grep -qE "^$start/[^/]+\.go\$" "$work/tree"; } || touch "$work/unestablished"
 echo "$start" > "$work/closure"; i=1
@@ -131,29 +132,33 @@ done
 echo "work=$work packages=$(wc -l < "$work/closure") $(ls "$work" | grep -E '^(failed|unestablished)$')"
 ```
 
-**2. The compare, filtered to that set.** A changed file is a hit when it sits in a package directory of the set or below one (embedded files, cgo sources), or when it is a `go.mod` or `go.sum` anywhere, because this method does not follow modules outside the repository:
+**2. The compare, filtered to that set — in both directions.** `compare/{a}...{b}` is a three-dot compare: it lists the changes from the merge base of `a` and `b` to `b`, not the difference between the two tags. When the old tag sits on a release branch the new one does not contain — a patch release whose fixes were backported — the commits only on that branch are missing from `{old_tag}...{new_tag}`. tailscale/tailscale `compare/v1.102.4...v1.104.1` reports `status: diverged`, `behind_by: 33`, and the reverse `v1.104.1...v1.102.4` lists 85 files changed on v1.102.4's side of the merge base, among them `cmd/k8s-operator/operator.go` and `k8s-operator/reconciler/tailscaled/statefulset.go`; a two-dot compare of the pair returns 404. So the block reads both directions and unions them: any file that differs between the tags changed on at least one side of the merge base. On a linear pair the reverse lists nothing. A renamed file counts under its old name as well as its new one, so a file moved out of the set is a hit. A changed file is a hit when it sits in a package directory of the set or below one (embedded files, cgo sources), or when it is a `go.mod` or `go.sum` anywhere, because this method does not follow modules outside the repository:
 
 ```bash
 gh api "repos/$repo/compare/{old_tag}...{new_tag}" \
-  --jq '(.files | length), .files[].filename' > "$work/changed" || touch "$work/failed"
+  --jq '(.files | length), (.files[] | .filename, (.previous_filename // empty))' > "$work/fwd" || touch "$work/failed"
+gh api "repos/$repo/compare/{new_tag}...{old_tag}" \
+  --jq '(.files | length), (.files[] | .filename, (.previous_filename // empty))' > "$work/rev" || touch "$work/failed"
 awk -v failed="$([ -e "$work/failed" ] && echo 1)" -v unest="$([ -e "$work/unestablished" ] && echo 1)" '
-  NR == FNR {c[$0]; next}
-  FNR == 1 {n = $0; next}
+  FILENAME == ARGV[1] {c[$0]; next}
+  FNR == 1 {n[FILENAME] = $0; next}
+  seen[$0]++ {next}
   $0 ~ /(^|\/)go\.(mod|sum)$/ {print "hit: " $0; hits++; next}
   {d = $0; if (d !~ /\//) d = "."; else sub(/\/[^\/]*$/, "", d)
    while (1) {if (d in c) {print "hit: " $0; hits++; break}; if (d !~ /\//) break; sub(/\/[^\/]*$/, "", d)}}
-  END {print "files: " n
-       print (failed ? "method failure" : (unest || n == "" || n >= 300 || hits ? "not established" : "unchanged"))}' \
-  "$work/closure" "$work/changed"
+  END {for (i = 2; i < ARGC; i++) {print "files " (i == 2 ? "old...new" : "new...old") ": " n[ARGV[i]]
+                                   if (n[ARGV[i]] == "" || n[ARGV[i]] >= 300) big = 1}
+       print (failed ? "method failure" : (unest || big || hits ? "not established" : "unchanged"))}' \
+  "$work/closure" "$work/fwd" "$work/rev"
 ```
 
 Read the last line:
 
-- `unchanged` — the compare is complete (fewer than 300 files), the import set was listed completely, and no hit. Only this establishes the generating code unchanged.
-- `not established` — a read completed but cannot show the code unchanged: the changed-file list has 300 files and may be truncated (the endpoint's documentation, "Compare two commits", *Working with large comparisons*, caps it at 300 for the whole comparison), the tree listing reported itself truncated, the root `go.mod` declares no module, the start path holds no `.go` file, or a hit. 2-5 counts the workloads as changing.
+- `unchanged` — both compares are complete (fewer than 300 files each), the import set was listed completely, and no hit in either. Only this establishes the generating code unchanged.
+- `not established` — a read completed but cannot show the code unchanged: either changed-file list has 300 files and may be truncated (the endpoint's documentation, "Compare two commits", *Working with large comparisons*, caps it at 300 for the whole comparison, so each direction has its own cap), the tree listing reported itself truncated, the tree has no root `go.mod` (a module in a subdirectory, or no Go module at all) or the root `go.mod` declares no module, the start path holds no `.go` file, or a hit. 2-5 counts the workloads as changing.
 - `method failure` — a `gh api` call errored (an error response of any kind, a 404 included, or a network failure; a file read counts only after three tries). That is the access method failing, an **unknown** under SKILL.md "Platform Access", not a result about the code.
 
-The set is listed at the old tag only, which is enough: an import added or removed at the new tag edits a file already in the set, or adds one to a directory in it, and the compare shows that edit as a hit. It over-approximates: every non-test `.go` file counts, whatever its build constraints, and every changed file in a package directory is a hit, not only `.go` files — so when the set includes the repository's root package, as the tailscale operator's does, any changed root-level file (`VERSION.txt`, `flake.nix`) is a hit. What it does not cover: generating code in any language other than Go has no listing method here, so its in-repo imports cannot be listed and the check is **not established** without running the blocks (on a repository with no root `go.mod` they would only report the 404 as a `method failure`); and dependencies outside the repository are not followed, which is why any `go.mod` or `go.sum` change is a hit. It is also costly: one API call per `.go` file in the set. For the tailscale operator at `v1.104.1` that was 239 packages and about 1,000 calls, roughly 7 minutes, against the authenticated rate limit of 5,000 calls an hour.
+The set is listed at the old tag only, which is enough: an import added or removed at the new tag edits a file already in the set, or adds one to a directory in it, and the compare shows that edit as a hit. It over-approximates: every non-test `.go` file counts, whatever its build constraints, and every changed file in a package directory is a hit, not only `.go` files — so when the set includes the repository's root package, as the tailscale operator's does, any changed root-level file (`VERSION.txt`, `flake.nix`) is a hit. What it does not cover: generating code in any language other than Go has no listing method here, so its in-repo imports cannot be listed and the check is **not established** — running the blocks on a repository with no root `go.mod` prints `not established` too, since block 1 reads `go.mod` only when the tree lists one; a Go module rooted in a subdirectory is not followed either, and lands in the same place; and dependencies outside the repository are not followed, which is why any `go.mod` or `go.sum` change is a hit. It is also costly: one API call per `.go` file in the set. For the tailscale operator at `v1.104.1` that was 239 packages and about 1,000 calls, roughly 7 minutes, against the authenticated rate limit of 5,000 calls an hour.
 
 ## Release age (the cooldown gate)
 
