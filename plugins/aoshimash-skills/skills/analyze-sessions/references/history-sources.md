@@ -73,30 +73,36 @@ the derivation is verified rather than trusted:
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 project="$(pwd | sed 's/[^A-Za-z0-9]/-/g')"
 SESSION_DIR="$CLAUDE_DIR/projects/$project"
-if [ ! -d "$CLAUDE_DIR/projects" ]; then echo "no Claude Code transcript store at $CLAUDE_DIR/projects"
+if [ ! -d "$CLAUDE_DIR/projects" ] || [ ! -r "$CLAUDE_DIR/projects" ] || [ ! -x "$CLAUDE_DIR/projects" ]; then echo "no readable Claude Code transcript store at $CLAUDE_DIR/projects"
 elif [ -d "$SESSION_DIR" ]; then echo "store: $SESSION_DIR"
 else echo "no derived directory for $(pwd); entries in the store:"; ls "$CLAUDE_DIR/projects"; fi
 ```
 
-The first branch is outcome **A**: the store itself is missing (or, when `ls`
-fails on it, unreadable). When only the derived directory is missing, the
-listing shows the actual entries: pick the one that matches the working
-directory, or ask the user.
+The first branch is outcome **A**: the store itself is missing or unreadable.
+When only the derived directory is missing, the listing shows the actual
+entries: pick the one that matches the working directory, or ask the user.
 
 ### Discovery — verified command
 
 List the 20 most recent session files from the last 30 days that carry a skill
-invocation from this plugin. The BSD `xargs` on macOS has no `-d` flag
-(observed 2026-10-29), hence the `tr` step:
+invocation from this plugin:
 
 ```bash
-find "$SESSION_DIR" -maxdepth 1 -name '*.jsonl' -mtime -30 -type f -print0 \
-  | xargs -0 ls -t | head -20 | tr '\n' '\0' \
-  | xargs -0 grep -l 'aoshimash-skills:' 2>/dev/null
+find "$SESSION_DIR" -maxdepth 1 -name '*.jsonl' ! -name '*.orphaned-*' -mtime -30 -type f -print0 \
+  | xargs -0 -r ls -t | head -20 | tr '\n' '\0' \
+  | xargs -0 -r grep -l 'aoshimash-skills:' 2>/dev/null
 ```
 
-`-maxdepth 1` keeps subagent transcripts (in per-session subdirectories) out
-of the session count; read them for context when a session needs it.
+Three details carry weight. The BSD `xargs` on macOS has no `-d` flag, hence
+the `tr` step. GNU `xargs` runs its command once even on empty input, which
+would turn an empty store into `ls -t` of the working directory and a `grep`
+over the repository's own files — `-r` stops that on GNU `xargs` and is
+accepted by the BSD one, so the same line runs on both (both executed
+2026-10-29, see the Verification Log). And `! -name '*.orphaned-*'` leaves out
+the previous transcripts Claude Code sets aside for a session (documented on
+the page above), so one session is counted once. `-maxdepth 1` keeps subagent
+transcripts (in per-session subdirectories) out of the session count; read
+them for context when a session needs it.
 
 ### Record format — documented shape, observed fields
 
@@ -178,6 +184,11 @@ CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
 if [ -d "$CODEX_DIR/sessions" ]; then echo "store: $CODEX_DIR/sessions"; else echo "no Codex session store at $CODEX_DIR/sessions"; fi
 ```
 
+Reading this store needs two ordinary tools that are not assumed: `python3`
+(any 3.x) for the parse check in the scoping loop, and `zstd` for compressed
+rollouts. The commands below say which one is missing; the skill then reports
+rather than guessing.
+
 ### Compressed rollouts — observed
 
 A `.jsonl.zst` file needs `zstd` on `PATH` (`zstd -dc "$f"`); without it,
@@ -197,31 +208,44 @@ Code's project directory applies — reading only the first line of each file:
 
 ```bash
 cwd_here="$(pwd)"
+command -v python3 >/dev/null 2>&1 || echo "python3 is not on PATH: the parse check cannot run, so every file below counts as unparsed — stop and report" >&2
 find "$CODEX_DIR/sessions" -type f \( -name '*.jsonl' -o -name '*.jsonl.zst' \) -mtime -30 -print0 \
-  | { read_n=0; unsupported=0
+  | { read_n=0; unparsed=0; unsupported=0
       while IFS= read -r -d '' f; do
         case "$f" in
           *.zst) if command -v zstd >/dev/null 2>&1; then first="$(zstd -dc "$f" 2>/dev/null | head -1)"; else unsupported=$((unsupported+1)); continue; fi;;
           *) first="$(head -1 "$f")";;
         esac
-        read_n=$((read_n+1))
-        cwd="$(printf '%s' "$first" | python3 -I -c 'import json,sys; o=json.loads(sys.stdin.read() or "{}"); p=o.get("payload",{}); print(p.get("cwd","") if isinstance(p,dict) else "")' 2>/dev/null)"
-        case "$cwd" in "$cwd_here"|"$cwd_here"/*) echo "$f";; esac
+        if cwd="$(printf '%s' "$first" | python3 -I -c 'import json,sys; o=json.loads(sys.stdin.read()); p=o.get("payload"); ok=o.get("type")=="session_meta" and isinstance(p,dict) and "cwd" in p; print(p["cwd"]) if ok else sys.exit(1)' 2>/dev/null)"; then
+          read_n=$((read_n+1))
+          case "$cwd" in "$cwd_here"|"$cwd_here"/*) printf '%s\0' "$f";; esac
+        else
+          unparsed=$((unparsed+1))
+        fi
       done
-      echo "rollouts read: $read_n; unsupported (.zst without zstd): $unsupported" >&2; }
+      echo "rollouts read: $read_n; unparsed (first line not a session_meta record with a cwd): $unparsed; unsupported (.zst without zstd): $unsupported" >&2; } \
+  | xargs -0 -r ls -t | head -20
 ```
 
-The trailing summary line is what separates the outcomes: files listed →
-proceed with the 20 most recent of them by modification time, as Step 2 says;
-none listed but `rollouts read` > 0 → outcome **C** with N = 0 for this
-working directory (say so, and offer the store's other working directories —
-the distinct `cwd` values — rather than widening the scope silently); none
-read and `unsupported` > 0 → outcome **B**.
+The listing on stdout is the scoped session set, already cut to the 20 most
+recent by modification time as Step 2 says; the summary line on stderr is what
+separates the outcomes:
 
-A rollout whose first line is not a `session_meta` record fails the parse
-check below and is reported as unsupported rather than silently dropped. The
-`-I` flag keeps the interpreter from importing a `json.py` planted in the
-repository being analyzed, since the loop runs from that working directory.
+| Summary | Outcome |
+|---|---|
+| Files listed | Proceed with them; carry non-zero `unparsed` / `unsupported` counts into every later message |
+| Nothing listed, `rollouts read` > 0 | **C** with N = 0 for this working directory — say so, and offer the store's other working directories (the distinct `cwd` values) rather than widening the scope silently |
+| All three counts 0 | **C** with N = 0 — the store holds nothing in the window |
+| `rollouts read` = 0 and `unparsed` + `unsupported` > 0 | **B** — name both counts and what would make the files readable |
+| The `python3` line printed | Nothing was parsed: stop and report that the parse check needs `python3` |
+
+The parse check is inside the loop: a first line that is not JSON, not a
+`session_meta` record, or has no `cwd` — including the empty line a failed
+decompression leaves — is counted as `unparsed`, never as a session without
+executions. The `-I` flag keeps the interpreter from importing a `json.py`
+planted in the repository being analyzed, since the loop runs from that
+working directory. When the user names a wider window than 30 days, change
+`-mtime -30` to match and say so in the report's history line.
 
 ### Record format — observed
 
@@ -282,18 +306,22 @@ analyzed as given.
 
 ## Verification Log
 
-Commands in this file were run as written (extracted from this file, not
-retyped) on 2026-10-29, macOS 27 with BSD `xargs`, under both bash and zsh,
-against the real stores on the verification machine. Counts only; no session
-content was read into this record.
+Commands in this file were run as written — extracted from this file, not
+retyped — on 2026-10-29. macOS 27 (BSD `xargs`, bash and zsh) against the real
+stores on the verification machine; Linux in local `ubuntu:24.04` (GNU
+findutils 4.9.0) and `debian:12` (no `python3`) containers against scratch
+stores. Counts only; no session content was read into this record.
 
 | Check | Result |
 |---|---|
-| Claude Code derivation + directory test, from a worktree path | Derived `-Users-…-skills--claude-worktrees-…`; directory exists. The earlier derivation (leading `-` stripped, `.` kept) named a directory that does not exist |
-| Claude Code derivation with `CLAUDE_CONFIG_DIR` pointed at an empty directory | `no Claude Code transcript store at …/projects` (outcome **A**); no listing attempted |
-| Claude Code discovery pipeline | Ran without error under both shells; 8 recent transcripts carried a marker in the worktree's directory, 1 in the main checkout's. In that transcript the marker appeared in both forms described above, and the skill's earlier pattern (no leading slash) matched neither |
-| Codex store test | `sessions/` present under `~/.codex` while `codex` was not on `PATH` |
+| Claude Code derivation + directory test, from a worktree path (macOS) | Derived `-Users-…-skills--claude-worktrees-…`; directory exists. The earlier derivation (leading `-` stripped, `.` kept) named a directory that does not exist |
+| Claude Code store test with `CLAUDE_CONFIG_DIR` pointed at an empty directory, and at one whose `projects/` has mode 000 | `no readable Claude Code transcript store at …/projects` in both cases (outcome **A**); no listing attempted |
+| Claude Code discovery pipeline (macOS, bash and zsh) | 8 recent transcripts carried a marker in the worktree's directory, 1 in the main checkout's; identical under both shells. In that transcript the marker appeared in both forms described above, and the skill's earlier pattern (no leading slash) matched neither |
+| Claude Code discovery pipeline on an empty project directory, with a file containing the marker in the working directory | macOS: no output. `ubuntu:24.04`, GNU `xargs`: no output as shipped; the same pipeline with `-r` removed listed the working directory's `CLAUDE.md` as a session file — the failure `-r` prevents |
+| Codex store test (macOS) | `sessions/` present under `~/.codex` while `codex` was not on `PATH` |
 | Codex store test with `CODEX_HOME` pointed at an empty directory | `no Codex session store at …/sessions` (outcome **A**) |
-| Codex scoping loop, this worktree as the working directory | `rollouts read: 22; unsupported: 0`, none listed — outcome **C** with N = 0 for this directory; identical under zsh |
-| Codex scoping loop with `zstd` hidden from `PATH` | `rollouts read: 4; unsupported (.zst without zstd): 18` — the 4 plain files are still read, the 18 compressed ones are counted as unsupported |
+| Codex scoping loop, this worktree as the working directory (macOS, bash and zsh) | `rollouts read: 22; unparsed: 0; unsupported: 0`, nothing listed — outcome **C** with N = 0 for this directory |
+| Codex scoping loop with `zstd` hidden from `PATH` | `rollouts read: 4; unparsed: 0; unsupported (.zst without zstd): 18` — the 4 plain files are still read, the 18 compressed ones counted as unsupported |
+| Codex scoping loop with `python3` hidden from `PATH` (macOS), and in `debian:12` which ships none | The `python3` line printed; every file counted as unparsed (`read: 0; unparsed: 22` on the real store, `read: 0; unparsed: 1` on the scratch store); nothing listed |
+| Codex scoping loop on a scratch store holding seven files | Listed: the `session_meta` rollout whose `cwd` is the working directory and the compressed one whose `cwd` is a subdirectory of it, most recent first; not listed: the `session_meta` rollout for another directory (read, out of scope) and a `response_item` first line carrying this directory's `cwd` (unparsed). Summary `read: 3; unparsed: 4` — the wrong-type, non-JSON, empty, and corrupt-`.zst` files are the 4 unparsed |
 | Codex `history.jsonl` keys | `session_id`, `text`, `ts` only |

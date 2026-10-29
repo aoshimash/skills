@@ -240,12 +240,12 @@
       "id": 14,
       "name": "neither-file-both-agents-load",
       "prompt": "Sync the shared agent rules into this repository. There is no AGENTS.md and no CLAUDE.md anywhere in the repo. Two rules are detected. Paper exercise: which file do you target, do you ask me anything about it, and what does the pull request say about how agents will load it?",
-      "expected_output": "The skill targets AGENTS.md without asking, creating it in the write phase with the managed block as its entire contents. The pull request body states that both agents load the file as created — Codex reads AGENTS.md natively, and Claude Code reads it because no CLAUDE.md is present — and that adding a CLAUDE.md later would stop Claude Code reading AGENTS.md unless that CLAUDE.md imports it with `@AGENTS.md`. It does not say an import is required now and does not create a CLAUDE.md.",
+      "expected_output": "The skill targets AGENTS.md without asking, creating it in the write phase with the managed block as its entire contents. The pull request body states that Codex reads AGENTS.md natively and that Claude Code reads it on a stated condition — no CLAUDE.md or CLAUDE.local.md at the root, in the .claude directory, or above the repository, and AGENTS.md support available in the session — rather than asserting the load unconditionally, and that adding a CLAUDE.md later would stop Claude Code reading AGENTS.md unless that CLAUDE.md imports it with `@AGENTS.md`. It does not say an import is required now and does not create a CLAUDE.md.",
       "files": [],
       "expectations": [
         "Targets AGENTS.md without a user question",
         "Creates the file only in the write phase, with the block as its entire contents",
-        "States in the pull request that Codex reads AGENTS.md natively and that Claude Code reads it because no CLAUDE.md is present",
+        "States in the pull request that Codex reads AGENTS.md natively and that Claude Code reads it on the stated condition (no CLAUDE.md anywhere that counts, support available) rather than unconditionally",
         "States that a later CLAUDE.md stops Claude Code reading AGENTS.md unless it imports it, without claiming an import is required now",
         "Does not create a CLAUDE.md"
       ]

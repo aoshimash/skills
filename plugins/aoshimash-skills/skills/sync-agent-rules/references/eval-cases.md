@@ -295,9 +295,11 @@ tree holds neither file.
 
 **Expected behavior**:
 - Targets `AGENTS.md` without asking (Phase 6, first row).
-- The pull request body says both agents load it as created — Codex natively,
-  Claude Code because no `CLAUDE.md` is present — and that adding a
-  `CLAUDE.md` later stops Claude Code reading it unless that `CLAUDE.md`
+- The pull request body says Codex loads it natively and Claude Code loads it
+  on the stated condition — no `CLAUDE.md` or `CLAUDE.local.md` at the root,
+  in the `.claude` directory, or above the repository, and AGENTS.md support
+  available — rather than asserting the load unconditionally; and that adding
+  a `CLAUDE.md` later stops Claude Code reading it unless that `CLAUDE.md`
   imports it.
 - Does not say an import is required now, and does not create a `CLAUDE.md`.
 

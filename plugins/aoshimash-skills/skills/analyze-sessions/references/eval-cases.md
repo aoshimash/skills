@@ -197,7 +197,7 @@ Outcome letters (**A**–**D**) refer to SKILL.md Step 2's outcome table.
 ### Case 16: Codex history — environment proposals stay on Codex's confirmed surface
 
 - **Persona**: User running in Codex whose rollouts show the same setup command at every session start and repeated approval prompts for the same command
-- **Setup**: 4 readable Codex rollouts for the working directory with the plugin's `implement-issue` invoked (heuristic marker); 3 show the session-start command, 3 show the repeated approvals
+- **Setup**: Case 8's scenario — this repository's own eval fixture since #36 (2026-03-14) — with the history coming from a Codex store instead of Claude Code: 4 readable rollouts for the working directory with the plugin's `implement-issue` invoked (heuristic marker), 3 showing the same approval repeated, 3 showing the same session-start command
 - **Initial input**: "設定を提案"
 - **Expected behavior**:
   - Hook opportunity → an environment proposal with **Product: Codex**, targeting `hooks.json` (or `[hooks]` in `config.toml`) on the documented `SessionStart` event, and saying the entry's exact shape is taken from the Codex hooks page at proposal time
@@ -205,19 +205,19 @@ Outcome letters (**A**–**D**) refer to SKILL.md Step 2's outcome table.
   - No `settings.json` / `permissions.allow` proposal appears anywhere: that is Claude Code's surface, not Codex's
   - The history line says detection was heuristic
 - **Key criteria**: Confirmed-surface gating per product; no cross-product settings
-- **Fixture**: The real `config.toml` on the verification machine (keys `model`, `notify`, `[projects.*] trust_level` observed) confirms the configuration file exists; the hooks page was fetched 2026-10-29
+- **Fixture**: Derived from a repository artifact (Case 8, unchanged since #36), not from a live rollout exhibiting the pattern — none in the verification machine's 30-day window was inspected for repeated approvals, so this case is desk-checked on a synthetic setup. The real `config.toml` on that machine (keys `model`, `notify`, `[projects.*] trust_level` observed) shows the Codex configuration surface exists; the hooks page was fetched 2026-10-29
 
 ### Case 17: User-provided history — a Claude Code session analyzes the Codex store
 
-- **Persona**: User in a Claude Code session who says "analyze my Codex sessions for this repo"
-- **Setup**: The Codex store exists; the user names it as the source
-- **Initial input**: "analyze my Codex sessions for this repo"
+- **Persona**: User in a Claude Code session who says "analyze my Codex sessions for this repo from September"
+- **Setup**: The Codex store exists; the user names it as the source and names a window wider than the default 30 days
+- **Initial input**: "analyze my Codex sessions for this repo from September"
 - **Expected behavior**:
-  - Resolves the source from the user's words (resolution order step 1), not from the running agent
+  - Resolves the source from the user's words (resolution order step 1), not from the running agent, and widens the `-mtime` window to the one the user named
   - Applies the Codex section of `references/history-sources.md`: first-line `session_meta` parse check, `payload.cwd` scoping, heuristic invocation markers (`$<skill-name>`, `<skill-name>/SKILL.md`)
-  - The history line names the Codex store and marks detection heuristic
-- **Key criteria**: The analyzed store and the running agent are decoupled
-- **Fixture**: The five Codex rollouts whose `cwd` is this plugin's main checkout (all dated 2026-09-05): every one contains the plugin's `SKILL.md` paths, two contain `$<skill-name>` mentions — the heuristic markers find them (log, 2026-10-29)
+  - The history line names the Codex store, the widened window, and marks detection heuristic
+- **Key criteria**: The analyzed store and the running agent are decoupled; a user-named window is honored and reported
+- **Fixture**: The five Codex rollouts whose `cwd` is this plugin's main checkout, all dated 2026-09-05 — outside the shipped loop's default 30-day window on 2026-10-29, which is why the case names a window: every one contains the plugin's `SKILL.md` paths and two contain `$<skill-name>` mentions (counted by a retyped survey, log 2026-10-29); the shipped loop at its default window lists none of them
 
 ### Case 18: CLI absent, store present
 
@@ -252,27 +252,37 @@ Record results here after each evaluation run.
 
 **What changed.** The skill no longer assumes Claude Code: SKILL.md is
 product-neutral and `references/history-sources.md` carries every product
-fact with a confirmation status (documented / observed / unconfirmed) and the
-date it was confirmed. Step 2 distinguishes four outcomes — history not
-reachable (A), unsupported format (B), no skill executions in N readable
-sessions (C), insufficient count (D). Environment proposals carry a snippet
-only on a surface confirmed for the product the history came from. The
-`compatibility` declaration naming Claude Code was removed, so the `claude-paths`
-check now applies to this skill (green).
+fact with a confirmation status (documented / observed / heuristic /
+unconfirmed) and the date it was confirmed. Step 2 distinguishes four outcomes
+— history not reachable (A), unsupported format (B), no skill executions in N
+readable sessions (C), insufficient count (D) — and the reference's commands
+print the counts those outcomes turn on (files read, unparsed, unsupported).
+Environment proposals carry a snippet only on a surface confirmed for the
+product the history came from. The `compatibility` declaration naming Claude
+Code was removed, so the `claude-paths` check now applies to this skill
+(green). The Stage 2 review of PR #157 found that the first shipped commands
+did not deliver two of these claims — GNU `xargs` ran `ls`/`grep` over the
+working directory on an empty store, and the Codex loop counted unparseable
+first lines as sessions read — and both were fixed and re-run before the
+results below were recorded.
 
 **Executed** — commands extracted from `references/history-sources.md` and run
-as written (bash and zsh, macOS 27, BSD `xargs`) against the real stores on the
-implementing machine; counts only, no session content was read into the
-record:
+as written: macOS 27 (BSD `xargs`; bash and zsh) against the real stores on
+the implementing machine, and Linux containers (`ubuntu:24.04` for GNU
+`xargs`, `debian:12` for a machine without `python3`) against scratch stores.
+Counts only; no session content was read into the record. The reference's own
+Verification Log holds the full table; the rows that decide a case:
 
 | Check | Result |
 |---|---|
-| Claude Code derivation + directory test (Case 15) | From this worktree, the documented rule derived an existing directory; the skill's previous rule (leading `-` stripped, `.` kept) derived a directory that does not exist. From the main checkout: existing directory |
-| Claude Code discovery pipeline (Case 2) | Ran without error under bash and zsh; main checkout: 1 of the recent transcripts carried `aoshimash-skills:implement-issue` → outcome D (1/3); this worktree: 8 transcripts carried a marker. Both marker forms (`<command-name>/aoshimash-skills:…</command-name>` on the invoking user record, `attributionSkill` on assistant records) were present in the real transcript; the skill's previous pattern without the slash matched none of them |
-| Claude Code store test with `CLAUDE_CONFIG_DIR` pointed at an empty directory (Case 1) | `no Claude Code transcript store at …/projects` → outcome A, no listing attempted |
+| Claude Code derivation + directory test (Case 15) | From this worktree, the documented rule derived an existing directory; the skill's previous rule (leading `-` stripped, `.` kept) derived one that does not exist |
+| Claude Code discovery pipeline (Case 2) | Main checkout: 1 recent transcript carried `aoshimash-skills:implement-issue` → outcome D (1/3); this worktree: 8. Both marker forms (`<command-name>/aoshimash-skills:…</command-name>` on the invoking user record, `attributionSkill` on assistant records) present in the real transcript; the previous pattern without the slash matched neither. On an empty project directory with a marker-bearing file in the working directory: no output on macOS and on GNU `xargs`; with `-r` removed, GNU `xargs` listed that file as a session — the regression the shipped line now prevents |
+| Claude Code store test with `CLAUDE_CONFIG_DIR` pointed at an empty directory, and at an unreadable `projects/` (Case 1) | `no readable Claude Code transcript store at …/projects` → outcome A, no listing attempted |
 | Codex store test (Case 18) | `sessions/` present under `~/.codex` while `codex` was not on `PATH` |
-| Codex scoping loop (Case 14) | Store readable; for this worktree's working directory: 0 rollouts listed, `rollouts read: 22; unsupported: 0` → outcome C with N = 0. Same result under zsh |
-| Codex scoping loop with `zstd` hidden from `PATH` (Case 13) | 0 listed, `rollouts read: 4; unsupported (.zst without zstd): 18` — the 4 plain rollouts in the window were still read, the 18 compressed ones counted as unsupported → B for those files, with the unsupported count carried into every later message |
+| Codex scoping loop (Case 14) | Store readable; for this worktree's working directory: nothing listed, `rollouts read: 22; unparsed: 0; unsupported: 0` → outcome C with N = 0. Same under zsh |
+| Codex scoping loop with `zstd` hidden from `PATH` (Case 13) | Nothing listed, `rollouts read: 4; unparsed: 0; unsupported (.zst without zstd): 18` — the 4 plain rollouts in the window were still read, the 18 compressed ones counted as unsupported → B for those files, with the count carried into every later message |
+| Codex scoping loop with `python3` hidden (macOS) and in `debian:12` (Case 13) | The `python3` line printed and every file counted as unparsed (`read: 0; unparsed: 22`, and `read: 0; unparsed: 1` on the scratch store) → stop and report, never C |
+| Codex scoping loop on a scratch store of seven files (Cases 13, 14) | Two `session_meta` rollouts for this directory listed (one compressed, subdirectory `cwd`); one for another directory read but not listed; a `response_item` first line carrying this directory's `cwd`, a non-JSON line, an empty file, and a corrupt `.zst` all counted unparsed (`read: 3; unparsed: 4`) — none mistaken for a session |
 | Codex store test with `CODEX_HOME` pointed at an empty directory (Case 1) | `no Codex session store at …/sessions` → outcome A |
 | Survey of the whole Codex store (retyped Python, not a shipped command — context for Cases 13, 14, 17) | 139 rollouts, 135 compressed; every first line parsed as `session_meta` with a `payload.cwd`; 20 distinct working directories; 22 rollouts newer than 30 days; 5 under this plugin's main checkout, all from 2026-09-05, every one carrying the plugin's `SKILL.md` paths and two carrying `$<skill-name>` mentions |
 | `history.jsonl` under `~/.codex` | Records carry `session_id`, `text`, `ts` only — prompt lines, not a transcript |
@@ -280,7 +290,8 @@ record:
 **Documentation fetched in the session** (the "documented" facts in the
 reference): code.claude.com/docs/en/claude-directory (transcript path,
 project-directory rule for the scratchpad, retention), code.claude.com/docs/en/settings-reference
-(settings file paths, `permissions.allow`, `hooks`), learn.chatgpt.com/docs/config-file/config-reference
+(settings file paths, `permissions.allow`, `hooks`), code.claude.com/docs/en/hooks
+(hook events, settings-file configuration), learn.chatgpt.com/docs/config-file/config-reference
 (`config.toml` path, `history.persistence`, `features.hooks`, `rules.prefix_rules`),
 learn.chatgpt.com/docs/hooks (hook file locations, events, trust),
 learn.chatgpt.com/docs/agent-configuration/agents-md (`CODEX_HOME`),
@@ -289,19 +300,20 @@ learn.chatgpt.com/docs/build-skills (`$<skill-name>` invocation), and
 
 | Date | Case # | Pass/Fail | Notes | SKILL.md revision needed? |
 |------|--------|-----------|-------|---------------------------|
-| 2026-10-29 | 1 | Pass (executed, both stores) | Store tests report outcome A with the path tested; no "no sessions" message | No |
+| 2026-10-29 | 1 | Pass (executed, both stores) | Store tests report outcome A with the path tested — missing and unreadable alike; no "no sessions" message | No |
 | 2026-10-29 | 2 | Pass (executed discovery; report desk-checked) | Real fixture 1/3 for implement-issue on the main checkout | No |
 | 2026-10-29 | 3–7, 9 | Pass (desk-checked) | Unchanged logic; wording follows the Environment Proposals rename; Case 5 allows a connector for the write | No |
 | 2026-10-29 | 8 | Pass (desk-checked) | Claude Code surface confirmed in the reference, snippet allowed | No |
 | 2026-10-29 | 10–12 | Pass (desk-checked) | Trigger boundary unchanged; description still carries the same trigger phrases | No |
-| 2026-10-29 | 13 | Pass (executed) | `zstd` hidden: 18 unsupported, 4 plain read; the partial-B rule (continue with readable files, state the count) applies | No |
-| 2026-10-29 | 14 | Pass (executed) | 22 read, 0 for this working directory → C with N = 0 | No |
+| 2026-10-29 | 13 | Pass (executed) | `zstd` hidden: 18 unsupported, 4 plain read; `python3` hidden: 22 unparsed, 0 read; unparseable first lines on the scratch store counted unparsed — each path reports B or stops, never C | No |
+| 2026-10-29 | 14 | Pass (executed) | 22 read, 0 for this working directory → C with N = 0; the scratch store's out-of-scope rollout read and not listed | No |
 | 2026-10-29 | 15 | Pass (executed) | Old derivation misses, new derivation hits; the block lists the store on a miss | No |
-| 2026-10-29 | 16 | Pass (desk-checked) | Codex hook proposal on a documented event; permission friction without a snippet; no `settings.json` | No |
-| 2026-10-29 | 17 | Pass (discovery executed; analysis desk-checked) | Heuristic markers present in all five repo-scoped rollouts | No |
+| 2026-10-29 | 16 | Pass (desk-checked, synthetic setup) | Fixture derived from the repository's Case 8 artifact, not a live rollout; Codex hook proposal on a documented event, permission friction without a snippet, no `settings.json` | No |
+| 2026-10-29 | 17 | Pass (desk-checked; marker presence from the retyped survey) | The five 2026-09-05 rollouts lie outside the default window, so the shipped loop at 30 days lists none of them; the case now names a wider window, which the reference tells the agent to honor and report | No |
 | 2026-10-29 | 18 | Pass (executed) | Store resolved by directory test while the CLI is absent | No |
 
-Not run: no live Codex session was available on the implementing machine
-(the `codex` CLI is not installed), so Cases 16 and 17 verify what the text
-prescribes for a Codex-run session, not an agent following it there. Running
-the skill end to end inside Codex remains an open verification item.
+Not run: no live Codex session was available on the implementing machine (the
+`codex` CLI is not installed), so Cases 16 and 17 verify what the text
+prescribes for a Codex-run session, not an agent following it there; and the
+Codex loop with `python3` present was executed on macOS only. Running the
+skill end to end inside Codex remains an open verification item.

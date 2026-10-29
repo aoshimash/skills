@@ -98,13 +98,15 @@ reported as "no sessions", which is the confusion Principle 2 forbids.
 ### 2. Discover Skill Sessions
 
 Read the **recent** sessions in the scoped store — the 20 most recent files
-modified in the last 30 days — and find the ones in which a skill from this
-plugin ran.
+modified in the last 30 days, or a wider window only when the user names one
+— and find the ones in which a skill from this plugin ran.
 
 - **Parse each file as the reference describes for its store.** A file that
-  cannot be parsed that way — compressed without a decompressor on `PATH`, or
-  a record shape the reference does not describe — counts as unsupported, not
-  as "no executions".
+  cannot be parsed that way — compressed without a decompressor on `PATH`, a
+  first record that is not the shape the reference describes, or a parser the
+  check needs (`python3` for Codex rollouts) missing — counts as unsupported or
+  unparsed, never as "no executions". The reference's commands print those
+  counts beside the number of files read.
 - **Detect invocations by the store's marker.** The reference lists, per
   store, the documented or observed marker a skill invocation leaves. Search
   for the skill's qualified name (`aoshimash-skills:<skill-name>`) where the
@@ -117,7 +119,7 @@ Report the result as exactly one of these outcomes, with the counts it names:
 | Outcome | Condition | Report |
 |---|---|---|
 | **A. History not reachable** | No store resolved in Step 1, or the resolved store cannot be read (missing directory, no read permission) | `No session history is reachable: <what was tried and why it failed>.` Then stop — nothing below can run |
-| **B. Unsupported format** | Files were found but none could be parsed as the reference describes | `Found N session file(s) in <store>, none in a format this skill can read: <reason, e.g. compressed .zst and no zstd on PATH>.` Say what would make them readable, and stop. When only *some* files are unsupported, continue with the rest and state the unsupported count in every later message |
+| **B. Unsupported format** | Files were found but none could be parsed as the reference describes (unsupported or unparsed, in the reference's counts) | `Found N session file(s) in <store>, none in a format this skill can read: <reason, e.g. compressed .zst and no zstd on PATH; first lines that are not session records>.` Say what would make them readable, and stop. When only *some* files are affected, continue with the rest and state the counts in every later message |
 | **C. No skill executions** | N files were read (N may be 0) and no skill invocation marker was found in any of them | `No skill execution found in N session(s) from the last 30 days (<store>, current project).` Name the window and the detection method, so the user can judge whether N is enough history |
 | **D. Insufficient count** | A skill was found, but in fewer than 3 sessions | `Not enough data for pattern analysis yet (K/3 sessions for <skill-name>).` List every skill found with its count |
 
@@ -194,7 +196,7 @@ Aggregate findings across the analyzed sessions using these thresholds:
 Open every report with one line that fixes its evidence base:
 
 ```
-History: <store> · <N> session(s) read · window 30 days · detection <marker | heuristic> · unsupported files: <K>
+History: <store> · <N> session(s) read · window <30 days, or the one the user named> · detection <marker | heuristic> · unparsed/unsupported files: <K>
 ```
 
 #### If no patterns found:
