@@ -10,6 +10,7 @@ GitHub-only for v1. The commands are written for the `gh` CLI and are the refere
 - [Release age (the cooldown gate)](#release-age-the-cooldown-gate)
 - [CI status (the merge gate)](#ci-status-the-merge-gate)
 - [Workflow files (gated-publish recognition)](#workflow-files-gated-publish-recognition)
+- [CI and build configuration outside Actions (gated-publish recognition)](#ci-and-build-configuration-outside-actions-gated-publish-recognition)
 - [Workflow runs (gated-publish V-2)](#workflow-runs-gated-publish-v-2)
 - [Merge (respect the repo merge method)](#merge-respect-the-repo-merge-method)
 - [Create and merge a revert PR (auto-revert)](#create-and-merge-a-revert-pr-auto-revert)
@@ -28,7 +29,7 @@ Resolved once per run as SKILL.md "Platform Access" describes: a connector for G
   - **The CI gate** is covered only when the connector's tools — one or several — return every entry of the rollup the reference reads: every check run **and** every commit status on the PR's head, each with its own settled state, complete by the test above. Check runs alone, or one combined state without the individual statuses, do not cover it: a failing commit status, or a failing check hidden inside a summary, would read as green.
   - **The lower-bound read** (release-age.md) is covered only by a tool returning the PR's commits with each commit's author login and `committedDate`, newest included. A list that may stop short of the newest commits gives an older bound, which makes a release look older than it is — the unsafe direction.
   - **Upstream release lookups** are covered only by a tool that reads a release **by exact tag** from a repository other than the target, with its `published_at`. A tool confined to the target repository does not cover them.
-  - **The workflow-file enumeration** of gated-publish recognition (below) is covered only by tools that return every file in a directory at a given ref with a signal that the listing is complete, read each file's content at that ref, and list every workflow with its state. A listing with no completeness signal does not cover it: a publishing workflow missing from it reads as "every publishing workflow is gated".
+  - **The workflow-file enumeration** of gated-publish recognition (below) is covered only by tools that return every file in a directory at a given ref with a signal that the listing is complete, read each file's content at that ref, and list every workflow with its state. A listing with no completeness signal does not cover it: a publishing workflow missing from it reads as "every publishing workflow is gated". The same test applies to the whole-tree listing for CI and build configuration outside Actions: a tool must return every path in the default branch's tree, recursively, with a signal that the listing is complete.
   - **The workflow-run reads** of gated-publish V-2 (below) are covered only by tools that return, for the settle read, every run on a given commit with each run's workflow path and status, complete by the test above; and, for the publish-run read, the runs of a given workflow created at or after a given time on **every** branch and tag and for every event, with each run's creation time. A tool confined to the default branch, or to one event, does not cover the publish-run read: it would return no rows for a tag-triggered or dispatched publish on another ref, which reads as a pass.
   - **The merge** is covered only by a tool that takes the repo's merge method, and the post-approval `mergeStateStatus` read only by one that returns it — without it a `BLOCKED` PR cannot be told from a mergeable one.
   - **Writes** — approving a review, merging, updating a branch with the merge or the rebase form, creating, approving and merging the revert PR, closing with a comment, commenting — are covered by a tool that performs that write and reports whether it succeeded.
@@ -131,12 +132,26 @@ gh api "repos/{owner}/{repo}/git/trees/{default_branch}:.github/workflows" \
 gh api "repos/{owner}/{repo}/contents/.github/workflows/{file}?ref={default_branch}" --jq .content | base64 -d
 ```
 
-A file that cannot be read is a workflow whose publishing cannot be determined: the row does not apply. Record from each file its triggers — for a `push` trigger, its branch and `paths` / `paths-ignore` filters — since the settle read below derives its expected runs from them. Which workflows can start runs at all:
+A file that cannot be read is a workflow whose publishing cannot be determined: the row does not apply. Record from each file its triggers — for a `push` trigger, its branch and `paths` / `paths-ignore` filters — since the settle read below derives its expected runs from them. Which workflows can start runs at all — the settle read below derives its expected set from it, so take it after the merge, with the settle read:
 
 ```bash
 gh api --paginate "repos/{owner}/{repo}/actions/workflows?per_page=100" \
   --jq '.workflows[] | {path, state}'
 ```
+
+A read that fails is verification that cannot be completed (SKILL.md "Platform Access"), as for the settle read: without each workflow's state the expected set cannot be derived, and the publish-run reads are not taken.
+
+## CI and build configuration outside Actions (gated-publish recognition)
+
+Recognition's condition (3) ([verification.md](verification.md) "Gated publish") looks for CI or build configuration other than GitHub Actions in the default branch's whole tree. One recursive listing returns the root entries and every path matching a common CI or build file anywhere in the tree:
+
+```bash
+gh api "repos/{owner}/{repo}/git/trees/{default_branch}?recursive=1" \
+  --jq '{truncated, root: [.tree[] | select(.path | contains("/") | not) | .path],
+         ci: [.tree[].path | select(test("(^|/)(\\.gitlab-ci\\.ya?ml|Jenkinsfile[^/]*|cloudbuild[^/]*\\.(ya?ml|json)|\\.travis\\.ya?ml|\\.drone\\.ya?ml|azure-pipelines[^/]*\\.ya?ml|bitbucket-pipelines\\.ya?ml|buildspec[^/]*\\.ya?ml|\\.?appveyor\\.ya?ml)$|(^|/)\\.(circleci|buildkite|tekton|woodpecker)(/|$)"))]}'
+```
+
+`truncated: false` on a read that succeeded → the listing is complete. `truncated: true` (GitHub caps a recursive tree read, so a very large repository returns it) or a read that fails → the listing may be incomplete, and the row does not apply. Read every path in `ci` at the same ref with the contents read above (`repos/{owner}/{repo}/contents/{path}?ref={default_branch}`); a directory entry such as `.circleci` stands for the files listed under it. Then scan `root` for configuration of any CI or build system the filter does not name — most read their configuration from the root. The filter names common systems, not every one: a system it does not name, configured in a file below the root, is not caught (verification.md, known limit).
 
 ## Workflow runs (gated-publish V-2)
 
@@ -149,7 +164,7 @@ gh api --paginate "repos/{owner}/{repo}/actions/runs?head_sha={merge_commit_sha}
   --jq '.workflow_runs[] | {id, path, event, status, conclusion}'
 ```
 
-Settled is positive evidence, never an empty list. The **expected set** is every workflow from the enumeration above whose `push` trigger admits the default branch and whose `paths` / `paths-ignore` filters, if any, admit a file the merge changed — a filter you cannot evaluate counts as admitting — less any the workflows list shows in a state other than `active`, since those start no run. Settled means both: every workflow in the expected set has a row (matched on `path`), and every row's `status` is `completed`. An empty result is settled only when the expected set is empty. GitHub creates runs asynchronously after the merge, so before then an empty or partial result means "not yet": re-read, within the wait V-2 allows. `--paginate` with `per_page=100` returns every page, so no limit comparison applies. An expected run that has not appeared, or a run that has not completed, when that wait runs out, or a read that fails, is verification that cannot be completed (SKILL.md "Platform Access"), and the publish-run reads are not taken.
+Settled is positive evidence, never an empty list. The **expected set** is every workflow from the enumeration above whose `push` trigger admits the default branch and whose `paths` / `paths-ignore` filters, if any, admit a file the merge changed — a filter you cannot evaluate counts as admitting — less any the workflows list shows in a state other than `active`, since those start no run. A `push` trigger with only `tags` / `tags-ignore` and no `branches` / `branches-ignore` admits no branch push, so such a workflow is never in the expected set; one with neither admits every branch. Settled means both: every workflow in the expected set has a row (matched on `path`), and every row's `status` is `completed`. An empty result is settled only when the expected set is empty. GitHub creates runs asynchronously after the merge, so before then an empty or partial result means "not yet": re-read, within the wait V-2 allows. `--paginate` with `per_page=100` returns every page, so no limit comparison applies. An expected run that has not appeared, or a run that has not completed, when that wait runs out, or a read that fails, is verification that cannot be completed (SKILL.md "Platform Access"), and the publish-run reads are not taken.
 
 **Publish-run read** — no run of a publishing workflow started at or after the merge, on any branch or tag, from any event. Take it **once for each** workflow recognition found publishing the artifact:
 
