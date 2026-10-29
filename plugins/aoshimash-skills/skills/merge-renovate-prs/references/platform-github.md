@@ -132,7 +132,7 @@ gh api "repos/{owner}/{repo}/git/trees/{default_branch}:.github/workflows" \
 gh api "repos/{owner}/{repo}/contents/.github/workflows/{file}?ref={default_branch}" --jq .content | base64 -d
 ```
 
-A file that cannot be read is a workflow whose publishing cannot be determined: the row does not apply. Record from each file its triggers — for a `push` trigger, its branch and `paths` / `paths-ignore` filters — since the settle read below derives its expected runs from them. Which workflows can start runs at all — the settle read below derives its expected set from it, so take it after the merge, with the settle read:
+A file that cannot be read is a workflow whose publishing cannot be determined: the row does not apply. Record from each file its triggers — for a `push` trigger, its branch and `paths` / `paths-ignore` filters — since the settle read below derives its expected runs from them, and each reusable workflow its jobs call (`uses:`), since recognition judges a `workflow_call` workflow by its callers. Which workflows can start runs at all — the settle read below derives its expected set from it, so take it after the merge, with the settle read:
 
 ```bash
 gh api --paginate "repos/{owner}/{repo}/actions/workflows?per_page=100" \
@@ -151,7 +151,7 @@ gh api "repos/{owner}/{repo}/git/trees/{default_branch}?recursive=1" \
          ci: [.tree[].path | select(test("(^|/)(\\.gitlab-ci\\.ya?ml|Jenkinsfile[^/]*|cloudbuild[^/]*\\.(ya?ml|json)|\\.travis\\.ya?ml|\\.drone\\.ya?ml|azure-pipelines[^/]*\\.ya?ml|bitbucket-pipelines\\.ya?ml|buildspec[^/]*\\.ya?ml|\\.?appveyor\\.ya?ml)$|(^|/)\\.(circleci|buildkite|tekton|woodpecker)(/|$)"))]}'
 ```
 
-`truncated: false` on a read that succeeded → the listing is complete. `truncated: true` (GitHub caps a recursive tree read, so a very large repository returns it) or a read that fails → the listing may be incomplete, and the row does not apply. Read every path in `ci` at the same ref with the contents read above (`repos/{owner}/{repo}/contents/{path}?ref={default_branch}`); a directory entry such as `.circleci` stands for the files listed under it. Then scan `root` for configuration of any CI or build system the filter does not name — most read their configuration from the root. The filter names common systems, not every one: a system it does not name, configured in a file below the root, is not caught (verification.md, known limit).
+`truncated: false` on a read that succeeded → the listing is complete. `truncated: true` (GitHub caps a recursive tree read, so a very large repository returns it) or a read that fails → the listing may be incomplete, and the row does not apply. Read every path in `ci` at the same ref with the contents read above (`repos/{owner}/{repo}/contents/{path}?ref={default_branch}`); a directory entry such as `.circleci` stands for the files listed under it. Then scan `root` for configuration of any CI or build system the filter does not name — most read their configuration from the root. The filter matches common file names, not every one: below the root, a system it does not name, or a named one kept under another name or path (`build/azure-pipelines/*.yml`), is not caught (verification.md, known limit).
 
 ## Workflow runs (gated-publish V-2)
 
