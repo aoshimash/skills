@@ -1,0 +1,38 @@
+name: Check invariants
+
+# The merge gate (merge-issue-prs) verifies every machine merge into an
+# integration branch against a `push`-triggered run on that branch, and reverts
+# the merge when no run concludes `success` within its verification window.
+# This workflow is that signal. Keep it fast, deterministic, and unconditional:
+#   - no `paths:` filter and no job-level `if:` — a merge that produces no run,
+#     or only a skipped one, counts as a verification timeout and is reverted;
+#   - no network service in the job — a rate limit or queue would revert a
+#     healthy change.
+# The same assertions run on pull requests, so a violation shows up before a
+# merge rather than only after one. See AGENTS.md "Repository Checks".
+on:
+  push:
+    branches:
+      - main
+      # Both integration branch forms: integration/issue-<parent-number> and
+      # integration/<date>-<slug>. `**` matches any characters, `/` included.
+      - "integration/**"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check-invariants:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Self-test (each check fails on a deliberate violation)
+        run: python3 scripts/check-invariants.py --self-test
+
+      - name: Check the repository
+        run: python3 scripts/check-invariants.py
