@@ -41,11 +41,12 @@ confirmation status, and the instructions below never assume one product.
    store, and a missing store is not "no skill executions".
 3. **Product surfaces only where confirmed.** A settings or hook proposal
    targets the product the analyzed history came from, through a
-   configuration surface the reference marks as confirmed for that product.
-   Where the surface is unconfirmed, the pattern is still reported — with its
-   evidence and the product documentation to consult — but without a
-   configuration snippet. One product's settings are never proposed for
-   another.
+   configuration surface the reference marks **documented** for that product
+   (or observed and re-verified on this machine — the reference's legend says
+   which statuses count). Where the surface is heuristic or unconfirmed, the
+   pattern is still reported — with its evidence and the product documentation
+   to consult — but without a configuration snippet. One product's settings
+   are never proposed for another.
 4. **Privacy.** Raw session content and project-specific paths stay on this
    machine; issues and pull requests carry aggregated findings only.
 
@@ -120,7 +121,7 @@ Report the result as exactly one of these outcomes, with the counts it names:
 |---|---|---|
 | **A. History not reachable** | No store resolved in Step 1, or the resolved store cannot be read (missing directory, no read permission) | `No session history is reachable: <what was tried and why it failed>.` Then stop — nothing below can run |
 | **B. Unsupported format** | Files were found but none could be parsed as the reference describes (unsupported or unparsed, in the reference's counts) | `Found N session file(s) in <store>, none in a format this skill can read: <reason, e.g. compressed .zst and no zstd on PATH; first lines that are not session records>.` Say what would make them readable, and stop. When only *some* files are affected, continue with the rest and state the counts in every later message |
-| **C. No skill executions** | N files were read (N may be 0) and no skill invocation marker was found in any of them | `No skill execution found in N session(s) from the last 30 days (<store>, current project).` Name the window and the detection method, so the user can judge whether N is enough history |
+| **C. No skill executions** | N files were read (N may be 0) and no skill invocation marker was found in any of them | `No skill execution found in N session(s) from the last <window> (<store>, current project).` Name the window and the detection method, so the user can judge whether N is enough history |
 | **D. Insufficient count** | A skill was found, but in fewer than 3 sessions | `Not enough data for pattern analysis yet (K/3 sessions for <skill-name>).` List every skill found with its count |
 
 With 3+ sessions for at least one skill, list which skills were used and how
@@ -223,9 +224,10 @@ Group findings by target:
 Before writing one, look up the product the analyzed history came from under
 "Configuration surface" in
 [references/history-sources.md](references/history-sources.md). A proposal
-carries a configuration snippet **only** for a surface marked confirmed there;
+carries a configuration snippet **only** for a surface whose status there
+counts as confirmed (documented, or observed and verified on this machine);
 otherwise it carries the evidence and the product documentation to consult,
-and says that no snippet was produced because the surface is unconfirmed.
+and says that no snippet was produced because the surface is not confirmed.
 Never write one product's snippet for another product's history — a Claude
 Code settings entry for a Codex pattern, or the reverse.
 

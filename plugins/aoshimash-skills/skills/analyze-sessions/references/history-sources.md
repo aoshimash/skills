@@ -15,6 +15,11 @@ skill may do with it:
 | **heuristic** | A detection rule inferred from observation where the product documents no marker | Use it for discovery only, label the detection heuristic in every report that relies on it, and never let it drive a configuration snippet |
 | **unconfirmed** | Neither documented nor observed | Do not act on it: report the pattern without a snippet, and point at the documentation to consult |
 
+A configuration surface counts as **confirmed** for a snippet (SKILL.md
+Principle 3, Step 4) when its status is documented, or observed and its
+verification step passed on the machine at hand; heuristic and unconfirmed
+never do.
+
 A product changes before this file does. A verification step that fails on
 the machine at hand outranks this file: report what was found, and do not
 force the recorded shape onto it.
@@ -84,12 +89,14 @@ entries: pick the one that matches the working directory, or ask the user.
 
 ### Discovery — verified command
 
-List the 20 most recent session files from the last 30 days that carry a skill
-invocation from this plugin:
+Among the 20 most recent session files from the last 30 days, list the ones
+that carry a skill invocation from this plugin — the cut to 20 comes first, so
+N in outcomes **C** and **D** is the number of files examined, never more than
+20:
 
 ```bash
 find "$SESSION_DIR" -maxdepth 1 -name '*.jsonl' ! -name '*.orphaned-*' -mtime -30 -type f -print0 \
-  | xargs -0 -r ls -t | head -20 | tr '\n' '\0' \
+  | xargs -0 -r ls -t | sed -n '1,20p' | tr '\n' '\0' \
   | xargs -0 -r grep -l 'aoshimash-skills:' 2>/dev/null
 ```
 
@@ -181,7 +188,7 @@ conversation.
 
 ```bash
 CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
-if [ -d "$CODEX_DIR/sessions" ]; then echo "store: $CODEX_DIR/sessions"; else echo "no Codex session store at $CODEX_DIR/sessions"; fi
+if [ -d "$CODEX_DIR/sessions" ] && [ -r "$CODEX_DIR/sessions" ] && [ -x "$CODEX_DIR/sessions" ]; then echo "store: $CODEX_DIR/sessions"; else echo "no readable Codex session store at $CODEX_DIR/sessions"; fi
 ```
 
 Reading this store needs two ordinary tools that are not assumed: `python3`
@@ -195,7 +202,11 @@ A `.jsonl.zst` file needs `zstd` on `PATH` (`zstd -dc "$f"`); without it,
 those files are outcome **B** material: count them, continue with the plain
 `.jsonl` files if any, and tell the user that installing `zstd` makes the rest
 readable. Decompress to a pipe or to a location outside the repository — never
-into the working tree.
+into the working tree. `-mtime` and `ls -t` key on a file's modification time,
+which for a compressed rollout can be the time it was compressed rather than
+the session's date (observed 2026-10-29: a rollout under `sessions/2026/09/05/`
+carried an October modification time), so the window and the recency order
+are approximate for `.zst` files.
 
 ### Project scoping — observed
 
@@ -224,20 +235,28 @@ find "$CODEX_DIR/sessions" -type f \( -name '*.jsonl' -o -name '*.jsonl.zst' \) 
         fi
       done
       echo "rollouts read: $read_n; unparsed (first line not a session_meta record with a cwd): $unparsed; unsupported (.zst without zstd): $unsupported" >&2; } \
-  | xargs -0 -r ls -t | head -20
+  | xargs -0 -r ls -t | sed -n '1,20p'
 ```
 
-The listing on stdout is the scoped session set, already cut to the 20 most
-recent by modification time as Step 2 says; the summary line on stderr is what
-separates the outcomes:
+The listing on stdout is the scoped session set, cut to the 20 most recent by
+modification time as Step 2 says; the summary line on stderr is what separates
+the outcomes. Read the table top down — the first matching row decides:
 
-| Summary | Outcome |
+| Summary (stderr) | Outcome |
 |---|---|
+| The `python3` line printed | Nothing was parsed, whatever the counts say: stop and report that the parse check needs `python3` |
+| `find` printed a permission error | **A** for the part of the store it could not read — report the path, do not treat the counts as complete |
 | Files listed | Proceed with them; carry non-zero `unparsed` / `unsupported` counts into every later message |
 | Nothing listed, `rollouts read` > 0 | **C** with N = 0 for this working directory — say so, and offer the store's other working directories (the distinct `cwd` values) rather than widening the scope silently |
 | All three counts 0 | **C** with N = 0 — the store holds nothing in the window |
 | `rollouts read` = 0 and `unparsed` + `unsupported` > 0 | **B** — name both counts and what would make the files readable |
-| The `python3` line printed | Nothing was parsed: stop and report that the parse check needs `python3` |
+
+Known limit of the recency cut: `xargs` runs `ls -t` once as long as the
+in-scope paths fit one command line (on the order of several hundred files);
+beyond that it runs `ls -t` per batch and each batch is sorted on its own, so
+the 20 lines are the newest of the first batch rather than of the whole set.
+The same holds for the Claude Code pipeline above. A store that large is
+better narrowed by the user naming a window.
 
 The parse check is inside the loop: a first line that is not JSON, not a
 `session_meta` record, or has no `cwd` — including the empty line a failed
@@ -317,11 +336,11 @@ stores. Counts only; no session content was read into this record.
 | Claude Code derivation + directory test, from a worktree path (macOS) | Derived `-Users-…-skills--claude-worktrees-…`; directory exists. The earlier derivation (leading `-` stripped, `.` kept) named a directory that does not exist |
 | Claude Code store test with `CLAUDE_CONFIG_DIR` pointed at an empty directory, and at one whose `projects/` has mode 000 | `no readable Claude Code transcript store at …/projects` in both cases (outcome **A**); no listing attempted |
 | Claude Code discovery pipeline (macOS, bash and zsh) | 8 recent transcripts carried a marker in the worktree's directory, 1 in the main checkout's; identical under both shells. In that transcript the marker appeared in both forms described above, and the skill's earlier pattern (no leading slash) matched neither |
-| Claude Code discovery pipeline on an empty project directory, with a file containing the marker in the working directory | macOS: no output. `ubuntu:24.04`, GNU `xargs`: no output as shipped; the same pipeline with `-r` removed listed the working directory's `CLAUDE.md` as a session file — the failure `-r` prevents |
+| Claude Code discovery pipeline on an empty project directory, with a file containing the marker in the working directory | macOS: no output. `ubuntu:24.04`, GNU `xargs`: no output as shipped; the same pipeline with `-r` removed listed the working directory's `CLAUDE.md` as a session file — the failure `-r` prevents. Re-run unchanged after `head -20` became `sed -n '1,20p'` |
 | Codex store test (macOS) | `sessions/` present under `~/.codex` while `codex` was not on `PATH` |
-| Codex store test with `CODEX_HOME` pointed at an empty directory | `no Codex session store at …/sessions` (outcome **A**) |
+| Codex store test with `CODEX_HOME` pointed at an empty directory, and at one whose `sessions/` has mode 000 | `no readable Codex session store at …/sessions` in both cases (outcome **A**) |
 | Codex scoping loop, this worktree as the working directory (macOS, bash and zsh) | `rollouts read: 22; unparsed: 0; unsupported: 0`, nothing listed — outcome **C** with N = 0 for this directory |
 | Codex scoping loop with `zstd` hidden from `PATH` | `rollouts read: 4; unparsed: 0; unsupported (.zst without zstd): 18` — the 4 plain files are still read, the 18 compressed ones counted as unsupported |
 | Codex scoping loop with `python3` hidden from `PATH` (macOS), and in `debian:12` which ships none | The `python3` line printed; every file counted as unparsed (`read: 0; unparsed: 22` on the real store, `read: 0; unparsed: 1` on the scratch store); nothing listed |
-| Codex scoping loop on a scratch store holding seven files | Listed: the `session_meta` rollout whose `cwd` is the working directory and the compressed one whose `cwd` is a subdirectory of it, most recent first; not listed: the `session_meta` rollout for another directory (read, out of scope) and a `response_item` first line carrying this directory's `cwd` (unparsed). Summary `read: 3; unparsed: 4` — the wrong-type, non-JSON, empty, and corrupt-`.zst` files are the 4 unparsed |
+| Codex scoping loop on a scratch store holding seven files | Listed: the `session_meta` rollout whose `cwd` is the working directory and the compressed one whose `cwd` is a subdirectory of it, most recent first; not listed: the `session_meta` rollout for another directory (read, out of scope) and a `response_item` first line carrying this directory's `cwd` (unparsed). Summary `read: 3; unparsed: 4` — the wrong-type, non-JSON, empty, and corrupt-`.zst` files are the 4 unparsed. The Stage 2 reviewer's own run (10 files, `python:3.12-slim` as well) agreed |
 | Codex `history.jsonl` keys | `session_id`, `text`, `ts` only |

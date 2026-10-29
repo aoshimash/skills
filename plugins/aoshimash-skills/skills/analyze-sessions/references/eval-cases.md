@@ -300,7 +300,7 @@ learn.chatgpt.com/docs/build-skills (`$<skill-name>` invocation), and
 
 | Date | Case # | Pass/Fail | Notes | SKILL.md revision needed? |
 |------|--------|-----------|-------|---------------------------|
-| 2026-10-29 | 1 | Pass (executed, both stores) | Store tests report outcome A with the path tested — missing and unreadable alike; no "no sessions" message | No |
+| 2026-10-29 | 1 | Pass (executed, both stores) | Store tests report outcome A with the path tested — missing and mode-000 directories alike, for both stores; no "no sessions" message | No |
 | 2026-10-29 | 2 | Pass (executed discovery; report desk-checked) | Real fixture 1/3 for implement-issue on the main checkout | No |
 | 2026-10-29 | 3–7, 9 | Pass (desk-checked) | Unchanged logic; wording follows the Environment Proposals rename; Case 5 allows a connector for the write | No |
 | 2026-10-29 | 8 | Pass (desk-checked) | Claude Code surface confirmed in the reference, snippet allowed | No |

@@ -397,7 +397,8 @@ session: Codex reads `AGENTS.override.md`, then `AGENTS.md`, then the names in
 `project_doc_fallback_filenames`, and does not read `CLAUDE.md`
 (learn.chatgpt.com/docs/agent-configuration/agents-md); Claude Code reads
 `AGENTS.md` natively only when no `CLAUDE.md` or `CLAUDE.local.md` is in the
-working directory or above it (v2.1.277+), and otherwise through an
+working directory, in its `.claude` directory, or above it (v2.1.277+, in
+sessions where that support is available), and otherwise through an
 `@AGENTS.md` import or its "Project instructions" setting
 (code.claude.com/docs/en/memory, "AGENTS.md").
 
