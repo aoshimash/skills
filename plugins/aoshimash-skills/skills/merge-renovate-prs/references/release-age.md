@@ -1,6 +1,6 @@
 # Release-Age Gate: Enforcing the Configured Cooldown
 
-Detailed procedure for the release-age gate (workflow.md 1-3, re-run at 2-6). It makes the cooldown the repo configured in Renovate hold for every update this skill merges — including the ones Renovate itself could not age.
+Detailed procedure for the release-age gate (workflow.md 1-3, re-run at 2-6). It makes the cooldown the repo configured in Renovate hold for every update this skill merges — including the ones Renovate itself could not age — at the moment it merges; a floating value's later releases are outside it (see [Known limits](#known-limits)).
 
 ## Table of Contents
 
@@ -8,6 +8,7 @@ Detailed procedure for the release-age gate (workflow.md 1-3, re-run at 2-6). It
 - [Scope](#scope)
 - [The cooldown value](#the-cooldown-value)
 - [Determining a member's age](#determining-a-members-age)
+- [Floating values](#floating-values)
 - [The PR's age and the decision](#the-prs-age-and-the-decision)
 - [Repeated lower-bound waits](#repeated-lower-bound-waits)
 - [Known limits](#known-limits)
@@ -37,6 +38,8 @@ No `minimumReleaseAge` configured anywhere → the repo has no cooldown; skip th
 ## Determining a member's age
 
 The commands in this file are the CLI form of each read; platform-github.md "Access Method" decides whether another method covers the GitHub reads. The registry reads are not GitHub operations and run as written (SKILL.md "Environment Adaptation", package registry read).
+
+First decide whether the member's value is **floating** — resolved by the consuming tool at run time to the newest release matching it — as [Floating values](#floating-values) defines. A floating member is aged only as that section says; everything else in this section is for the rest.
 
 Collect two numbers per member — a **source age** and the **lower bound** — and take the **larger** (see [The PR's age and the decision](#the-prs-age-and-the-decision) for why the larger is safe). The source age is the first of these that yields an accepted date; a member with neither is aged by the lower bound alone:
 
@@ -89,7 +92,9 @@ Do not use a lightweight tag's commit date: the commit can be arbitrarily older 
 
 Renovate can only write a commit that references a release which already exists, so for the newest commit **Renovate authored** on the PR branch:
 
-> true age of every member ≥ now − that commit's `committedDate`
+> true age of every non-floating member ≥ now − that commit's `committedDate`
+
+It bounds the version the commit names, so it says nothing about a floating member: the release such a value resolves to can be published after the commit.
 
 ```bash
 gh pr view {pr} --json commits \
@@ -100,14 +105,59 @@ gh pr view {pr} --json commits \
 
 Renovate re-commits when it rebases or picks up a newer version; each re-commit resets the bound to later, which only makes the gate wait longer.
 
+## Floating values
+
+Every read above ages the version Renovate picked, and CI installs that version only when the value the diff writes names it exactly. A **floating** value is resolved by the consuming tool at run time to the newest release matching it: `node-version: "26"` under `actions/setup-node`, a major-only image tag (`node:26`), an action ref on a moving major tag (`@v5`), a range that no lockfile fixes. For such a member the source age measures a build CI may not install, and the lower bound is no floor. In the PR behind [eval Case 22](eval-cases.md#case-22-a-floating-value-cooldown-floating-value--autonomous), Renovate committed `node-version: "26"` at 2026-10-28T22:28:35Z, having picked 26.12.1. actions/node-versions then published 26.13.0 at 2026-10-29T02:33:28Z and listed it in its manifest at 15:48:30Z, and from then on setup-node would install 26.13.0 for `"26"` on a runner without a 26.x cached — a build younger than the commit.
+
+### Recognising one
+
+Treat a member's value as **exact** only when one of these holds; otherwise it is floating:
+
+- a lockfile the diff changes records the exact version (step 1's case);
+- the value carries a digest or a commit SHA;
+- the value is the full version Renovate resolved the update to — the string its release notes, badges or diff link name for the target, ignoring a leading `v` — with no range operator, wildcard or alias.
+
+An update table showing `24` → `26` while its badges name 26.12.1 is floating. When the value cannot be compared with Renovate's resolved version, treat it as floating.
+
+### Aging one
+
+A floating member's age is the age of the **newest release its value can resolve to now**, read from the source the consuming tool resolves from. Do not take the larger of that and the lower bound, and do not read the release Renovate picked. This file has that read for one tool; any other floating member — another tool, another input, a value form not listed below — has an **unknown** age (see [The PR's age and the decision](#the-prs-age-and-the-decision)).
+
+**`actions/setup-node`**, when its step sets `node-version` to a major (`26`) or a major and minor (`26.12`), and sets neither `node-version-file`, `mirror` nor `stable: false`. setup-node v7.1.0 (`src/distributions/official_builds/official_builds.ts`, with `@actions/tool-cache`'s `find` and `findFromManifest`; read 2026-10-30) resolves such a value in this order. With `check-latest: true` it first takes the manifest's match. Then it checks the runner's tool cache, which yields its highest matching version. Then it takes the first stable entry of the actions/node-versions `versions-manifest.json` on `main` that matches and has a file for the runner. `@actions/tool-cache` requires the manifest sorted newest first and stops at the first match. If the manifest has no match, or fetching it or the build fails, setup-node takes the highest matching version in the Node.js release index (`https://nodejs.org/dist/index.json`). Leaving aside versions placed in the tool cache by something other than setup-node (see Known limits), the youngest build the value can resolve to is the newer of the manifest's first match and the release index's highest.
+
+```bash
+# 1. The manifest's first stable match, with its release tag
+gh api -H "Accept: application/vnd.github.raw" \
+  "repos/actions/node-versions/contents/versions-manifest.json?ref=main" \
+  | jq -r --arg spec "{spec}" 'first(.[] | select(.stable and ((.version + ".") | startswith($spec + ".")))) | "\(.version) \(.release_url | sub(".*/tag/"; ""))"'
+
+# 2. That release's publish time
+gh api "repos/actions/node-versions/releases/tags/{tag}" --jq '.published_at'
+
+# 3. The release index's highest match
+curl -fsS "https://nodejs.org/dist/index.json" \
+  | jq -r --arg spec "{spec}" '[.[].version | ltrimstr("v") | select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) | select((. + ".") | startswith($spec + "."))] | max_by(split(".") | map(tonumber)) // empty'
+```
+
+`{spec}` is the `node-version` value the diff writes, unquoted. Read 1 ignores the runner's platform. A newer entry without a file for it would be skipped by setup-node, so ignoring the platform can only pick a younger build.
+
+- **The index's version is newer than the manifest's** → the newest build is not in the manifest yet, and setup-node installs it whenever the manifest cannot be fetched. The member is too young. Its eligible date is not computed, because the time the manifest will list it is unknown; the next run re-reads it.
+- **Otherwise** → the member's age is now − read 2's `published_at`. That release is the actions/node-versions build of a Node.js release Node.js had already published (v26.13.0: nodejs/node's GitHub Release at 2026-10-28T16:57:41Z, the build at 2026-10-29T02:33:28Z). So this age is never more than the time since Node.js published that version. It is more than the time since the manifest listed the build (26.13.0 was listed at 2026-10-29T15:48:30Z, 13 h after its release). That time is not used: it measures when setup-node could first fetch this build, not how long the release has been public.
+- **Any read fails or returns nothing** → the age is unknown.
+
+### After the merge
+
+The gate measures a floating member once, when it merges. From then on CI installs each newer matching release as soon as its source lists it, with no PR and no cooldown — as the value the PR replaces already did. When a run finds a floating member whose newest resolution is younger than the cooldown, it raises a **configuration proposal** in Phase 3-2 (workflow.md): pin the value to a full version, so that the version the diff writes is the build CI installs, and each later release reaches the repo only as a change to that value, which this gate ages. Name the member, its value, the build it resolves to and that build's age. The cost is a change for every release in that line instead of none.
+
 ## The PR's age and the decision
 
-- **Member age** = the larger of the source age (the accepted registry time or, failing that, the accepted release date) and the lower bound. Taking the larger is sound because the lower bound is a hard floor on the true age; a source age below it means the record was edited or re-published later, and the floor still holds.
+- **Member age** = the larger of the source age (the accepted registry time or, failing that, the accepted release date) and the lower bound. Taking the larger is sound because the lower bound is a hard floor on the true age; a source age below it means the record was edited or re-published later, and the floor still holds. A **floating** member's age is its newest resolution's age alone ([Floating values](#floating-values)), or unknown.
+- **Any non-exempt member's age unknown** → the gate cannot pass the PR, and waiting does not resolve it: in autonomous mode defer it to the **human queue**, naming the member, its value, and why its resolution could not be aged; in interactive mode surface it the same way.
 - **PR age** = the **smallest** member age among non-exempt members: a grouped PR is only as old as its newest member.
 - **PR age ≥ the cooldown** → the PR passes the gate and enters the order (workflow.md 1-4).
-- **PR age < the cooldown** → **cooldown wait**: in autonomous mode do not merge and do not send to the human queue — waiting resolves it. Remove it from this run's order and record, for the report, the member that set the age, which source set it (registry time, release date, or lower bound), and the **eligible date** (the age source + the cooldown). For a lower-bound wait, word the date as "earliest", since a Renovate re-commit would move it. In interactive mode, list waiting PRs in the plan the same way; the user may explicitly include one, which is their call to make.
+- **PR age < the cooldown** → **cooldown wait**: in autonomous mode do not merge and do not send to the human queue — waiting resolves it. Remove it from this run's order and record, for the report, the member that set the age, which source set it (registry time, release date, lower bound, or a floating value's newest resolution), and the **eligible date** (the age source + the cooldown). For a lower-bound or floating wait, word the date as "earliest", since a Renovate re-commit or a newer matching release would move it; a floating wait on a build not yet in its manifest has no date, and is reported as re-checked next run. In interactive mode, list waiting PRs in the plan the same way; the user may explicitly include one, which is their call to make.
 
-The gate runs at triage on every candidate, and again at 2-6 for a PR whose Renovate-authored head commit changed since triage (Renovate pushed while the run was in progress).
+The gate runs at triage on every candidate, and again at 2-6 for a PR whose Renovate-authored head commit changed since triage (Renovate pushed while the run was in progress). A PR with a floating member has that member re-read at 2-6 whether or not Renovate pushed, since a new matching release changes its age without a commit.
 
 ## Repeated lower-bound waits
 
@@ -123,6 +173,8 @@ gh pr view {pr} --json comments \
 
 The marker only ever leads to a proposal, which the user approves or declines, so a marker another account posted, or a run in between that waited on a registry time or release date instead, can at most cause an early proposal — never a merge.
 
+A floating wait posts no marker: its proposal ([After the merge](#after-the-merge)) is raised in the run that observes it, without waiting for a second one.
+
 ## Known limits
 
 - **Registry time covers two registries.** The gate reads the publish time on the public npm registry and PyPI. Every other registry falls through to the upstream release date, even one that records a publish time; adding one means a reference read in step 1, with its field confirmed from that registry's own documentation, and a row in SKILL.md's capability table. A package installed from a private registry or a mirror gets no registry time either.
@@ -130,3 +182,6 @@ The marker only ever leads to a proposal, which the user approves or declines, s
 - **Container registry push time is not used.** GHCR's package-versions API would give the push time of a digest, but it requires the `read:packages` token scope (a token without it gets HTTP 403, confirmed 2026-10-19). Reading an image's own `created` field was not adopted: reproducible builds commonly set it to a fixed epoch, which would make any image look years old.
 - **The sanity check needs both records.** An upstream that publishes no GitHub Releases, or names them in a way the exact-tag lookup misses, gets no release date; such members are aged by the lower bound alone.
 - **The sanity check rejects parallel release lines.** A package that ships several major lines side by side can publish the from version after the target: `@types/node` 24.19.2 went to npm only two minutes before 26.6.5, so a from version published a few minutes later would have failed, and actions/node-versions released 24.22.2 a week after 26.12.1. Then a correct time is discarded and the member falls to the next source, often the lower bound. It costs a longer wait, never an early merge.
+- **A floating value's resolution is read for one tool.** Only setup-node's `node-version` major or major.minor form has a read. Every other floating member — an action ref on a moving major tag, a major-only image tag, `node-version-file`, a mirror — has an unknown age and defers the PR to the human queue. Before this rule such members were aged by the version Renovate picked or by the lower bound, neither of which bounds them. Adding a tool means a read here, confirmed from that tool's own source or documentation.
+- **The setup-node read bounds the builds setup-node itself fetches.** A version placed in the runner's tool cache by something other than setup-node — a runner image's preinstalled versions or a manual install — that is newer than both the manifest's and the release index's match is not seen. The read also assumes setup-node v7.1.0's order; a step pinned to another major is not checked against it.
+- **The gate cannot hold a floating value's later releases.** It ages the value once, at the merge. Every later matching release reaches CI with no cooldown until the value is pinned, which is why a floating member younger than the cooldown is always proposed for pinning ([After the merge](#after-the-merge)).
