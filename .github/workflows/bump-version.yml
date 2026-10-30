@@ -175,5 +175,23 @@ jobs:
           git commit \
             -m "chore: bump plugin version to $NEW_VERSION" \
             -m "Bump level: ${LEVEL} — ${REASON} (PR #${PR_NUMBER})"
-          git pull --rebase
-          git push
+
+          # The concurrency group serializes bump runs, not ordinary PR merges.
+          # A merge that lands between "git pull --rebase" and "git push" makes
+          # the push fail with "cannot lock ref" (run 40878066343 lost a bump this
+          # way), so rebase onto the new main and push again. Rebasing keeps the
+          # computed version correct: only this serialized workflow writes
+          # marketplace.json, so a merge that slipped in cannot have moved it.
+          # A rebase conflict will not clear on retry, so it fails immediately.
+          for attempt in 1 2 3 4 5; do
+            if ! git pull --rebase; then
+              git rebase --abort || true
+              echo "::error::Rebasing the bump commit onto main failed"
+              exit 1
+            fi
+            git push && exit 0
+            echo "Push attempt ${attempt} failed; retrying after rebasing onto main"
+            sleep $((attempt * 5))
+          done
+          echo "::error::Push failed after ${attempt} attempts"
+          exit 1
