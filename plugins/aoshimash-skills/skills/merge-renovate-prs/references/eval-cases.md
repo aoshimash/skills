@@ -343,6 +343,7 @@ Both with-skill Case 11 runs also proposed splitting Home Assistant out, citing 
 | 2026-10-29 | Case 19 | with 8/8; after Stage 2 7/9 as first written, 9/9 with expectations scoped per variant (re-graded, not re-run); (d) added in round 4, (e) in round 5, (f) in round 6, (g) in round 8, (h) in round 9, none run / base 6/8, 1/1 on (c) | Gated-publish repo type; self-graded, weakly discriminating (see below). |
 | 2026-10-29 | Case 20 | with 5/5 / base 4/5 (v1, both variants; 4/5 / 3/5 re-graded after Stage 2 round 2); (a)-only v2: both defer | Disruption recomputed from the resolved spec; self-graded; **not discriminating** (see below). |
 | 2026-10-29 | All cases | desk-checked — no behavioral change | `platform-github.md`'s config-example heading renamed from `CLAUDE.md Config Example` to `Agent Instructions Config Example`, with the "project's agent instructions (e.g. CLAUDE.md, AGENTS.md)" lead-in (Refs #135). No inbound links to the old anchor (`links` check green). |
+| 2026-10-30 | Case 21 | with 6/6 / base 3/6 | Registry publish time as the release-age gate's first source; self-graded (see below). |
 
 ### 2026-10-25 — Platform access resolution (Cases 12–14)
 
@@ -607,3 +608,22 @@ Case 20 (b)'s expectation now also requires the compare to be complete and on th
   - octocat/Hello-World at `master`, which has no `go.mod`: the first attempt hit a TLS timeout on the tree read and printed `method failure`. The re-run printed `not established`.
   - The `mod=` line was run on `module "example.com/x" // c`, on a backquoted path and on a bare path. Each gave the unquoted path.
 - Case 20 (b) is a linear pair, so its outcome is unchanged. Its text now notes the empty reverse compare. **The eval was not re-run.**
+
+### 2026-10-30 — Registry publish time first (Case 21)
+
+**Change.** The gate's source age for a version update is now the registry's own publish time for the exact target version (npm `time[<version>]` from the full package document; PyPI's newest per-file `upload_time_iso_8601` for the version), sanity-checked against the from version, and only when the registry gives none the upstream release date; the lower bound, `max(source age, lower bound)`, the youngest-member rule and digest handling are unchanged. `renovate/stability-days` is stated not to be evidence of age. Placement: release-age.md grows to ~130 lines, so no split; SKILL.md gains a capability row because the read is not a GitHub operation.
+
+**Primary sources read in the authoring session (2026-10-30).** npm/registry `docs/responses/package-metadata.md` ("Full metadata format": `time` maps versions to the time published; the abbreviated format lists no `time`). PyPI "JSON API" docs (per-version route; `upload_time_iso_8601` appears only in the examples). PyPA "Simple repository API" spec (`upload-time`: the time the file was uploaded to the index). Renovate `docs/usage/configuration-options.md` (`timestamp-optional` treats a release without a timestamp as stable; `renovate/stability-days`). Renovate `lib/modules/datasource/npm/get.ts` (`releaseTimestamp` from `res.time?.[version]`). The JSON API and Simple API values were compared for both files of requests 2.32.3 and were equal.
+
+**Commands run as written.** Both blocks were extracted from release-age.md with `grep -o`, only `{package}` and `{version}` substituted, and run under zsh 5.9 and bash 5.3 on macOS (curl 8.7.1, jq 1.8.2) and bash 5.2 in `debian:stable-slim` (curl 8.14.1, jq 1.7), with identical output: `@types/node` 26.6.5 → `2026-10-09T18:46:47.657Z`, 24.19.2 → `2026-10-09T18:44:25.189Z`, 99.0.0 → empty, a missing package → curl 404 and empty; `requests` 2.32.3 → `2024-05-29T15:37:49.536140Z` (the sdist, 2 s after the wheel), 2.32.2 → `2024-05-21T18:51:32.819665Z`, 99.0.0 → curl 404 and empty. The pipeline exits 0 on a 404 (jq's status), which is why the text routes empty output and a failed read the same way.
+
+**Run.** One run per arm (with-skill reading SKILL.md, release-age.md and workflow.md from this branch / baseline reading no files and told only that nothing younger than the cooldown merges), fresh contexts, paper exercise with the facts in the prompt. **Graded by the authoring session against `expectations`, not by independent graders** — treat as SELF-REVIEWED.
+
+| Arm | Score | Notes |
+|---|---|---|
+| with-skill | 6/6 | Aged `@types/node` from `time["26.6.5"]` after the 24.19.2 check, ignored `stability-days`, discarded node's release date (no from-version release by exact tag, and 24.22.2 newer anyway), waited on node's lower bound to 2026-10-31T22:28:35Z, and posted the marker naming node. |
+| baseline | 3/6 | Read the npm time and the exact lockfile version and ignored `stability-days` (1, 2 pass); did not check the from version (3 fails); held the PR for a different reason — the floating `"26"` resolves to 26.13.0, published 2026-10-29 — with no sanity check and an eligible date of 2026-11-01T02:33Z (4, 5 fail); its comment names node, in its own marker format (6 passes on substance). |
+
+**Discrimination.** Moderate. An unaided model already reaches for the npm `time` once the prompt hands it the value, so the registry read itself is not what the case discriminates; the from-version check, the source priority, and the attribution are.
+
+**Finding outside this change.** Both arms noticed that the `node` member writes a floating major (`node-version: "26"`), which setup-node resolves at run time to the newest 26.x — 26.13.0, ~22h old — while both Renovate and this gate age the version Renovate chose (26.12.1). Neither the gate nor Renovate measures the build CI will actually install for a floating value; the main branch's `"24"` is in the same position. Not addressed here.
