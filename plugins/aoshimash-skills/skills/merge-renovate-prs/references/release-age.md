@@ -16,7 +16,7 @@ Detailed procedure for the release-age gate (workflow.md 1-3, re-run at 2-6). It
 
 Renovate's `minimumReleaseAge` holds an update until the release is old enough, so a short-lived broken release is pulled upstream before it reaches this repo. It needs a release timestamp from the datasource, and several datasources do not supply one — GHCR, Quay, ECR and other non-Docker-Hub registries, Git tags, and digest updates on those registries among them. Since Renovate 42 the default `minimumReleaseAgeBehaviour: timestamp-required` holds such an update forever, so repos set `timestamp-optional` for them — which raises the update with **no** age check at all.
 
-The timestamp is missing from the datasource, not from the world. In aoshimash/homelab-k8s, three GHCR updates were merged under the 3-day cooldown in one month (#313 paperless-ngx 3.2.1 at ~32h, #366 home-assistant 2026.10 at ~2.3 days, #374 paperless-ngx 3.3.2 at ~21h); each had an upstream GitHub Release whose `published_at` showed it. This gate looks up that date, and when none can be found it falls back to a bound that is always available and always conservative.
+The timestamp is missing from the datasource, not from the world. In aoshimash/homelab-k8s, three GHCR updates were merged under the 3-day cooldown in one month (#313 paperless-ngx 3.2.1 at ~32h, #366 home-assistant 2026.10 at ~2.3 days, #374 paperless-ngx 3.3.2 at ~21h); each had an upstream GitHub Release whose `published_at` showed it. This gate reads the registry's own publish time where the registry records one, the upstream release date where it does not, and when neither can be found falls back to a bound that is always available and always conservative.
 
 ## Scope
 
@@ -36,13 +36,44 @@ No `minimumReleaseAge` configured anywhere → the repo has no cooldown; skip th
 
 ## Determining a member's age
 
-The commands in this file are the CLI form of each read; platform-github.md "Access Method" decides whether another method covers them.
+The commands in this file are the CLI form of each read; platform-github.md "Access Method" decides whether another method covers the GitHub reads. The registry reads are not GitHub operations and run as written (SKILL.md "Environment Adaptation", package registry read).
 
-Collect up to two numbers per member and take the **larger** (see [The PR's age and the decision](#the-prs-age-and-the-decision) for why the larger is safe).
+Collect two numbers per member — a **source age** and the **lower bound** — and take the **larger** (see [The PR's age and the decision](#the-prs-age-and-the-decision) for why the larger is safe). The source age is the first of these that yields an accepted date; a member with neither is aged by the lower bound alone:
 
-### 1. Upstream release date (version updates only)
+1. the **registry publish time** of the exact target version;
+2. only when the registry gives none, the **upstream release date**.
 
-For a version update (major / minor / patch), find the upstream release for the **target** version and read its `published_at`. The source repository comes from the PR body's update table (the `source` link) or release-notes section. Try the exact tag forms the repo is known to use (`v{version}`, `{version}`, `{chart}-{version}`):
+The order follows what the cooldown is for: a broken release pulled soon after publication must never reach this repo, so what counts is when the artifact the repo installs became available. Where the registry records that, it is the measurement; the upstream release date is a proxy for it, and the lower bound a floor. When step 1 yields an accepted time, step 2 is not read: an upstream release published before the registry upload would only make the member look older.
+
+### 1. Registry publish time (version updates only)
+
+Applies when the member's package is installed from a registry this file has a reference read for — the public npm registry or PyPI — and the update has an exact target version. That version is the one the lockfile change resolves, or the pinned version the diff writes (Renovate's diff link carries it as `…/{from}/{to}`), never a range from the update table (`^24.0.0` → `^26.0.0`).
+
+Take the registry from the lockfile's tarball URL where the lockfile records one (`resolved` in `package-lock.json` or `yarn.lock`), otherwise from the repo's registry or index configuration (`.npmrc` `registry` / `@scope:registry`, a pip or uv index setting), otherwise the public default. A package resolved from any other registry — a private registry or a mirror — gets no registry time here: the public record under the same name may not be the artifact the repo installs.
+
+- **npm.** The full package document's `time` object maps each version to the time it was published. The abbreviated install document (`Accept: application/vnd.npm.install-v1+json`) has no `time`, so read the full one (`npm view {package} time --json` returns the same object):
+
+  ```bash
+  curl -fsS "https://registry.npmjs.org/{package}" | jq -r --arg v "{version}" '.time[$v] // empty'
+  ```
+
+- **PyPI.** A version is one or more distribution files, each uploaded on its own. The per-version JSON API lists them under `urls`, each with `upload_time_iso_8601`; take the **newest**, because a file added later (a wheel for another platform) became installable only then:
+
+  ```bash
+  curl -fsS "https://pypi.org/pypi/{package}/{version}/json" | jq -r '[.urls[].upload_time_iso_8601] | max // empty'
+  ```
+
+  PyPI's JSON API documentation shows this field only in its examples. The Simple Repository API specification defines the per-file `upload-time` as the time the file was uploaded to the index, and the two values were observed equal for every file of requests 2.32.3 (2026-10-30).
+
+Empty output (no record for that version) or a failed read (a 404, a network error) → no registry time; go to step 2.
+
+**Accept the time only if it passes the same sanity check as the release date in step 2:** the **from** version's registry time, read the same way, must exist and be **older** than the target's; otherwise discard the target's time and go to step 2. A version key cannot resolve to an unrelated record the way a tag name can, but the read can still hit the wrong package — an npm alias (`"x": "npm:typescript@^7"`), or a name the public registry also holds while the repo installs from elsewhere — and the check catches that wherever the from version is missing there or out of order.
+
+Do not take Renovate's `renovate/stability-days` status as the age or as a pass. Under `minimumReleaseAgeBehaviour: timestamp-optional`, Renovate treats a release without a timestamp as stable, so the check can be green for an update it never aged, and it is one status for the whole branch, which does not say which members it measured. It is the check this gate exists to back up.
+
+### 2. Upstream release date (version updates only, when the registry gives none)
+
+For a version update (major / minor / patch) with no accepted registry time — container images on registries without timestamps, GitHub Actions, Git-tag datasources, or a registry read that came back empty — find the upstream release for the **target** version and read its `published_at`. The source repository comes from the PR body's update table (the `source` link) or release-notes section. Try the exact tag forms the repo is known to use (`v{version}`, `{version}`, `{chart}-{version}`):
 
 ```bash
 gh api repos/{upstream_owner}/{upstream_repo}/releases/tags/{tag} --jq '.published_at'
@@ -52,9 +83,9 @@ gh api repos/{upstream_owner}/{upstream_repo}/releases/tags/{tag} --jq '.publish
 
 Do not use a lightweight tag's commit date: the commit can be arbitrarily older than the tag. Do not list every release with `--paginate` to search for a match on repos with long release histories; exact-tag lookups or the release URL in the PR body are enough, and a miss falls through to the lower bound.
 
-**Digest updates** take no release date: a new digest for the same tag is a rebuild or a floating tag moving, and the version's release date says nothing about when that digest was pushed. Use the lower bound alone.
+**Digest updates** take no registry time and no release date: a new digest for the same tag is a rebuild or a floating tag moving, and the version's publish or release date says nothing about when that digest was pushed. Use the lower bound alone.
 
-### 2. The lower bound from Renovate's commit (always available)
+### The lower bound from Renovate's commit (always available)
 
 Renovate can only write a commit that references a release which already exists, so for the newest commit **Renovate authored** on the PR branch:
 
@@ -71,10 +102,10 @@ Renovate re-commits when it rebases or picks up a newer version; each re-commit 
 
 ## The PR's age and the decision
 
-- **Member age** = the larger of the accepted release-date age and the lower bound. Taking the larger is sound because the lower bound is a hard floor on the true age; a release-date age below it means the release record was edited or re-published later, and the floor still holds.
+- **Member age** = the larger of the source age (the accepted registry time or, failing that, the accepted release date) and the lower bound. Taking the larger is sound because the lower bound is a hard floor on the true age; a source age below it means the record was edited or re-published later, and the floor still holds.
 - **PR age** = the **smallest** member age among non-exempt members: a grouped PR is only as old as its newest member.
 - **PR age ≥ the cooldown** → the PR passes the gate and enters the order (workflow.md 1-4).
-- **PR age < the cooldown** → **cooldown wait**: in autonomous mode do not merge and do not send to the human queue — waiting resolves it. Remove it from this run's order and record, for the report, the member that set the age, which source set it (release date or lower bound), and the **eligible date** (the age source + the cooldown). For a lower-bound wait, word the date as "earliest", since a Renovate re-commit would move it. In interactive mode, list waiting PRs in the plan the same way; the user may explicitly include one, which is their call to make.
+- **PR age < the cooldown** → **cooldown wait**: in autonomous mode do not merge and do not send to the human queue — waiting resolves it. Remove it from this run's order and record, for the report, the member that set the age, which source set it (registry time, release date, or lower bound), and the **eligible date** (the age source + the cooldown). For a lower-bound wait, word the date as "earliest", since a Renovate re-commit would move it. In interactive mode, list waiting PRs in the plan the same way; the user may explicitly include one, which is their call to make.
 
 The gate runs at triage on every candidate, and again at 2-6 for a PR whose Renovate-authored head commit changed since triage (Renovate pushed while the run was in progress).
 
@@ -90,10 +121,12 @@ gh pr view {pr} --json comments \
   --jq '[.comments[] | select(.author.login == "{me}" and (.body | contains("<!-- merge-renovate-prs:cooldown-wait -->")))] | length'
 ```
 
-The marker only ever leads to a proposal, which the user approves or declines, so a marker another account posted, or a run in between that waited on a release date instead, can at most cause an early proposal — never a merge.
+The marker only ever leads to a proposal, which the user approves or declines, so a marker another account posted, or a run in between that waited on a registry time or release date instead, can at most cause an early proposal — never a merge.
 
 ## Known limits
 
-- **Upstream release time is not registry push time.** Renovate measures when the artifact appeared in the registry; this gate measures when the upstream release was published, which usually precedes the image or chart push by the build's duration (minutes to hours). The age is overestimated by that much. Accepted: it is small against a cooldown measured in days, and it applies only where Renovate had no timestamp at all.
-- **Registry push time is not used.** GHCR's package-versions API would give the push time of a digest, but it requires the `read:packages` token scope (a token without it gets HTTP 403, confirmed 2026-10-19). Reading an image's own `created` field was not adopted: reproducible builds commonly set it to a fixed epoch, which would make any image look years old.
-- **The sanity check needs both releases.** An upstream that publishes no GitHub Releases, or names them in a way the exact-tag lookup misses, gets no release date; such members are aged by the lower bound alone.
+- **Registry time covers two registries.** The gate reads the publish time on the public npm registry and PyPI. Every other registry falls through to the upstream release date, even one that records a publish time; adding one means a reference read in step 1, with its field confirmed from that registry's own documentation, and a row in SKILL.md's capability table. A package installed from a private registry or a mirror gets no registry time either.
+- **Upstream release time is not registry push time.** Where step 2 applies, the gate measures when the upstream release was published, which usually precedes the image or chart push by the build's duration (minutes to hours). The age is overestimated by that much. Accepted: it is small against a cooldown measured in days, and it applies only where no registry time was found.
+- **Container registry push time is not used.** GHCR's package-versions API would give the push time of a digest, but it requires the `read:packages` token scope (a token without it gets HTTP 403, confirmed 2026-10-19). Reading an image's own `created` field was not adopted: reproducible builds commonly set it to a fixed epoch, which would make any image look years old.
+- **The sanity check needs both records.** An upstream that publishes no GitHub Releases, or names them in a way the exact-tag lookup misses, gets no release date; such members are aged by the lower bound alone.
+- **The sanity check rejects parallel release lines.** A package that ships several major lines side by side can publish the from version after the target: `@types/node` 24.19.2 went to npm only two minutes before 26.6.5, so a from version published a few minutes later would have failed, and actions/node-versions released 24.22.2 a week after 26.12.1. Then a correct time is discarded and the member falls to the next source, often the lower bound. It costs a longer wait, never an early merge.

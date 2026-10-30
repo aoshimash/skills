@@ -35,7 +35,7 @@ Phrases that **should** invoke `merge-renovate-prs` (a backlog of Renovate PRs t
 
 Each maps to an entry in `evals/evals.json` with objective expectations.
 
-The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 pin interactive mode** (their prompts explicitly ask to confirm each step) and exercise the approval-gate discipline. **Cases 5–9 exercise autonomous mode**: zero gates, precondition verification, defer-don't-block, auto-revert, repo-type-adapted verification, and human-supplied verification checks. **Cases 10–11** (added 2026-10-19) cover the release-age gate and grouping proposals; both fixtures are taken from real aoshimash/homelab-k8s PRs (#374, #345) with their actual tables, commits, and dates. **Cases 16–17** (added 2026-10-27) cover Renovate `prBodyNotes` as a classification input; both fixtures are real homelab-k8s PRs (#387, #374) and its config's actual notes. **Case 18** (added 2026-10-29) covers the split of Phase 0 precondition failures into structural and recoverable; its scenario is the run issue #140 records.
+The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 pin interactive mode** (their prompts explicitly ask to confirm each step) and exercise the approval-gate discipline. **Cases 5–9 exercise autonomous mode**: zero gates, precondition verification, defer-don't-block, auto-revert, repo-type-adapted verification, and human-supplied verification checks. **Cases 10–11** (added 2026-10-19) cover the release-age gate and grouping proposals; both fixtures are taken from real aoshimash/homelab-k8s PRs (#374, #345) with their actual tables, commits, and dates. **Cases 16–17** (added 2026-10-27) cover Renovate `prBodyNotes` as a classification input; both fixtures are real homelab-k8s PRs (#387, #374) and its config's actual notes. **Case 18** (added 2026-10-29) covers the split of Phase 0 precondition failures into structural and recoverable; its scenario is the run issue #140 records. **Case 21** (added 2026-10-30) covers the registry publish time as the release-age gate's first source; its fixture is the real PR whose false wait motivated it.
 
 ### Case 1: Manual-apply routing (`manual-apply-routing`) — interactive
 
@@ -268,6 +268,18 @@ Why it is the dangerous direction: the chart's `proxyConfig.image.tag` is `""`, 
 - **(a)**: resolves the proxy image from the chart at both tags against the repo's values (unset → appVersion) and follows `PROXY_IMAGE` past the rendered diff to the operator-managed `ingress-proxies` StatefulSet. It classifies the member disruptive (a single-replica restart under five apps' ingress), replacing the Phase 1 estimate, and defers #389 under the user's timing constraint.
 - **(b)**: finds that the pin holds `PROXY_IMAGE` at `v1.104.1` in both versions. Because the operator itself is updated, it also compares the operator's source tags (the published charts' appVersions, `v1.104.1` and `v1.104.2`), filtered to the generating code **and its in-repo imports**. The compare lists 13 files, under the API's 300-file cap and so complete (the pair is linear: the reverse compare `v1.104.2...v1.104.1` lists none), and none is under `cmd/k8s-operator/` — but it is not clean: `go.mod` and `go.sum` changed, which the reference method counts as a hit because it does not follow external modules, and the operator's in-repo import set (239 packages at `v1.104.1`) includes `net/dns`, whose `manager.go` changed, and the root package, beside which `VERSION.txt` changed. The `go.mod` change alone settles it. So the generating code is not shown unchanged, the `ingress-proxies` StatefulSet counts as changing, the member is disruptive, and #389 defers under the timing constraint, as in (a). An answer that stops at "nothing under `cmd/k8s-operator/`" and goes is the fail-open this variant tests.
 
+### Case 21: A registry that records the publish time (`cooldown-registry-publish-time`) — autonomous
+
+**Setup** (a real two-member PR in an internal repository, read on 2026-10-30; the repository and bot names are withheld, and every version, date, commit and check is as read): `minimumReleaseAge: 3 days` from an org preset. The PR bumps `node` (`uses-with`, actions/node-versions GitHub Releases) `24` → `26` and `@types/node` (npm devDependency) `^24.0.0` → `^26.0.0`, which the pnpm lockfile resolves 24.19.2 → 26.6.5 with no tarball URL; the repo has no `.npmrc`. One Renovate-authored commit, 2026-10-28T22:28:35Z. Every check is green, `renovate/stability-days` included. It is 2026-10-30T00:30Z, the moment the run that motivated the change held this PR.
+
+Why it matters: that run aged `@types/node` by the lower bound because DefinitelyTyped has no per-version GitHub Release, though npm records 26.6.5's publish time (2026-10-09T18:46:47Z) — the time the artifact the lockfile installs became available, and the time Renovate itself ages npm packages from.
+
+**Expected behavior**:
+- Does not take the green `renovate/stability-days` as evidence of age.
+- Ages `@types/node` from the npm registry's `time["26.6.5"]` (~20 days), using the exact version from the lockfile change rather than the range, after checking that 24.19.2's time exists and is older.
+- Ages `node` — which has no package registry — by the upstream release date path, where the sanity check fails (`24` matches no tag; 24.22.2, the version Renovate resolved it to, was released a week after 26.12.1), so `node` falls to the lower bound.
+- The PR is therefore still a **cooldown wait**, now set by `node` on the lower bound (earliest 2026-10-31T22:28Z), and the first marker comment names `node`, not `@types/node`. The case pins the attribution as much as the registry read: the motivating run reported the right date for the wrong member.
+
 ## Evaluation Log
 
 > Note: the 2026-06-21 results below predate the 2026-07-23 autonomous redesign; they were run against the interactive-only version of the skill (Cases 1–4). Cases 5–9 have not been benchmarked yet.
@@ -331,6 +343,7 @@ Both with-skill Case 11 runs also proposed splitting Home Assistant out, citing 
 | 2026-10-29 | Case 19 | with 8/8; after Stage 2 7/9 as first written, 9/9 with expectations scoped per variant (re-graded, not re-run); (d) added in round 4, (e) in round 5, (f) in round 6, (g) in round 8, (h) in round 9, none run / base 6/8, 1/1 on (c) | Gated-publish repo type; self-graded, weakly discriminating (see below). |
 | 2026-10-29 | Case 20 | with 5/5 / base 4/5 (v1, both variants; 4/5 / 3/5 re-graded after Stage 2 round 2); (a)-only v2: both defer | Disruption recomputed from the resolved spec; self-graded; **not discriminating** (see below). |
 | 2026-10-29 | All cases | desk-checked — no behavioral change | `platform-github.md`'s config-example heading renamed from `CLAUDE.md Config Example` to `Agent Instructions Config Example`, with the "project's agent instructions (e.g. CLAUDE.md, AGENTS.md)" lead-in (Refs #135). No inbound links to the old anchor (`links` check green). |
+| 2026-10-30 | Case 21 | with 6/6 / base 3/6 | Registry publish time as the release-age gate's first source; self-graded (see below). |
 
 ### 2026-10-25 — Platform access resolution (Cases 12–14)
 
@@ -595,3 +608,22 @@ Case 20 (b)'s expectation now also requires the compare to be complete and on th
   - octocat/Hello-World at `master`, which has no `go.mod`: the first attempt hit a TLS timeout on the tree read and printed `method failure`. The re-run printed `not established`.
   - The `mod=` line was run on `module "example.com/x" // c`, on a backquoted path and on a bare path. Each gave the unquoted path.
 - Case 20 (b) is a linear pair, so its outcome is unchanged. Its text now notes the empty reverse compare. **The eval was not re-run.**
+
+### 2026-10-30 — Registry publish time first (Case 21)
+
+**Change.** The gate's source age for a version update is now the registry's own publish time for the exact target version (npm `time[<version>]` from the full package document; PyPI's newest per-file `upload_time_iso_8601` for the version), sanity-checked against the from version, and only when the registry gives none the upstream release date; the lower bound, `max(source age, lower bound)`, the youngest-member rule and digest handling are unchanged. `renovate/stability-days` is stated not to be evidence of age. Placement: release-age.md grows to ~130 lines, so no split; SKILL.md gains a capability row because the read is not a GitHub operation.
+
+**Primary sources read in the authoring session (2026-10-30).** npm/registry `docs/responses/package-metadata.md` ("Full metadata format": `time` maps versions to the time published; the abbreviated format lists no `time`). PyPI "JSON API" docs (per-version route; `upload_time_iso_8601` appears only in the examples). PyPA "Simple repository API" spec (`upload-time`: the time the file was uploaded to the index). Renovate `docs/usage/configuration-options.md` (`timestamp-optional` treats a release without a timestamp as stable; `renovate/stability-days`). Renovate `lib/modules/datasource/npm/get.ts` (`releaseTimestamp` from `res.time?.[version]`). The JSON API and Simple API values were compared for both files of requests 2.32.3 and were equal.
+
+**Commands run as written.** Both blocks were extracted from release-age.md with `grep -o`, only `{package}` and `{version}` substituted, and run under zsh 5.9 and bash 5.3 on macOS (curl 8.7.1, jq 1.8.2) and bash 5.2 in `debian:stable-slim` (curl 8.14.1, jq 1.7), with identical output: `@types/node` 26.6.5 → `2026-10-09T18:46:47.657Z`, 24.19.2 → `2026-10-09T18:44:25.189Z`, 99.0.0 → empty, a missing package → curl 404 and empty; `requests` 2.32.3 → `2024-05-29T15:37:49.536140Z` (the sdist, 2 s after the wheel), 2.32.2 → `2024-05-21T18:51:32.819665Z`, 99.0.0 → curl 404 and empty. The pipeline exits 0 on a 404 (jq's status), which is why the text routes empty output and a failed read the same way.
+
+**Run.** One run per arm (with-skill reading SKILL.md, release-age.md and workflow.md from this branch / baseline reading no files and told only that nothing younger than the cooldown merges), fresh contexts, paper exercise with the facts in the prompt. **Graded by the authoring session against `expectations`, not by independent graders** — treat as SELF-REVIEWED.
+
+| Arm | Score | Notes |
+|---|---|---|
+| with-skill | 6/6 | Aged `@types/node` from `time["26.6.5"]` after the 24.19.2 check, ignored `stability-days`, discarded node's release date (no from-version release by exact tag, and 24.22.2 newer anyway), waited on node's lower bound to 2026-10-31T22:28:35Z, and posted the marker naming node. |
+| baseline | 3/6 | Read the npm time and the exact lockfile version and ignored `stability-days` (1, 2 pass); did not check the from version (3 fails); held the PR for a different reason — the floating `"26"` resolves to 26.13.0, published 2026-10-29 — with no sanity check and an eligible date of 2026-11-01T02:33Z (4, 5 fail); its comment names node, in its own marker format (6 passes on substance). |
+
+**Discrimination.** Moderate. An unaided model already reaches for the npm `time` once the prompt hands it the value, so the registry read itself is not what the case discriminates; the from-version check, the source priority, and the attribution are.
+
+**Finding outside this change.** Both arms noticed that the `node` member writes a floating major (`node-version: "26"`), which setup-node resolves at run time to the newest 26.x — 26.13.0, ~22h old — while both Renovate and this gate age the version Renovate chose (26.12.1). Neither the gate nor Renovate measures the build CI will actually install for a floating value; the main branch's `"24"` is in the same position. Not addressed here.

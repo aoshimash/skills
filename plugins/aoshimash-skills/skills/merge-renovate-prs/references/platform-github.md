@@ -40,7 +40,7 @@ Resolved once per run as SKILL.md "Platform Access" describes: a connector for G
   - **The workflow-run reads** of gated-publish V-2 (below) are covered only by tools that return, for the settle read, every run on a given commit with each run's workflow path and status, complete by the test above; and, for the publish-run read, the runs of a given workflow created at or after a given time on **every** branch and tag and for every event, with each run's creation time. A tool confined to the default branch, or to one event, does not cover the publish-run read: it would return no rows for a tag-triggered or dispatched publish on another ref, which reads as a pass.
   - **The merge** is covered only by a tool that takes the repo's merge method, and the post-approval `mergeStateStatus` read only by one that returns it — without it a `BLOCKED` PR cannot be told from a mergeable one.
   - **Writes** — approving a review, merging, updating a branch with the merge or the rebase form, creating, approving and merging the revert PR, closing with a comment, commenting — are covered by a tool that performs that write and reports whether it succeeded.
-- **Outside this choice**: local git (fetch, branches, revert, push) and the deploy tooling the verification plan uses (`kubectl`, Flux/Argo CLIs, `talosctl`, …) always run as written, whatever the method. So does chart rendering (`helm show chart`, `helm template` against the chart repository; workflow.md 2-5), which is not a GitHub operation. When it is unavailable, 2-5 falls back to reading the templates, and leaves unresolved anything only a render settles.
+- **Outside this choice**: local git (fetch, branches, revert, push) and the deploy tooling the verification plan uses (`kubectl`, Flux/Argo CLIs, `talosctl`, …) always run as written, whatever the method. So does chart rendering (`helm show chart`, `helm template` against the chart repository; workflow.md 2-5), which is not a GitHub operation, and so do the package registry reads of the release-age gate (npm and PyPI publish times; release-age.md step 1). When it is unavailable, 2-5 falls back to reading the templates, and leaves unresolved anything only a render settles.
 
 ## List and filter Renovate PRs
 
@@ -169,7 +169,7 @@ The set is listed at the old tag only, which is enough: an import added or remov
 
 ## Release age (the cooldown gate)
 
-The commands for the release-age gate (workflow.md 1-3) — upstream release dates with their sanity check, the lower bound from Renovate's newest authored commit, and the cooldown-wait marker lookup — live with the procedure in [release-age.md](release-age.md), because each one is only correct together with the rule around it.
+The commands for the release-age gate (workflow.md 1-3) — upstream release dates with their sanity check (read only when the package registry gives no publish time; the registry reads themselves are not GitHub operations), the lower bound from Renovate's newest authored commit, and the cooldown-wait marker lookup — live with the procedure in [release-age.md](release-age.md), because each one is only correct together with the rule around it.
 
 ## CI status (the merge gate)
 
