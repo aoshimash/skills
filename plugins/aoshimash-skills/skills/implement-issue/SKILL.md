@@ -83,6 +83,7 @@ below use capability terms; map them to your environment as follows.
 |---|---|---|
 | **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`, which can carry several questions in one round) | Numbered options as plain text; wait for the user's reply |
 | **Separate agent instance** — run a task in a fresh context that has not seen this conversation | Subagent dispatch (e.g. Claude Code's Task tool) | Run sequentially in the current context; for verification, mark the result `SELF-REVIEWED` in the artifact it lands in (e.g. the PR body) |
+| **Observable peer agent** — run a Batch implementer in its own terminal, which the orchestrator can inspect and re-prompt | A terminal workspace manager the user opted in to (e.g. Herdr when `HERDR_ENV=1`; see [references/peer-agents.md](references/peer-agents.md) P1) | Separate agent instance, then sequential execution, per the rows above; loses visibility into a running implementer and into the questions it stops on |
 | **Platform access** — read and write the issue tracker and the code host | A connector or MCP server for the platform, preferred when it covers the operations the run uses (see [Platform Access](#platform-access)) | The platform guide's CLI (`gh`, `bee`); with neither, ask how to reach the platform, or stop when no user is reachable |
 | **Model selection** — run a separate agent instance on a chosen model | Per-instance model override (e.g. Claude Code's Task tool `model` parameter, or an agent definition's `model` frontmatter) | Run every instance on the session's default model — the implementer classification is skipped entirely rather than approximated, and the reviewer-stronger-than-implementer recommendation is unavailable |
 | **Security review** — security-focused review of the pending diff | Dedicated command (e.g. Claude Code's `/security-review`) | Review the diff yourself against the checklist in [references/workflow.md](references/workflow.md) step 2-6 |
@@ -345,7 +346,9 @@ than starting new work.
    capability tier its issue's content calls for
    ([references/model-selection.md](references/model-selection.md)); otherwise
    implement sequentially in dependency order — the DAG, review gates, and
-   failure cascade are identical either way.
+   failure cascade are identical either way. Where the conditions in
+   [references/peer-agents.md](references/peer-agents.md) P1 all hold, the
+   implementers run as observable peer agents instead.
    After each draft PR is created, the orchestrator runs the two-stage review
    gates ([references/review-gates.md](references/review-gates.md)), including
    **Stage 2.5 pattern propagation** across other in-flight PRs when a
@@ -390,6 +393,7 @@ than starting new work.
 - [references/batch-reentry.md](references/batch-reentry.md) — Resuming an integration-mode batch in a fresh session: the artifacts state is re-derived from, concurrent-session detection, and the idempotency rules
 - [references/context-budget.md](references/context-budget.md) — Keeping the batch orchestrator's own context bounded: what each dispatched step may return, what must be durable before it can leave, the position read that survives a compaction, the sequential fallback, and the deliberate stop
 - [references/model-selection.md](references/model-selection.md) — Batch dispatch's content-based implementer tiers: the classification rubric, the default mapping, the classes never dispatched cheaply, and the repository override
+- [references/peer-agents.md](references/peer-agents.md) — Optional implementer dispatch into observable terminals: when it applies, what each observed state means, and what the "no implementer still running" assertion needs under it
 - [references/review-gates.md](references/review-gates.md) — Two-stage review procedure (Stage 1 spec compliance, Stage 2 code quality, Stage 2.5 pattern propagation)
 - [references/automated-review.md](references/automated-review.md) — Responding to repository-configured automated (bot/AI) reviewers before the draft → ready flip
 - [references/harvesting.md](references/harvesting.md) — Post-PR promotion of generalizable decisions into repository agent instructions or user-level configuration

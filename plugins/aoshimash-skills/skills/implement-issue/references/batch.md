@@ -221,6 +221,10 @@ in the B1-3 plan, since the batch cannot satisfy it.
 
 ### B1-3. Visualize and Approve
 
+**Resolve the dispatch method before drawing the plan** ([peer-agents.md](peer-agents.md) P1).
+Only when it resolves to observable peer agents does the plan gain a line, naming the method
+and that its implementers do not get model tiers.
+
 **Integration mode: read the branch's state before drawing the plan.** Whether the
 integration branch already exists, and what it carries, changes what the user is
 approving — so both reads happen here, not after the approval. Both are read-only (see
@@ -423,7 +427,7 @@ falls entirely on later unattended sessions, which fall back to the artifact-evi
 
 Repeat until every issue is completed, blocked, or `HELD`.
 
-**Execution model — parallel or sequential.** When the environment can run separate agent instances in parallel, dispatch a whole group's issues at once and wait for the group to finish before starting the next. When it cannot, implement each group's issues **sequentially in dependency order** in the current context, still using one worktree per issue. The DAG, review gates, and failure cascade are unchanged; only wall-clock parallelism is lost. The steps below are written for the parallel case; in the sequential case, "dispatch"/"run the implementer" means "execute those same instructions yourself, one issue at a time, in group-then-dependency order."
+**Execution model — parallel or sequential.** When the environment can run separate agent instances in parallel, dispatch a whole group's issues at once and wait for the group to finish before starting the next. When it cannot, implement each group's issues **sequentially in dependency order** in the current context, still using one worktree per issue. The DAG, review gates, and failure cascade are unchanged; only wall-clock parallelism is lost. The steps below are written for the parallel case; in the sequential case, "dispatch"/"run the implementer" means "execute those same instructions yourself, one issue at a time, in group-then-dependency order." Implementers run as observable peer agents only where [peer-agents.md](peer-agents.md) P1 resolved to that; with its conditions unmet, nothing here changes.
 
 ### B2-1. Per-Group Execution
 
@@ -451,12 +455,14 @@ For each issue in the current group:
    dispatched cheaply, the uncertainty-resolves-upward rule, and the resolve/fill/check
    procedure a pinned table goes through before any of it is applied.
 
-   **Skip this step entirely — do not approximate it — in either of two cases**: the
-   environment does not support model selection (see Environment Adaptation in SKILL.md), or
+   **Skip this step entirely — do not approximate it — in any of three cases**: the
+   environment does not support model selection (see Environment Adaptation in SKILL.md),
    this batch is running **sequentially in the current context**, where the orchestrator is
    executing the implementer's instructions itself and there is no separate instance to place
-   on a tier. Both run everything on the session's model.
-3. **Run the implementer** using the instruction template below — as a separate agent instance where available, otherwise by executing those same instructions yourself in the issue's worktree.
+   on a tier, or implementers run as **observable peer agents**
+   ([peer-agents.md](peer-agents.md) Known limits). The first two run everything on the
+   session's model; the third runs each implementer on its agent's default model.
+3. **Run the implementer** using the instruction template below — as an observable peer agent where [peer-agents.md](peer-agents.md) P1 resolved to it, otherwise as a separate agent instance where available, otherwise by executing those same instructions yourself in the issue's worktree.
 4. **Wait for completion** of all issues in the current group before proceeding to the next group.
 
 **Integration mode: cut each worktree after its dependencies have merged, not at batch
@@ -862,7 +868,8 @@ never opens, updates, or flips that PR itself.
 
 **Assemble the declaration from what the summary below already needs** (Merge Modes, B2-4
 item 4): the issue set this batch dispatched, a final B2-6 status for every one of them, and
-the assertion that no implementer is still running. Send all three or none — the gate treats
+the assertion that no implementer is still running (for observable peer agents, what supports
+it is [peer-agents.md](peer-agents.md) P4). Send all three or none — the gate treats
 a partial declaration as no declaration, and then the milestone PR never leaves draft. Do
 not soften a status to make the set look complete: `BLOCKED`, `NEEDS_CONTEXT`, and `SKIPPED`
 are final statuses and belong in the declaration as themselves.
@@ -906,7 +913,7 @@ Batch Complete: N/M issues implemented
 | #105 | Integration tests | ⏭️ Skipped (dep) | — |
 ```
 
-For blocked issues, explain what went wrong and suggest next steps. Name the platform access method used for each platform (SKILL.md "Platform Access"). If the issue tracker supports it, post a summary comment on the parent issue.
+For blocked issues, explain what went wrong and suggest next steps. Name the platform access method used for each platform (SKILL.md "Platform Access"), and the dispatch method if implementers ran as observable peer agents ([peer-agents.md](peer-agents.md) P1). If the issue tracker supports it, post a summary comment on the parent issue.
 
 **Standard mode with stacks:** restack once more before printing this summary
 ([stacked-prs.md](stacked-prs.md) S6), so a push during the last group is not left stale. A
