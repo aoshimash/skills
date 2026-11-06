@@ -328,7 +328,10 @@ than starting new work.
    the issues' content where labels do not decide, issue number last, with a
    blocker inheriting its dependents' urgency
    ([references/priority-order.md](references/priority-order.md) P2); visualize
-   the plan, showing each issue's rank basis; get approval via a user choice (see Environment Adaptation) with
+   the plan, showing each issue's rank basis — and, when implementers will run as
+   observable peer agents, a line saying so and that model tiers are not applied
+   ([references/peer-agents.md](references/peer-agents.md) P1), written into the
+   approval question itself so it is on screen when the user answers; get approval via a user choice (see Environment Adaptation) with
    options Approve (standard) / Approve (integration mode, when available) /
    Reorder / Abort (Reorder collects dependency-graph edits and re-presents the
    plan — see batch.md B1-3). The plan shows the ordering edges integration mode

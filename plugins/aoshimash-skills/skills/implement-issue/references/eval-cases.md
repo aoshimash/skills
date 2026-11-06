@@ -3755,9 +3755,25 @@ pointer to what supports the assertion under this method.
 **Detection command.** `test "${HERDR_ENV:-}" = 1`, extracted as written, returned 1 unset and 0
 set on macOS bash and zsh, and in an `ubuntu:24.04` container, which has no `herdr`.
 
+**Real batch run (2026-11-05), issues #168 and #169 of this repository, standard mode.** A fresh
+Claude Code session was started in this branch's worktree with the user-level opt-in present,
+and asked to implement both issues as a batch.
+- P1 resolved to Herdr. `impl-skills-168` and `impl-skills-169` started in parallel panes, and
+  both returned `DONE` with draft PRs #171 and #170.
+- #171 failed Stage 2 round 1 (one Important finding). The fix round ran in a new pane, pushed
+  `c7117b4`, and returned `DONE`; Stage 2 round 2 passed. Both PRs then went ready with CI green.
+- Every implementer pane was closed, and no batch implementer was listed at the end. The
+  worktrees and prompt files were removed.
+- **Defect found:** the plan did not show the model-tier line. The approval question named Herdr,
+  but the limit appeared only in the final summary. SKILL.md Batch step 1 and B1-3 now require
+  the line inside the approval question.
+- **Unconfirmed:** the session loaded the skill under the installed plugin's name, and which
+  copy's reference files it followed was not recorded. Its behaviour matched this branch's
+  `peer-agents.md`, which the installed copy does not contain.
+
 **Not exercised.** The `blocked` path, the retry loop's retries, a close failure, a name
-collision, the baseline fallback, a real issue dispatched end to end, and any agent kind but
-Claude Code. Those rows follow Herdr's documentation or are desk-checked only.
+collision, the baseline fallback, and any agent kind but Claude Code. Those rows follow Herdr's
+documentation or are desk-checked only. The tier-line fix has not been run.
 
 Desk-checked by separate agent instances. Round 1 passed cases 102–106 and found nine defects;
 round 2 checked the fixes and found seven more. After PR #167 opened, a review of the whole

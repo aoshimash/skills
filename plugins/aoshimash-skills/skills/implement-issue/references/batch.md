@@ -223,7 +223,9 @@ in the B1-3 plan, since the batch cannot satisfy it.
 
 **Resolve the dispatch method before drawing the plan** ([peer-agents.md](peer-agents.md) P1).
 Only when it resolves to observable peer agents does the plan gain a line, naming the method
-and that its implementers do not get model tiers.
+and that its implementers do not get model tiers. Put that line in the approval question itself:
+a structured question tool can hide the text before it while the question is open, and this is
+a limit the user approves.
 
 **Integration mode: read the branch's state before drawing the plan.** Whether the
 integration branch already exists, and what it carries, changes what the user is
