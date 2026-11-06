@@ -100,7 +100,7 @@ Neutral vocabulary — use the capability term in skill instructions; reserve pr
 
 ## Repository Checks
 
-`.github/workflows/check-invariants.yml` runs `python3 scripts/check-invariants.py` on every pull request and on every push to `main` and `integration/**`. The push run on an integration branch is the merge gate's post-merge verification signal (merge-issue-prs P1 and 2-4), so the workflow must stay fast, deterministic, network-free, and unconditional: no `paths:` filter and no job-level `if:`, because a merge that produces no successful run is reverted. Run it locally the same way; `--only <name>` runs one check, `--self-test` shows each check failing on a deliberate violation.
+`.github/workflows/check-invariants.yml` runs `python3 scripts/check-invariants.py` on every pull request and on every push to `main` and `integration/**`. The push run on an integration branch is the merge gate's post-merge verification signal (merge-issue-prs P1 and 2-4), so the workflow must stay fast, deterministic, network-free, and unconditional: no `paths:` filter and no job-level `if:`, because a merge that produces no successful run is reverted. Run it locally the same way; `--only <name> [<name> ...]` runs only the one or more named checks, `--root DIR` points the checks at another directory instead of this repository's root, `--self-test` shows each check failing on a deliberate violation.
 
 Each check has a stable name. When a change is covered, cite the check by that name — this is the "named check" `model-selection.md`'s fast tier asks for, and it covers only what its row says:
 
