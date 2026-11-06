@@ -29,6 +29,13 @@ the orchestrator is executing the implementer's instructions itself, on its own 
 there is no separate instance to place on a tier and the step does not run — even in an
 environment whose separate instances could have taken one.
 
+The same holds where implementers run as **observable peer agents**
+([peer-agents.md](peer-agents.md)): each runs on its own agent's default model, so the step does
+not run. Everything below that sets a tier for an implementer dispatch — the hard exclusions and
+the strongest tier for fix rounds included — is **not met** in that case, and the plan says so.
+Where the environment supports model selection for reviewers, they run at the strongest tier,
+since there is no implementer tier to compare against.
+
 ## The three tiers
 
 Tiers are positions in whatever model roster the environment offers, ordered by capability —

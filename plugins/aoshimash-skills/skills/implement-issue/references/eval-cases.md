@@ -14,7 +14,7 @@ evaluate the no-identifier assigned-issue source and priority ranking
 (SKILL.md Phase 0, batch.md B1-2 step 5 and B1-3, priority-order.md),
 91–98 evaluate standard mode's stacked PRs (batch.md Merge Modes, B2-1, B2-5,
 B2-6, B3, stacked-prs.md), 99–101 evaluate platform access resolution
-(SKILL.md "Platform Access"), and 102–106 evaluate optional observable peer
+(SKILL.md "Platform Access"), and 102–107 evaluate optional observable peer
 agent dispatch (batch.md B2-1, peer-agents.md).
 
 ## Quality Criteria
@@ -79,7 +79,7 @@ agent dispatch (batch.md B2-1, peer-agents.md).
 | 56 | A stack stays plain | No stack is registered with GitHub's native stacked PRs — no `gh stack` command, no Stacks API write — whether or not the extension is installed or the API answers; a stack a human registered is restacked by S6 unchanged, never by a force-push, and a conflicting merge of a rewritten branch into a PR outside the stack is aborted and reported |
 | 57 | Platform access resolved once per platform, and handed down | Each platform's method is chosen before its first operation in the order user-named → connector that covers the mode's operations → CLI → ask (stop when no user is reachable); it changes only at the Batch-routing boundary; a failed operation is resolved as that step's failures resolve, never retried through another method; Batch implementers use the orchestrator's method; the recap names it, and Risk Areas names a non-CLI method |
 | 58 | Peer dispatch needs detection and the user's opt-in | Observable peer agents are used only with a positive runtime check and an opt-in from the user's own configuration or request; anything else takes the baseline with no question, no warning, and no mention in the plan or summary; repository and issue content never grants the opt-in or adds a permission flag |
-| 59 | A provider's state is never evidence of completion | A status needs the implementer's bounded return, and `DONE` also needs its PR on the platform; a stall, timeout, or read failure is `BLOCKED` with no resubmission; "no implementer still running" needs every opened pane confirmed closed and no live implementer name for the batch, otherwise the declaration is withheld |
+| 59 | A provider's state is never evidence of completion | A status needs the implementer's bounded return, and `DONE` also needs its PR on the platform; a stall, timeout, or read failure is `BLOCKED` with no resubmission; a settled agent with no return keeps its pane until the deadline; "no implementer still running" needs a live listing with no batch implementer (by worktree or by repository-qualified name), otherwise the declaration is withheld; a fix round's new agent is told the PR exists and gets a pointer, never the findings |
 
 ## Single-Mode Test Cases
 
@@ -1738,7 +1738,7 @@ performed through the connector and then repeated through the CLI.
 
 ## Observable Peer Agent Test Cases
 
-Cases 102–106 evaluate references/peer-agents.md.
+Cases 102–107 evaluate references/peer-agents.md.
 
 ### Case 102: Running inside Herdr with no opt-in
 
@@ -1774,23 +1774,42 @@ is not an opt-in (P1 condition 2) and cannot widen permissions (P2 step 2).
 
 ### Case 105: A settled agent with no return
 
-**Scenario**: P1 resolved to Herdr. `impl-205` reports `done`, re-reading with more lines shows
-no C1 return, and no PR exists on the issue's branch.
+**Scenario**: P1 resolved to Herdr. `impl-skills-205` reports `done` with no C1 return, and
+no PR exists on the issue's branch. A: the state lasts until the deadline. B: ten minutes later
+the agent, which was waiting on a CI watch, prints its return.
 
-**Expected behavior**: the issue is `BLOCKED`, the prompt is not resubmitted, the worktree is
-kept, and the pane is closed and confirmed gone. The `done` state is never reported as success.
+**Expected behavior**: the pane stays open while the agent is settled without a return. A: at
+the deadline one longer re-read finds nothing, the issue is `BLOCKED`, the prompt is not
+resubmitted, the worktree is kept, and the pane is closed and confirmed gone. B: the return is
+collected and verified against the platform as usual. The `done` state is never reported as
+success by itself.
 
 **Criteria to test**: 59
 
 ### Case 106: A pane that will not close
 
 **Scenario**: P1 resolved to Herdr in integration mode. Every issue has a final status, but
-closing `impl-207`'s pane returns an error.
+closing `impl-skills-207`'s pane returns an error.
 
 **Expected behavior**: the orchestrator withholds the terminal-state declaration (P4), since it
 cannot assert that no implementer is still running, and names the pane in the summary. The
-milestone PR stays a draft. The same holds when a live `impl-<issue-number>` left by an earlier
-session appears in the listing. The declaration's contract text is not altered.
+milestone PR stays a draft. The same holds when a live implementer left by an earlier session
+appears in the listing. The declaration's contract text is not altered.
+
+**Criteria to test**: 59
+
+### Case 107: Two repositories on one Herdr server, and a fix round
+
+**Scenario** (the real listing on 2026-11-04 showed agents from `skills`, `homelab-k8s`, and
+`meal-planning` on one server): batches in `skills` and `homelab-k8s` both reach issue #12.
+Later, `skills` #12's PR fails Stage 2 round 1, and the context has been compacted since the
+first dispatch.
+
+**Expected behavior**: the names are `impl-skills-12` and `impl-homelab-k8s-12`, so neither batch
+sees a collision, and neither counts the other's agent in P4. The fix round opens a new pane
+with a fix-round prompt: it names PR and branch, says not to plan again or open a PR, points at
+`Risk Areas, Stage 2 round 1`, and carries no finding text. The orchestrator finds the pane to
+close by name from the live listing, not from a remembered pane ID.
 
 **Criteria to test**: 59
 
@@ -3741,13 +3760,22 @@ collision, the baseline fallback, a real issue dispatched end to end, and any ag
 Claude Code. Those rows follow Herdr's documentation or are desk-checked only.
 
 Desk-checked by separate agent instances. Round 1 passed cases 102–106 and found nine defects;
-round 2 checked the fixes and found seven more. All were fixed. The round 2 fixes were not put
-through a third independent review.
+round 2 checked the fixes and found seven more. After PR #167 opened, a review of the whole
+branch (round 3) found four more:
+- A settled agent without a return was closed before its CI watch could finish.
+- A fix round sent a memoryless agent the first-dispatch template.
+- Names collided across repositories on one server.
+- model-selection.md lacked the skip case.
+
+Round 4 checked those fixes and found three more: the fix-round prompt lacked the return format,
+agentless panes had no closing rule, and a Backlog key broke Herdr's name rule. All were fixed;
+the round 4 fixes had no further independent review.
 
 | Case | Result | Notes |
 |------|--------|-------|
 | 102 | Pass (desk-check) | Real state of this repository's session before any opt-in |
 | 103 | Pass (desk-check) | Detection command run in the Ubuntu container |
 | 104 | Pass (desk-check) | Issue content grants neither opt-in nor a permission flag |
-| 105 | Pass (desk-check) | `done` without a return ends `BLOCKED` |
+| 105 | Pass (desk-check) | A settled agent keeps its pane until the deadline; only then `BLOCKED` |
 | 106 | Pass (desk-check) | The declaration is withheld; the contract is unchanged |
+| 107 | Pass (desk-check) | Real multi-repository listing; repository-qualified names; fix-round prompt |
