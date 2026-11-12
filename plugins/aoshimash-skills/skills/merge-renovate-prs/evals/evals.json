@@ -10,6 +10,8 @@
     { "query": "go merge the dependency bot PRs but make sure the cluster actually comes back up after each one", "should_trigger": true },
     { "query": "renovate のPRたち、全自動でマージまでやって。壊れてたら revert して報告してくれればいい", "should_trigger": true },
     { "query": "process the renovate backlog fully autonomously — merge, verify each one works, auto-revert anything that breaks, just give me a report at the end", "should_trigger": true },
+    { "query": "my-org の全リポジトリで、自分にレビュー依頼が来てる renovate の PR をまとめて片付けて", "should_trigger": true },
+    { "query": "merge this renovate PR for me: https://github.com/aoshimash/homelab-k8s/pull/392", "should_trigger": true },
     { "query": "respond to the review comments on PR #231 — there are two reviewers asking for changes to the error handling", "should_trigger": false },
     { "query": "Dependabot opened a bunch of security update PRs, please handle them", "should_trigger": false },
     { "query": "DependabotのPR対応しといて", "should_trigger": false },
@@ -20,7 +22,9 @@
     { "query": "review my pull request for code quality and security issues before I ask for human review", "should_trigger": false },
     { "query": "the homelab cluster is down, cilium pods are crashlooping, help me figure out what broke", "should_trigger": false },
     { "query": "create an issue to track upgrading our Kubernetes version next quarter", "should_trigger": false },
-    { "query": "what's the difference between Renovate and Dependabot? which should I use for a Go monorepo?", "should_trigger": false }
+    { "query": "what's the difference between Renovate and Dependabot? which should I use for a Go monorepo?", "should_trigger": false },
+    { "query": "list every PR across my-org where my review is requested, oldest first", "should_trigger": false },
+    { "query": "自分がレビュアーに指定されている PR を全部レビューしてコメントを付けて", "should_trigger": false }
   ],
   "evals": [
     {
@@ -357,6 +361,37 @@
         "(b) Finds no confirmed resolution read for a setup-node step with `mirror`, treats node's age as unknown, and defers #225 to the human queue (not a cooldown wait, not merged), naming node and the reason",
         "(c) Sees that the release index's 26.13.0 is newer than the manifest's 26.12.1, holds #225 as a cooldown wait set by node, and reports no computed eligible date (re-checked next run) rather than a date derived from the lower bound or from 26.12.1",
         "Posts no cooldown-wait marker comment in any variant (none is a lower-bound wait), and proposes pinning node's `node-version` at wrap-up in (a) and (c)"
+      ]
+    },
+    {
+      "id": 23,
+      "name": "selection-review-requested",
+      "prompt": "renovate たまってるからやって — aoshimash/homelab-k8s. Facts as read on 2026-11-12: the repo has 7 open PRs, all authored by app/renovate on renovate/ branches (#386 container images, #387 siderolabs/talos v1.14.5, #388 cilium v1.20.4, #389 helm charts, #391 aqua-installer action v4.1.1, #392 aqua v2.66.1, #398 kubernetes/kubernetes v1.37.2), and none of them has a review request to anyone. (a) Say what this run selects and does. (b) Then I follow up with: \"OK, just do #392 then.\" Say what changes. Do not approve, merge, close, or comment on anything; describe what you would do.",
+      "expected_output": "(a) The run selects only PRs whose review is requested from the user (review-requested:@me, including team requests). Detection still recognizes all 7 as Renovate PRs, but none is selected, so all are context only: the run reports an empty selected set with the count (7 open Renovate PRs, none requesting the user's review) and ends without approving, merging, closing or commenting on any of them, and without widening the set to find work. (b) Naming #392 selects exactly #392 regardless of the review request; it still has to pass Renovate detection and every gate (release-age, CI, pre-check, verification), and the other six stay untouched.",
+      "files": [],
+      "expectations": [
+        "(a) Selects by review request from the user — directly or via a team — rather than processing every open Renovate PR",
+        "(a) Still runs Renovate detection over all open PRs and treats the unselected ones as context only",
+        "(a) Reports the empty selected set with its count and ends without approving, merging, closing or commenting on any PR, and does not widen the selection",
+        "(b) Treats the named PR #392 as selected without checking for a review request",
+        "(b) Still runs #392 through Renovate detection and the normal gates, and leaves the other six PRs untouched"
+      ]
+    },
+    {
+      "id": 24,
+      "name": "org-parallel-relay",
+      "prompt": "Process the Renovate PRs that request my review across the GitHub org `acme`. Assume this scenario (modeled on a real org search on 2026-11-12, names anonymized): the review-request search across the org, archived repos excluded, returns one page with total_count 8 and incomplete_results false. Hits by repo: acme/repo-a 2 (both authored by a colleague, human PRs), acme/repo-b 1, acme/repo-c 2, acme/repo-d 1, acme/repo-e 1, acme/repo-f 1; the non-human hits are authored by app/acme-renovate, a self-hosted Renovate GitHub App. acme/repo-d is a Kubernetes cluster's GitOps repo whose PR bumps the CNI, and its docs define no health checks beyond the baseline. Midway, the instance for acme/repo-c ends without returning any report. Describe how the run is orchestrated from start to finish and what the final report contains. Do not run anything against GitHub or any cluster.",
+      "expected_output": "The parent resolves the platform access method once and passes it to every instance. It enumerates with the review-requested:@me search across the org, excluding archived repos, and checks completeness (every page incomplete_results false, total <= 1000, fetched hits == total) — complete here. It groups hits by repo and dispatches six separate agent instances, one per repo, all in parallel with no cap or ordering, each in its own fresh clone, with the selection (review-requested), the mode, the user's verification checks verbatim, the access method, and whether a user is reachable through the parent. The parent does not decide which hits are Renovate PRs; each instance detects against its own repo's Renovate config, so repo-a's two human PRs are reported out of scope and untouched. repo-d's instance hits the knowledge-gap rule (high-blast-radius CNI with no human-defined checks), stops before any merge and returns the question; the parent asks the user, one question at a time, while the other instances keep running, and continues the same instance with the answer quoted verbatim — the answer cannot widen the selected set. repo-c's missing report is an unknown outcome: reported with its clone path and a note that a human must check its open and recently merged Renovate PRs, and never re-dispatched automatically. The aggregated report puts stopped lines first, then a per-repo summary row, each instance's Phase 3 report unedited, the enumeration's completeness, the access method, and any question it could not relay. It notes that serial discipline holds within each repo, not across them.",
+      "files": [],
+      "expectations": [
+        "Resolves the platform access method once in the parent and gives the same method to every instance",
+        "Enumerates with the review-requested:@me search across the org with archived repos excluded, and checks completeness (incomplete_results false on every page, total at most 1000, hits fetched equal to total)",
+        "Dispatches one separate agent instance per repository (six), in parallel without a cap or ordering, each working in its own fresh clone",
+        "Leaves Renovate detection to each instance against its own repo's config; repo-a's human-authored PRs are reported out of scope and not acted on",
+        "Relays repo-d's knowledge-gap question to the user while other instances continue, and continues the same repo-d instance with the user's answer quoted verbatim; the answer cannot widen the selected set",
+        "Reports repo-c as outcome unknown with its clone path and a human check, and does not re-dispatch it automatically",
+        "Aggregates: stopped lines first, a per-repository summary, each instance's report unedited, the enumeration's completeness and the access method",
+        "States that serial discipline holds within each repository but not across repositories"
       ]
     }
   ]

@@ -26,11 +26,13 @@ Pick the mode once, at the start of the run:
 - **Autonomous (default).** Use when the user asked to process/merge the dependency PRs without asking to be consulted per step. After Phase 0's precondition verification passes, there are **no approval gates**: the run proceeds through review → merge → apply → verify → (revert on failure) unattended, and ends with a report.
 - **Interactive.** Use when the user asked to confirm each step ("1個ずつ確認しながら", "check with me before merging"), or as the **fallback** when Phase 0's autonomous preconditions fail and are not cleared at run start (0-4 separates structural failures from recoverable ones) — in that case, state which precondition failed and why before continuing interactively.
 
+This file describes one repository's run. Which repository it runs on, and which of its PRs it may act on (the **selected set**), is resolved before Phase 0 ([targets.md](targets.md)); a run over several repositories runs this whole file once per repository, each in its own agent instance, and its user-choice questions reach the user through the parent (targets.md M-3).
+
 The two modes share every phase below; they differ only at the marked decision points. **Autonomous never converts a gate into silent risk-taking** — where interactive mode would ask a human, autonomous mode either decides by rule or defers the PR unmerged to the human queue.
 
 ## Phase 0: Discover repo conventions & verify preconditions
 
-Run once at the start. First confirm the repo is hosted on **GitHub** (a `github.com` remote in `git remote -v`, or, with the CLI, `gh repo view` succeeds) — this skill is GitHub-only for v1; if the remote is GitLab or another host, say so and stop rather than guessing at non-GitHub commands. Then resolve the platform access method once for the run (SKILL.md "Platform Access") before the first GitHub operation. Then learn **how this repo ships a merged change to the running system** before you merge anything — because in many repos merging is only the first of several steps.
+Run once at the start, in the repository's local checkout ([targets.md](targets.md) "A local checkout per repository"). First confirm the repo is hosted on **GitHub** (a `github.com` remote in `git remote -v`, or, with the CLI, `gh repo view` succeeds) — this skill is GitHub-only for v1; if the remote is GitLab or another host, say so and stop rather than guessing at non-GitHub commands. Then resolve the platform access method once for the run (SKILL.md "Platform Access") before the first GitHub operation. Then learn **how this repo ships a merged change to the running system** before you merge anything — because in many repos merging is only the first of several steps.
 
 ### 0-1: Learn the deploy mechanism and merge method
 
@@ -132,7 +134,7 @@ Then take the tool's documented login command for the credential type those sett
 
 ### 1-1: Detect candidate Renovate PRs
 
-Apply composite detection (see [detection.md](detection.md)). Produce the deduped candidate set. If anything is ambiguous (a borderline author, an unfamiliar self-hosted account):
+Apply composite detection (see [detection.md](detection.md)) to every open PR in the repository, not only the selected ones: conflicts and ordering (1-2) need the whole picture. Produce the deduped candidate set, then mark which candidates are in the **selected set** ([targets.md](targets.md) "The selected set"). Only selected candidates go on to 1-3 and the order; the rest stay as context for 1-2 and are never approved, merged, updated, closed, or commented on. A selected PR that is not a Renovate PR is out of scope like any other non-Renovate PR. If anything is ambiguous (a borderline author, an unfamiliar self-hosted account):
 
 - **Autonomous:** exclude the ambiguous candidate from the run and list it in the report — never auto-merge a PR you are not sure is machine-generated.
 - **Interactive:** present the candidates and confirm with the user before treating them as in-scope.
@@ -147,7 +149,7 @@ For the candidate set, look for:
   - A CRD update that must land before the controller that consumes it.
   - A library and a plugin that must move in lockstep.
 
-Record these as edges; they constrain the order and sometimes mean two PRs should be handled as a deliberate sequence with full verification between them.
+Record these as edges; they constrain the order and sometimes mean two PRs should be handled as a deliberate sequence with full verification between them. An edge that runs from an unselected PR to a selected one — the unselected PR must land first — holds the selected PR: autonomous defers it (an unselected prerequisite), interactive surfaces it. A superseded PR outside the selected set is reported, not closed (targets.md).
 
 Edges **inside** a grouped PR (two members that must land in a particular order, e.g. a controller before the resources it manages) cannot be ordered by this skill — Renovate ships them as one change. Record them too: they are evidence for a split proposal in 3-3.
 
@@ -303,7 +305,7 @@ Never defer a *not a refusal* call as unmerged on the strength of an open PR or 
 
 If the repo enforces CODEOWNERS or team-based required reviewers that an agent cannot satisfy, never bypass the check. Autonomous: defer the PR (reason: required review the agent cannot provide). Interactive: surface it and ask the user to approve.
 
-Resolve conflicting sibling PRs identified in 1-2: close the superseded PR. The survivor may need updating against `main`; the bot will rebase it on its **own schedule**, so if you need it current now, a branch update (with the CLI, `gh pr update-branch`) is the deterministic path.
+Resolve conflicting sibling PRs identified in 1-2: close the superseded PR when it is in the selected set; otherwise leave it open and report it (targets.md). The survivor may need updating against `main`; the bot will rebase it on its **own schedule**, so if you need it current now, a branch update (with the CLI, `gh pr update-branch`) is the deterministic path.
 
 **main-divergence rule:** if the PR is behind `main`:
 
@@ -363,6 +365,8 @@ Present what happened across the run:
 - **Disruptive changes executed** — flagged prominently with what downtime occurred, each with its recomputed class (2-5): the workloads that restart, the values or controller that move them, and the Phase 1 estimate it replaced when they differ.
 - **Follow-ups** — anything that needs a human later, including a gated-publish merge 0-3 found without its not-yet-published comment.
 - **Platform access** — the method the run used (SKILL.md "Platform Access"), and any operation whose failure under it deferred a PR, stopped the line, or escalated.
+- **Selection** — the target, how the set was selected (review-requested, as which account; or the named PRs), the number of open Renovate PRs that were context only, the selected PRs that were not Renovate PRs, superseded PRs left open because they were outside the set, and every PR the run approved without merging, with the note that it leaves the next run's review-requested set ([targets.md](targets.md)). An empty selected set is reported here and ends the run.
+- **Local checkout** — the clone's path when the run cloned the repository.
 
 ### 3-2: Surface improvements (do not auto-fix)
 

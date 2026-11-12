@@ -5,6 +5,7 @@ GitHub-only for v1. The commands are written for the `gh` CLI and are the refere
 ## Table of Contents
 
 - [Access Method](#access-method)
+- [List the review-requested PRs](#list-the-review-requested-prs)
 - [List and filter Renovate PRs](#list-and-filter-renovate-prs)
 - [Read a PR: diff, files, body, branch, labels](#read-a-pr-diff-files-body-branch-labels)
 - [Read an upstream file at a tag](#read-an-upstream-file-at-a-tag)
@@ -28,6 +29,7 @@ Resolved once per run as SKILL.md "Platform Access" describes: a connector for G
 
 - **CLI**: `gh` installed and authenticated (`gh auth status`); the current directory is the target repo, or pass `-R {owner}/{repo}`.
 - **Connector coverage**: each command is the reference for its operation. A connector tool covers an operation only when its own description or schema shows that it returns the same fields with the same completeness the command guarantees, or performs the same write. Where that cannot be confirmed, the operation is not covered, and one uncovered operation sends the whole run to the CLI. The tests below are where a connector falls short **silently**, letting a PR through that the reference read would have held, so each is covered only on positive evidence:
+  - **The review-request search** (below) is covered only by a tool that runs a GitHub search with the `review-requested:@me` qualifier as the authenticated account — a tool that lists PRs without that qualifier, or searches as another identity, selects a different set. For the owner-wide search it must also return each page's `total_count` and `incomplete_results`, so the report can say whether the enumeration was complete. A short result here only drops PRs from the selected set, the safe direction, so this read's completeness is reported rather than required.
   - **Complete lists.** The open-PR list and the CI entries below are covered only when the tool shows it returns every item — it reads every page itself, or exposes a signal that ends the pagination (a total, a next-page cursor or link) that the run follows to the end. A page-number parameter with no such signal is not enough: a page the tool shortened by its own filtering looks exactly like the last page.
   - **The CI gate** is covered only when the connector's tools — one or several — return every entry of the rollup the reference reads: every check run **and** every commit status on the PR's head, each with its own settled state, complete by the test above. Check runs alone, or one combined state without the individual statuses, do not cover it: a failing commit status, or a failing check hidden inside a summary, would read as green.
   - **The lower-bound read** (release-age.md) is covered only by a tool returning the PR's commits with each commit's author login and `committedDate`, newest included. A list that may stop short of the newest commits gives an older bound, which makes a release look older than it is — the unsafe direction.
@@ -41,6 +43,32 @@ Resolved once per run as SKILL.md "Platform Access" describes: a connector for G
   - **The merge** is covered only by a tool that takes the repo's merge method, and the post-approval `mergeStateStatus` read only by one that returns it — without it a `BLOCKED` PR cannot be told from a mergeable one.
   - **Writes** — approving a review, merging, updating a branch with the merge or the rebase form, creating, approving and merging the revert PR, closing with a comment, commenting — are covered by a tool that performs that write and reports whether it succeeded.
 - **Outside this choice**: local git (fetch, branches, revert, push) and the deploy tooling the verification plan uses (`kubectl`, Flux/Argo CLIs, `talosctl`, …) always run as written, whatever the method. So does chart rendering (`helm show chart`, `helm template` against the chart repository; workflow.md 2-5), which is not a GitHub operation, and so do the package registry reads of the release-age gate (npm and PyPI publish times; release-age.md step 1) and its read of the Node.js release index (release-age.md "Floating values"). When it is unavailable, 2-5 falls back to reading the templates, and leaves unresolved anything only a render settles.
+
+## List the review-requested PRs
+
+The selected set ([targets.md](targets.md) "The selected set"): open PRs whose review is requested from the authenticated account, directly or through one of its teams. `@me` is that account; print it for the report with `gh api user --jq .login`.
+
+In one repository:
+
+```bash
+gh pr list -R {owner}/{repo} --state open --search "review-requested:@me" --limit 100 \
+  --json number,title,author,headRefName \
+  --jq '.[] | {number, title, author: .author.login, branch: .headRefName}'
+```
+
+As elsewhere, a row count equal to `--limit` may be short: raise it and re-read.
+
+Across an owner — an organization or a user account; `org:` matched a user account's PRs too (observed 2026-11-12: `org:aoshimash` and `user:aoshimash` returned the same 54 open PRs):
+
+```bash
+gh api -X GET search/issues --paginate -f per_page=100 \
+  -f q="is:pr is:open archived:false org:{owner} review-requested:@me" \
+  --jq '{total: .total_count, incomplete: .incomplete_results, hits: [.items[] | {repo: (.repository_url | sub("^https://api.github.com/repos/"; "")), number}]}'
+```
+
+It prints one object per page. The enumeration is complete only when every page has `incomplete: false`, `total` is at most 1,000, and the hits across all pages number `total`. The REST search returns at most 1,000 results per search, and a search that hits its time limit returns what it found so far with `incomplete_results` set (GitHub REST docs, "Search": *Timeouts and incomplete results*).
+
+GitHub's search docs define the qualifier: it matches PRs where the person is requested for review, including review requests to a team the person is on, and a requested reviewer is no longer listed once they have reviewed the PR.
 
 ## List and filter Renovate PRs
 
