@@ -1,0 +1,103 @@
+{
+  "skill_name": "merge-own-prs",
+  "evals": [
+    {
+      "id": 1,
+      "name": "selection-org-bypass",
+      "prompt": "nulab-internal の自分のPRをセルフマージしていって。テストなので GitHub への書き込みはせず、選定結果と処理順の計画までを示して止まって。前提: 認証アカウントは aoshimash、所属チームは nulab-internal/staff_all と nulab-internal/pet。作成者 aoshimash の open PR は次のとおり。(a) nulab-internal/github-config#2148: draft でない、reviewRequests=[Team nulab-internal/pet]、reviewDecision=REVIEW_REQUIRED、viewerCanMergeAsAdmin=true、base=main、.github/workflows の変更。(b) nulab-internal/datadog-terraform#567: draft でない、reviewRequests=[Team nulab-internal/pet]、reviewDecision=REVIEW_REQUIRED、viewerCanMergeAsAdmin=false。(c) nulab-internal/developer-platform#16: draft。(d) nulab-internal/pet-cluster#500: draft。(e) nulab-internal/github-config#2147: draft でない、reviewRequests=[]、reviewDecision=REVIEW_REQUIRED、viewerCanMergeAsAdmin=true。なお review-requested:@me 検索はこのどれも返さない。",
+      "expected_output": "Selected set is exactly github-config#2148. #567 excluded because it needs another person's approval (REVIEW_REQUIRED, viewerCanMergeAsAdmin false). #16 and #500 excluded as drafts. #2147 excluded because no review is currently requested from the account or its teams (not named). Selection reads each PR's reviewRequests and the team list, not the review-requested:@me search. A plan with the one PR and the exclusion reasons is shown with a proceed/reorder/stop choice; nothing is written to GitHub.",
+      "files": [],
+      "expectations": [
+        "Selects github-config#2148 and only it",
+        "Excludes datadog-terraform#567 with the reason that another person's approval is required",
+        "Excludes developer-platform#16 and pet-cluster#500 as drafts",
+        "Excludes github-config#2147 because no review is requested from the account or its teams",
+        "Does not rely on the review-requested:@me search to select",
+        "Shows a plan and asks proceed / reorder / stop before any write"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "named-pr-no-request",
+      "prompt": "aoshimash/gh-costbook#70 をセルフマージして。テストなので書き込みはせず、選定判断と、マージするとしたら使うマージコマンドを示して止まって。前提: 作成者は自分(aoshimash)、draft でない、reviewRequests=[]、reviewDecision=null、viewerCanMergeAsAdmin=false、mergeStateStatus=CLEAN、base=main、リポジトリにルールセットもブランチ保護もない、mergeCommitAllowed/squashMergeAllowed/rebaseMergeAllowed すべて true、README には squash でマージすると書いてある。",
+      "expected_output": "The PR is selected: named PRs skip the review-request condition, it is the user's own non-draft PR, and reviewDecision null means no review is required. The merge command uses --squash (docs name it) and --match-head-commit with the reviewed head, and no --admin because no bypass is needed. It states a COMMENT review would precede the merge and that the merge waits for the human's explicit merge decision after the brief.",
+      "files": [],
+      "expectations": [
+        "Selects the PR despite having no review request, because it was named",
+        "Uses reviewDecision null as the self-mergeability evidence",
+        "Chooses --squash from the README",
+        "Pins the merge with --match-head-commit",
+        "Does not use --admin",
+        "States the merge waits for an explicit merge decision after the brief"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "comments-human-individual-bot-batch",
+      "prompt": "自分の PR nulab-internal/github-config#2148 をセルフレビューして。テストなので GitHub への書き込みはせず、コメント対応の進め方（ユーザーへの質問の仕方と返信案）までを示して止まって。前提: 未解決のレビュースレッドが 2 つ。(1) 人間 tanaka（User）: approval-gate.yml:155 に『この if 条件だと pull_request_review の dismissed イベントで status が更新されないのでは？』。(2) devin-ai-integration（Bot）: approval-gate.yml:40 に『The token permission `statuses: write` is granted at workflow level; consider scoping it to the job.』。会話コメントが 1 つ: github-actions（Bot）による 'Workflow Lint ✅ No findings'。セルフレビューでは should-fix が 1 件（新しい分岐にテストがない）。",
+      "expected_output": "Human thread (1) is presented on its own with a proposed action and a draft reply in Japanese, asked as an individual user choice. The bot thread (2), the self-review finding and the Workflow Lint report are presented together as one numbered batch with a single approve-all / change-some / skip-all-fixes question. Workflow Lint is proposed as Acknowledge or No reply, explicitly for approval, not silently dropped. Bot replies have no thanks; the human reply opens with brief thanks. The plan states replies are posted after the push and every thread is resolved; replies outside a thread start with a link to the item.",
+      "files": [],
+      "expectations": [
+        "Asks about the human comment individually, before the batch",
+        "Puts the bot thread, the self-review finding, and the Workflow Lint comment in one batch with one question",
+        "Does not drop the Workflow Lint comment silently; proposes Acknowledge or No reply for approval",
+        "Drafts the human reply in Japanese with a brief thanks, and the bot reply in English without thanks",
+        "States that every replied thread is resolved after the push",
+        "Posts nothing to GitHub"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "brief-and-bypass-gate",
+      "prompt": "自分の PR nulab-internal/github-config#2148 のコメント対応は終わった。テストなのでGitHubへの書き込みはせず、マージ判断用のブリーフと、承認されたら実行する手順を示して止まって。前提: CI は全チェック SUCCESS、未解決スレッド 0、mergeable=MERGEABLE、mergeStateStatus=BLOCKED、reviewDecision=REVIEW_REQUIRED、viewerCanMergeAsAdmin=true。base=main のルールは deletion, non_fast_forward, pull_request(allowed_merge_methods=[merge], required_approving_review_count=1, require_code_owner_review=true), required_deployments(environments=[production])。ルールセットの current_user_can_bypass=always。変更は approval-gate ワークフローが commit status を書くようにするもので、org 全体の PR の承認判定に影響する。",
+      "expected_output": "A short brief led by the risk level (medium or high, with the reason that the approval gate affects every repository's PR approvals), summary, blast radius, comment handling, gate state, verification plan, and rollback path. It names required_deployments as a rule the bypass would skip, so the human decides knowing it. It asks merge / skip / stop. On merge: a COMMENT review (not approve), then gh pr merge --merge --match-head-commit with --admin. It does not approve the PR and does not merge before the answer.",
+      "files": [],
+      "expectations": [
+        "Shows the risk level with a reason first",
+        "Names required_deployments as a rule the bypass would skip",
+        "Asks merge / skip this PR / stop the run",
+        "Plans a COMMENT review, never an approval",
+        "Uses --merge (the only allowed method) with --match-head-commit and --admin",
+        "Does not merge or post anything before the human answers"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "post-merge-failure-stop",
+      "prompt": "自分のPR org/app#88 をマージした直後、マージ後の確認でデプロイワークフローは成功したが、検証計画にあるヘルスチェック https://app.example.com/healthz が 503 を返し続けている。キューにはまだ org/app#90 が残っている。テストなので書き込みはせず、次に何をするかを示して止まって。",
+      "expected_output": "Stops the line: does not start #90. Shows what was merged, which check failed and the evidence, and the current state. Proposes a revert PR (and a fix forward or outside cause if the evidence suggests one) and asks the human revert / fix forward / hold. Does not create or merge a revert automatically.",
+      "files": [],
+      "expectations": [
+        "Does not start org/app#90",
+        "Reports the failed check with its evidence",
+        "Proposes a revert PR without creating it",
+        "Asks revert / fix forward / hold",
+        "Does not claim the merge is verified"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "head-moved-after-approval",
+      "prompt": "自分のPR org/infra#12 のブリーフを出して、ユーザーが『マージして』と答えた。直後に再読込したら headRefOid が abc123 から def456 に変わっていた（同僚がコミットを push した）。テストなので書き込みはせず、次に何をするかを示して止まって。",
+      "expected_output": "The approval is void for the new head. Does not post the COMMENT review or merge. Re-runs self-review, comment collection, and the pre-merge gate for def456, then shows a new brief and asks again.",
+      "files": [],
+      "expectations": [
+        "Treats the earlier approval as void for the new head",
+        "Does not merge or post the review",
+        "Re-runs self-review and the gate for the new head",
+        "Shows a new brief and asks again"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    {"query": "セルフマージして", "should_trigger": true},
+    {"query": "セルフレビューして", "should_trigger": true},
+    {"query": "自分のPRたまってるから片付けて", "should_trigger": true},
+    {"query": "merge my open PRs in nulab-internal one by one", "should_trigger": true},
+    {"query": "org/app#88 は自分のPRなのでレビューしてマージまでやって", "should_trigger": true},
+    {"query": "renovate のPRをマージして", "should_trigger": false},
+    {"query": "PR #41 のレビューコメントに対応して", "should_trigger": false},
+    {"query": "issue #120 の実装PRを統合ブランチにマージして", "should_trigger": false},
+    {"query": "同僚の PR #45 をレビューしてコメントして", "should_trigger": false}
+  ]
+}
