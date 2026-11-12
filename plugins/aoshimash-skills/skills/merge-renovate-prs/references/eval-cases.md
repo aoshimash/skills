@@ -17,6 +17,8 @@ Phrases that **should** invoke `merge-renovate-prs` (a backlog of Renovate PRs t
 - "go merge the dependency bot PRs but make sure the cluster actually comes back up after each one"
 - "renovate のPRたち、全自動でマージまでやって。壊れてたら revert して報告してくれればいい"
 - "process the renovate backlog fully autonomously — merge, verify each one works, auto-revert anything that breaks, just give me a report at the end"
+- "my-org の全リポジトリで、自分にレビュー依頼が来てる renovate の PR をまとめて片付けて" (an owner target)
+- "merge this renovate PR for me: https://github.com/aoshimash/homelab-k8s/pull/392" (a named PR)
 
 ### Should NOT trigger (near-misses)
 
@@ -30,12 +32,14 @@ Phrases that **should** invoke `merge-renovate-prs` (a backlog of Renovate PRs t
 - A **cluster outage / crashloop** investigation → incident response, not PR review.
 - **Creating an issue** to track a future K8s upgrade → issue creation.
 - A **conceptual question** ("Renovate vs Dependabot?") → informational, no PR work.
+- **Listing** the PRs that request the user's review across an org → a query, not the review/merge loop.
+- **Reviewing and commenting** on every PR that requests the user's review → general code review; the review request is this skill's selection rule, not its trigger.
 
 ## Behavioral Evals
 
 Each maps to an entry in `evals/evals.json` with objective expectations.
 
-The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 pin interactive mode** (their prompts explicitly ask to confirm each step) and exercise the approval-gate discipline. **Cases 5–9 exercise autonomous mode**: zero gates, precondition verification, defer-don't-block, auto-revert, repo-type-adapted verification, and human-supplied verification checks. **Cases 10–11** (added 2026-10-19) cover the release-age gate and grouping proposals; both fixtures are taken from real aoshimash/homelab-k8s PRs (#374, #345) with their actual tables, commits, and dates. **Cases 16–17** (added 2026-10-27) cover Renovate `prBodyNotes` as a classification input; both fixtures are real homelab-k8s PRs (#387, #374) and its config's actual notes. **Case 18** (added 2026-10-29) covers the split of Phase 0 precondition failures into structural and recoverable; its scenario is the run issue #140 records. **Case 21** (added 2026-10-30) covers the registry publish time as the release-age gate's first source; its fixture is the real PR whose false wait motivated it. **Case 22** (added 2026-10-30) covers floating values on the same PR.
+The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 pin interactive mode** (their prompts explicitly ask to confirm each step) and exercise the approval-gate discipline. **Cases 5–9 exercise autonomous mode**: zero gates, precondition verification, defer-don't-block, auto-revert, repo-type-adapted verification, and human-supplied verification checks. **Cases 10–11** (added 2026-10-19) cover the release-age gate and grouping proposals; both fixtures are taken from real aoshimash/homelab-k8s PRs (#374, #345) with their actual tables, commits, and dates. **Cases 16–17** (added 2026-10-27) cover Renovate `prBodyNotes` as a classification input; both fixtures are real homelab-k8s PRs (#387, #374) and its config's actual notes. **Case 18** (added 2026-10-29) covers the split of Phase 0 precondition failures into structural and recoverable; its scenario is the run issue #140 records. **Case 21** (added 2026-10-30) covers the registry publish time as the release-age gate's first source; its fixture is the real PR whose false wait motivated it. **Case 22** (added 2026-10-30) covers floating values on the same PR. **Cases 23–24** (added 2026-11-12) cover targets and selection: the review-requested selected set with its named-PR exemption (a real homelab-k8s state), and the multi-repository run with its question relay (a real owner-wide search, anonymized).
 
 ### Case 1: Manual-apply routing (`manual-apply-routing`) — interactive
 
@@ -294,6 +298,20 @@ Why it matters: the gate aged `node` by what Renovate picked or by the lower bou
 - **(b)**: has no confirmed read for a setup-node step with `mirror`, so `node`'s age is unknown → defers #225 to the human queue, naming `node` and why; not a cooldown wait, not merged.
 - **(c)**: the index's 26.13.0 is newer than the manifest's 26.12.1 → cooldown wait set by `node` with no computed eligible date (re-checked next run).
 - No marker comment in any variant; a pin proposal at wrap-up in (a) and (c).
+
+### Case 23: Selection by review request (`selection-review-requested`) — autonomous
+
+**Setup** (aoshimash/homelab-k8s as read on 2026-11-12): 7 open PRs, all authored by `app/renovate` on `renovate/` branches (#386, #387, #388, #389, #391, #392, #398), none with a review request. **(a)** "renovate たまってるからやって" on that repository. **(b)** The user follows up naming #392.
+
+**Expected behavior**:
+- **(a)**: selects by review request from the user (`review-requested:@me`, team requests included), not every open Renovate PR. Detection still runs over all seven, which stay context only. The run reports the empty selected set with its count and ends — nothing approved, merged, closed or commented on, and the set is not widened to find work.
+- **(b)**: naming #392 selects it without a review-request check; it still passes Renovate detection and every gate, and the other six stay untouched.
+
+### Case 24: Multi-repository run with a relayed question (`org-parallel-relay`) — autonomous
+
+**Setup** (modeled on a real owner-wide review-request search run on 2026-11-12; organization and repository names anonymized, because the organization is private): the search returns `total_count` 8, `incomplete_results` false on its one page. Hits: repo-a 2 (a colleague's human PRs), repo-b 1, repo-c 2, repo-d 1, repo-e 1, repo-f 1; the rest are authored by `app/acme-renovate`, a self-hosted Renovate GitHub App — the real shape, where the bot's login carries the organization's name rather than `renovate`. repo-d is a cluster's GitOps repository bumping the CNI, with no checks beyond the baseline. repo-c's instance ends without a report (constructed).
+
+**Expected behavior**: the parent resolves the access method once and hands it to every instance; enumerates with the review-request search, archived repositories excluded, and checks its completeness; dispatches six instances, one per repository, in parallel and uncapped, each in its own clone; leaves Renovate detection to the instances, so repo-a's human PRs are reported out of scope; relays repo-d's knowledge-gap question while the others run and continues that same instance with the answer verbatim, which cannot widen the set; reports repo-c as outcome unknown with its clone path, never re-dispatched; aggregates with stopped lines first, a per-repository summary, each report unedited, the enumeration's completeness and the method; and says serial discipline holds within each repository, not across them.
 
 ## Evaluation Log
 
@@ -666,3 +684,26 @@ Case 20 (b)'s expectation now also requires the compare to be complete and on th
 **Discrimination.** Weak on recognition: an unaided model spots a floating major once the prompt supplies the manifest facts, as both Case 21 arms did on 2026-10-30. What the skill adds is a stated, confirmed basis for the read (the baseline's (b) defer rested on a guess), one dating rule, and comment discipline.
 
 **Open points.** The baseline's choice of the manifest-listing time is defensible: it is when setup-node could first fetch the build. The rule uses the release time instead (release-age.md says why), which ages 26.13.0 13 h older than the listing would. In (c) the rule computes no date, though the baseline's date from the node-versions release was knowable here; finding that release without the manifest means listing actions/node-versions releases, which the rule does not do.
+
+### 2026-11-12 — Targets, review-requested selection, and multi-repository runs (Cases 23–24)
+
+**Change.** A run now resolves a target before Phase 0 — the current repository, a named repository, named PRs, or an owner (organization or user account) — and acts only on a **selected set**: open PRs whose review is requested from the user, directly or through a team (`review-requested:@me`), or exactly the named PRs. Every other PR is context for detection and ordering only: never approved, merged, updated, closed or commented on; a superseded sibling outside the set is reported, and an unselected prerequisite holds the selected PR. More than one repository dispatches one separate agent instance per repository, in parallel with no cap or ordering; the parent resolves the access method once, relays each instance's user-choice questions and continues the same instance with the answer, and aggregates the reports. New reference `references/targets.md`; hooks in SKILL.md, workflow.md (mode selection, Phase 0 intro, 1-1, 1-2, 2-6, 3-1), detection.md and platform-github.md ("List the review-requested PRs" and a coverage line). Placement: a new reference, because the rules govern which runs exist rather than a step inside one run, and workflow.md is already ~400 lines.
+
+**Decisions, all the user's (2026-11-12).** Team requests included (direct-only would have selected 2 of the 6 Renovate PRs a real owner-wide search returned). The review-request condition applies to every target except named PRs. Repositories run fully parallel even where two may deploy to the same live target — recorded in targets.md "Known limits" as a crossing of the serial rule, not hidden. Questions are relayed through the parent rather than instances running unattended.
+
+**Description.** Rewritten to 1,011 characters, under the 1,024 cap, so its `DESCRIPTION_WAIVERS` entry (1,074) is deleted from `scripts/check-invariants.py`, as the `frontmatter` row requires.
+
+**Facts confirmed in this session.** GitHub's search docs (github/docs `content/search-github/searching-on-github/searching-issues-and-pull-requests.md`): `review-requested` includes requests to a team the person is on, and a requested reviewer stops being listed once they review; `user-review-requested:@me` is direct only. GitHub's REST search docs (`content/rest/search/search.md`): at most 1,000 results per search, and `incomplete_results` on a timeout. `org:aoshimash` and `user:aoshimash` returned the same 54 open PRs (observed).
+
+**Commands run as written.** Both blocks of platform-github.md "List the review-requested PRs" were extracted from the file, placeholders substituted (an organization repository and owner), and run under zsh and bash on macOS and under bash in an `alpine:3.20` container with gh 2.47.0 (GNU userland): identical output, exit 0 — 2 rows for the repository list; one page, `total` 8, `incomplete` false, 8 hits for the owner search. A variant query (`is:pr org:aoshimash`, all states) printed 10 pages of 100 against `total` 1,433, the 1,000-result cap the completeness rule detects.
+
+**Run.** One run per arm (with-skill reading SKILL.md and the references from this branch / baseline reading no files but told the user's selection and relay requirements), executors in fresh contexts, paper exercise with no GitHub or cluster commands. **Graded by the authoring session against `expectations`, not by independent graders** — treat as SELF-REVIEWED.
+
+| Case | with-skill | baseline | Notes |
+|---|---|---|---|
+| 23 `selection-review-requested` | 5/5 | 4/5 | The baseline selected correctly and did not widen; it lost expectation 2 (it never kept the unselected PRs as ordering context). Not discriminating on the selection itself: the baseline was told the rule. |
+| 24 `org-parallel-relay` | 8/8 | 1/8 | The baseline judged Renovate-ness in the parent and skipped repo-a, resolved the access method per instance, continued repo-d with no same-instance resume, re-dispatched repo-c automatically ("recovery instance"), and never stated where serial discipline stops. Only the completeness check matched. |
+
+**Fixes from the runs** (not re-run): a bare `#N` after the conversation named a repository resolved to the current directory's repository; it now resolves to the conversation's repository first (Case 23 with-skill). The parent did not know the clone path of an instance that never reported; the parent now assigns it in the brief. *Outcome unknown* was not among the entries M-4 puts first; it is now. An instance whose selected hits are all human PRs ran the whole of Phase 0; the selected set and detection are now settled before the drift check and probes (Case 24 with-skill).
+
+**Known limits recorded.** Cross-repository parallelism can put two changes in flight on one live target. The search index can lag a fresh request. A PR this skill approved but did not merge leaves the next run's review-requested set (reported). A teammate on a requested team can merge the PR first, and the run then verifies a merge it did not make. Relay and parallel dispatch were exercised only on paper: no multi-repository run has merged anything yet.

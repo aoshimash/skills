@@ -45,9 +45,7 @@ NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 # shrunk description growing back up to it. The entry must be deleted once the
 # description is under the cap (a stale entry fails). A waived violation is
 # printed but does not fail the run.
-DESCRIPTION_WAIVERS: dict[str, int] = {
-    "merge-renovate-prs": 1074,
-}
+DESCRIPTION_WAIVERS: dict[str, int] = {}
 WAIVED = "waived: "  # prefix of a reported, non-failing violation
 
 

@@ -1,30 +1,31 @@
 ---
 name: merge-renovate-prs
 description: >
-  Review and merge Renovate dependency PRs one at a time — discover repo
-  conventions, verify that monitoring and a revert path exist, triage open
-  Renovate PRs, hold any whose release is younger than the repo's configured
-  cooldown (including ones Renovate could not age), read primary-source
-  release notes, then run each PR through a uniform set: LLM pre-check →
-  merge → post-merge verification → automatic revert on failure. Autonomous
-  by default (no approval gates once preconditions hold); an interactive
-  per-PR-approval mode remains for when the user wants to confirm each step
-  or preconditions are not met. Strictly
-  serial: one change in flight at a time. Renovate only (not Dependabot);
-  GitHub only. Use when the user says "review dependency PRs", "merge the
-  Renovate PRs", "process dependency updates", "依存更新PRを処理して",
-  "Renovate のPRをレビューして", "依存関係の更新PRをまとめて見て",
-  "renovate たまってるからやって", or otherwise wants to work through a
-  backlog of Renovate pull requests on a GitHub repo. Invoke this skill even
-  if the user just says "renovate 対応して" or "依存PRやって" without further
-  detail.
+  Review and merge Renovate dependency PRs one at a time — in the current
+  repo, a named repo, named PRs, or every repo of a GitHub org or user (one
+  parallel agent instance per repo). Acts only on PRs whose review is
+  requested from the user, directly or via a team, unless PRs are named.
+  Discovers repo conventions, verifies monitoring and a revert path, holds
+  PRs younger than the configured cooldown, reads primary-source release
+  notes, then runs each PR through LLM pre-check → merge → post-merge
+  verification → automatic revert on failure. Autonomous by default;
+  interactive per-PR approval on request or when preconditions fail.
+  Strictly serial within a repo. Renovate only, GitHub only. Use when the
+  user says "review dependency PRs", "merge the Renovate PRs", "process
+  dependency updates", "依存更新PRを処理して", "Renovate のPRをレビューして",
+  "renovate たまってるからやって", "org の renovate PR をマージして",
+  "レビュー依頼の来てる renovate PR を片付けて", or names a Renovate PR to
+  merge. Invoke even if the user just says "renovate 対応して" or
+  "依存PRやって".
 ---
 
 # Review Dependency PRs
 
-Process Renovate PRs with discipline. Every PR goes through the same set: LLM pre-check (release notes, diff, CI) → merge → post-merge three-state verification → automatic revert if verification fails — **strictly serially**, one change in flight at a time. A PR enters that set only once its newest update is older than the cooldown the repo configured in Renovate, which this skill enforces even where Renovate could not measure it. At wrap-up, what the run revealed about Renovate's grouping comes back as evidence-backed config proposals.
+Process Renovate PRs with discipline. Every PR goes through the same set: LLM pre-check (release notes, diff, CI) → merge → post-merge three-state verification → automatic revert if verification fails — **strictly serially within a repository**, one change in flight at a time. A PR enters that set only once its newest update is older than the cooldown the repo configured in Renovate, which this skill enforces even where Renovate could not measure it. At wrap-up, what the run revealed about Renovate's grouping comes back as evidence-backed config proposals.
 
 **Scope: Renovate only, GitHub only.** Limiting to one bot keeps detection and config-reading simple and predictable. PRs from other dependency bots (e.g. Dependabot) are out of scope — leave them untouched and note them in the report; if the user asks to process them, say the skill covers Renovate only.
+
+**Targets and selection.** A run covers the current repository, a named repository, named PRs, or every repository of an organization or user account. It acts only on the **selected set**: the open PRs whose review is requested from the user — directly or through a team — or, when the user names PRs, exactly those. Every other PR is read for context and never touched. A run over several repositories gives each repository its own agent instance, all in parallel. See [Targets and Selection](#targets-and-selection).
 
 Two modes:
 
@@ -33,12 +34,12 @@ Two modes:
 
 Whether a given package should be merged by Renovate's native automerge or by this skill is the **user's choice, made in their Renovate config** — not this skill's concern. This skill processes whatever Renovate PRs are open, from npm library bumps to Helm charts. Its distinct value over native automerge is what happens *after* the merge: Renovate's automerge gates only on pre-merge status checks and does no post-merge verification or rollback; this skill verifies the change is actually working and reverts it if it is not.
 
-The hard-won lesson behind the serial rule: on 2026-05-04 a homelab cluster bumped Talos and Cilium in the same window and cascaded into an outage. One change in flight at a time keeps a failure isolated and immediately revertable. That is the spine of this skill — do not parallelize merges to "save time". Serial discipline is also what makes auto-revert sound: a failure maps to exactly one change, so the revert target is unambiguous.
+The hard-won lesson behind the serial rule: on 2026-05-04 a homelab cluster bumped Talos and Cilium in the same window and cascaded into an outage. One change in flight at a time keeps a failure isolated and immediately revertable. That is the spine of this skill — do not parallelize merges within a repository to "save time". A multi-repository run does process repositories in parallel, one instance each; that crosses the rule only where two repositories deploy to the same live target, a known limit the user accepted ([references/targets.md](references/targets.md) "Known limits"). Serial discipline is also what makes auto-revert sound: a failure maps to exactly one change, so the revert target is unambiguous.
 
 ## Core Principles
 
 1. **Safety by verification, not by prior approval (autonomous default).** In autonomous mode the gates are machine-checkable: Phase 0 verifies the agent can actually observe system health and that a revert path exists; every merge is followed by three-state verification; failed verification triggers an automatic revert. **What to verify is human-supplied, not agent-invented:** the functioning checks come from the user's request and the repo's runbooks/docs, on top of a repo-type baseline — the agent executes that plan, it does not judge sufficiency on its own. Anything the machine checks cannot cover — human-only steps, missing revert paths, undecidable risk, a high-blast-radius target with no human-defined checks — is **deferred to a human queue, never merged on hope**. In interactive mode, explicit user approval before every merge and every mutating apply, as before.
-2. **Strictly serial execution.** One change in flight, full working-verification between merges. Never start PR N+1 until PR N is verified functioning (or cleanly deferred without merging). A failure must be isolated to a single change so the revert is unambiguous.
+2. **Strictly serial execution, per repository.** One change in flight in a repository, full working-verification between merges. Never start PR N+1 until PR N is verified functioning (or cleanly deferred without merging). A failure must be isolated to a single change so the revert is unambiguous.
 3. **Primary-source, read-the-diff.** The bot's PR body is a convenience, not the truth. Renovate sometimes omits inline release notes. Fetch the upstream GitHub Release / CHANGELOG and read the **actual diff/config**, not just the changelog prose.
 4. **Merge ≠ deployed ≠ working.** In GitOps repos merging only updates Git. Classify each PR's apply path and verify all three states — merged, applied/reconciled, functioning — before calling it done.
 5. **Autonomy is scoped to the PR loop.** Zero-gate applies to reviewing, merging, applying, verifying, and reverting dependency PRs — nothing else. Tangential improvements (doc fixes, config tidy-ups, bot-config changes) are surfaced as proposals, never done unprompted. Doc drift you notice is reported, not silently corrected.
@@ -54,11 +55,22 @@ below use capability terms; map them to your environment as follows.
 | **User choice** — present numbered options, wait for an explicit selection | Structured question tool (e.g. Claude Code's `AskUserQuestion`) | Numbered options as plain text; wait for the user's reply |
 | **Platform access** — read and write GitHub: PRs, checks, reviews, merges, comments, upstream releases, upstream files at a tag, upstream tree listings, upstream tag compares | A connector or MCP server for GitHub, only when it provably covers every operation the run can use (see [Platform Access](#platform-access)) | The `gh` CLI; with neither, ask the user how to reach GitHub, or stop and merge nothing when no user is reachable |
 | **Package registry read** — read a version's publish time from the public npm registry or PyPI, or the versions in the Node.js release index (Phase 1 step 3) | The ecosystem CLI (e.g. `npm view {package} time --json`) | An HTTPS read of the registry's JSON API or the index with `curl` and `jq` ([references/release-age.md](references/release-age.md)); with neither, or no network access to the registry, the member has no registry time and is aged by the upstream release date or the lower bound, losing the registry's precision: an upstream release can predate the upload by the build's duration (release-age.md "Known limits"). A floating `node-version` whose index cannot be read has an unknown age, and its PR defers |
+| **Separate agent instance** — run one repository's whole workflow in a fresh context (multi-repository runs) | Subagent dispatch (e.g. Claude Code's Task tool), one per repository, all at once | Run the repositories one after another in the current context; nothing is lost but time |
+| **Continue an agent instance** — resume a dispatched instance with a message, its context intact (relaying a question's answer) | Messaging a running subagent (e.g. Claude Code's `SendMessage`) | Dispatched instances run as an unattended launch: questions resolve by their unattended rules (defer, merge nothing) and the parent lists them in the report for the next attended run |
 | **Chart rendering** — read a published chart's metadata and render it at a version with given values (Phase 2 step 6) | Chart tooling with network access to the chart repository (e.g. `helm show chart`, `helm template`) | Read the chart's templates and values at the source tag (platform access); a default that only a render or the published chart would settle counts as unresolved, so the change is classed disruptive |
 
-(User choice is used by interactive mode's gates, by autonomous mode's escalation path — a failed revert always comes back to the human — by the Phase 0 knowledge-gap question when a high-blast-radius target has no human-defined verification checks, and by the Phase 0 remediation question when a precondition probe fails on an expired credential — which the user, never the agent, renews. Platform access is resolved once, in Phase 0, and judged strictly: an operation a connector cannot be shown to perform exactly as the reference command does sends the whole run to the CLI.)
+(In a multi-repository run, an instance never uses user choice itself: its questions reach the user through the parent — [references/targets.md](references/targets.md) M-3. User choice is used by interactive mode's gates, by autonomous mode's escalation path — a failed revert always comes back to the human — by the Phase 0 knowledge-gap question when a high-blast-radius target has no human-defined verification checks, and by the Phase 0 remediation question when a precondition probe fails on an expired credential — which the user, never the agent, renews. Platform access is resolved once, in Phase 0, and judged strictly: an operation a connector cannot be shown to perform exactly as the reference command does sends the whole run to the CLI.)
 
 ## Workflow
+
+### Targets and Selection
+
+Resolve these before Phase 0. See [references/targets.md](references/targets.md) for the full rules.
+
+1. **Target** — nothing named → the current directory's repository; a repository; one or more PRs; or an owner (organization or user account). One repository → a single-repository run, Phases 0–3 below. More than one → a multi-repository run. A name that could be a repository or an owner is not guessed.
+2. **Selected set** — review-requested (GitHub's `review-requested:@me`, which includes team requests) for every target except named PRs, which are selected as named. A selected PR still has to be a Renovate PR and pass every gate. Never approve, merge, update, close, or comment on a PR outside the set: a superseded sibling outside it is reported, not closed, and an unselected prerequisite holds the selected PR behind it. An empty set is reported, never widened.
+3. **Local checkout** — the current directory when it is the target repository, otherwise a fresh clone in a new temporary directory per repository.
+4. **Multi-repository run** — enumerate (an owner: the review-request search, its completeness reported), dispatch one separate agent instance per repository, in parallel, uncapped and unordered, each running Phases 0–3 on its own selected set with the run's access method; relay each instance's questions to the user one at a time and continue that instance with the answer; aggregate the reports, stopped lines first. An instance that returns no report has an unknown outcome and is never re-dispatched automatically. Serial discipline holds within each repository, not across them — a known limit the user chose.
 
 ### Phase 0: Discover repo conventions & verify autonomous preconditions (once per run)
 
@@ -77,7 +89,7 @@ Establish how this repo ships code, and whether autonomous mode is safe here, be
 The platform guide's commands specify each operation; they do not fix the tool that performs it. In autonomous mode this skill merges and reverts without per-PR approval, so its coverage test is strict and its failure direction is always the CLI, never a connector. Resolve the method **once per run**, after confirming the repo is on GitHub and before the first GitHub operation, taking the first that applies:
 
 1. **Named by the user** in this conversation → use it, if it covers every operation the run can use (coverage is defined in the platform guide's Access Method section). A named method that does not is never used for part of the run: name the operations it does not cover and ask whether to use the CLI instead or stop; with no user reachable, stop and report, merging nothing.
-2. **Connector** — a connector or MCP server for GitHub is available in this session and covers every operation the run can use → use it. Coverage is judged against autonomous mode's whole run — triage, release-age reads, upstream file reads, tree listings and tag compares, approval, merge, branch update, the revert PR, comments — since both modes share every phase. Whatever cannot be confirmed from the connector's own tool descriptions and schemas is not covered, and **one uncovered operation sends the whole run to the CLI**: operations are never split between methods. A connector counts as available only when its tools can be called now; one listed as needing authentication is not, and the run does not ask the user to authenticate it.
+2. **Connector** — a connector or MCP server for GitHub is available in this session and covers every operation the run can use → use it. Coverage is judged against autonomous mode's whole run — the review-request search, triage, release-age reads, upstream file reads, tree listings and tag compares, approval, merge, branch update, the revert PR, comments — since both modes share every phase. Whatever cannot be confirmed from the connector's own tool descriptions and schemas is not covered, and **one uncovered operation sends the whole run to the CLI**: operations are never split between methods. A connector counts as available only when its tools can be called now; one listed as needing authentication is not, and the run does not ask the user to authenticate it.
 3. **CLI** — `gh` is installed and authenticated → use the guide's commands.
 4. **Neither** → ask the user how to reach GitHub; with no user reachable, stop and report, merging nothing.
 
@@ -87,7 +99,7 @@ The platform guide's commands specify each operation; they do not fix the tool t
 - **From the merge call onward** the merge may have landed — a call that timed out can still complete on the server after the client gave up — so a method failure is never a deferral. If the merge's outcome cannot be confirmed from platform state, do not infer it from git: an unmoved default branch read just afterwards proves nothing. Nor does an open PR: platform state can confirm that a merge landed, but only an explicit refusal shows that it did not, so a call that ended any other way and a PR still reading open is unconfirmed too ([references/workflow.md](references/workflow.md) 2-6). **Stop the line and escalate to the human** as a *merge outcome unconfirmed*, naming the PR and the default branch's head as git reports it (or that git could not be read either); no re-attempt and no revert, since no revert target is established. Once the merge is confirmed, verification that cannot be completed is a **verification failure** (auto-revert, [references/verification.md](references/verification.md)), and a revert PR the method cannot create, approve or merge is a **revert failure**, which escalates to the human immediately.
 - A documentation comment that cannot be posted is reported, not retried through another method.
 
-Name the method in the Phase 3 report.
+Name the method in the Phase 3 report. In a multi-repository run the parent resolves the method once and every instance uses it; an instance that cannot is stopped before its first GitHub operation and merges nothing ([references/targets.md](references/targets.md) M-2).
 
 **Known limits.** The guide's CLI commands are the verified path. A connector's coverage is judged from its own tool descriptions and schemas — the runtime behaviour behind them is not observed — and no connector path has been exercised by this skill's evaluations. The one GitHub MCP server desk-checked against the Access Method test, from its README, fails it on the CI gate ([references/eval-cases.md](references/eval-cases.md) Case 13), so in practice the CLI is expected to remain the path.
 
@@ -97,7 +109,7 @@ Find the Renovate PRs, understand how they relate, and propose an order. See [re
 
 **Summary:**
 
-1. Detect Renovate PRs via **composite signals** (author + branch prefix + PR-body signature + labels), refined against the Renovate config from Phase 0. Assume multiple Renovate instances (Cloud + self-hosted) may coexist; dedupe. Other bots' PRs (e.g. Dependabot) are out of scope — note them in the report, do not process them.
+1. Detect Renovate PRs among all open PRs via **composite signals** (author + branch prefix + PR-body signature + labels), refined against the Renovate config from Phase 0. Assume multiple Renovate instances (Cloud + self-hosted) may coexist; dedupe. Other bots' PRs (e.g. Dependabot) are out of scope — note them in the report, do not process them. Then keep only the **selected** candidates for the steps below; the rest are context for step 2.
 2. Detect inter-PR **conflicts** (same file/line — e.g. a digest-bump PR superseded by a major-bump PR) and **compatibility/ordering** constraints (e.g. a Kubernetes ↔ CNI support matrix; a CRD before its controller).
 3. **Release-age gate** — enforce the configured `minimumReleaseAge` for every member of every PR, including updates Renovate could not age because the datasource gives no timestamp (e.g. GHCR, raised with `timestamp-optional`). Age = the larger of a source age and the lower bound from Renovate's own newest commit, where the source age is the sanity-checked registry publish time of the exact target version (npm, PyPI) or, only when the registry gives none, the sanity-checked upstream release date. A **floating** member — a value the tool resolves at run time to the newest match, such as `node-version: "26"` or a major-only tag — is aged instead by the newest release it can resolve to now, read from the tool's own source; the lower bound does not bound it, and a tool with no confirmed read leaves its age unknown, which defers the PR to the human queue. Renovate's `renovate/stability-days` status is not evidence of age; a grouped PR is as young as its youngest member. Too young → **cooldown wait**: not merged, not sent to the human queue, reported with its eligible date. See [references/release-age.md](references/release-age.md).
 4. Propose a processing order, **low → high blast radius**. The blast radius is a **provisional estimate**, made before any release notes are read: it sets the order only, and Phase 2 step 6 recomputes the disruption class.
@@ -134,12 +146,15 @@ For each PR, in order, run the full sequence below before starting the next. See
 
 ### Phase 3: Wrap-up
 
-1. Report what was **merged & verified / merged, not yet published (gated publish, with the remaining release steps and who runs them) / reverted (with cause) / waiting on the cooldown (with eligible date) / deferred to the human queue (with reasons) / merge outcome unconfirmed (the PR and why the line stopped) / followed up**, and the **platform access method** the run used.
+1. Report the **selection** (target, account, context-only and out-of-scope counts, and PRs approved but not merged — they leave the next run's review-requested set) and what was **merged & verified / merged, not yet published (gated publish, with the remaining release steps and who runs them) / reverted (with cause) / waiting on the cooldown (with eligible date) / deferred to the human queue (with reasons) / merge outcome unconfirmed (the PR and why the line stopped) / followed up**, and the **platform access method** the run used.
 2. Surface (do not auto-fix) any **doc drift** or **repeatedly-manual** packages noticed during the run. For a package that needed the same manual apply again, **propose** adding a Renovate `prBodyNotes` entry, with its condition stated, so the note appears automatically on every future PR for it and the next run's classification reads it. A PR held by the lower bound for a **second consecutive run** gets a proposal to reconfigure its slow-to-age member, and a floating member whose newest resolution was younger than the cooldown gets a proposal to pin its value.
 3. **Grouping proposals** — when the run shows a Renovate group should be split (one member blocked or reverted the rest, members need different handling, an ordering edge inside the group, a member that never ages) or separate PRs should be combined (lockstep updates, one upstream release split across PRs), **propose** the `packageRules` change with the run's evidence, the config's own stated rationale addressed, and the cost. Evidence from this run or the group's recorded history only — never speculation. See workflow.md 3-3.
 
+In a multi-repository run, the parent aggregates the instances' reports: stopped lines first, one summary row per repository, each instance's report unedited, then the enumeration's completeness and any question it could not relay ([references/targets.md](references/targets.md) M-4).
+
 ## References
 
+- [references/targets.md](references/targets.md) — Target forms, the selected set (review-requested or named PRs), local checkouts, and multi-repository runs: enumeration, per-repository dispatch, question relay, report aggregation, known limits.
 - [references/workflow.md](references/workflow.md) — Phase 0–3 detailed procedure: mode selection, precondition verification, serial loop, go/defer decisions, A/B/C routing, main-divergence, PR documentation.
 - [references/release-age.md](references/release-age.md) — Release-age gate: cooldown value resolution, registry publish times and upstream release dates with sanity check, Renovate-commit lower bound, floating values, cooldown wait, repeated-wait record, known limits.
 - [references/detection.md](references/detection.md) — Composite Renovate-PR detection: signals, config cross-check, multi-instance dedupe, ambiguity handling.
