@@ -612,7 +612,11 @@ def check_shared_references(root: Path) -> list[str]:
         shared = plugin / SHARED_DIR
         manifest = shared / SHARED_MANIFEST
         where = rel(root, manifest)
-        present = sorted(f.name for f in shared.iterdir() if f.is_file() and f.name != SHARED_MANIFEST and not f.name.startswith(".")) if shared.is_dir() else []
+        present = []
+        if shared.is_dir():
+            # Dotfiles (e.g. .DS_Store) are never shared files.
+            present = sorted(f.name for f in shared.iterdir()
+                             if f.is_file() and f.name != SHARED_MANIFEST and not f.name.startswith("."))
         declared: dict = {}
         if manifest.is_file():
             try:
@@ -629,7 +633,7 @@ def check_shared_references(root: Path) -> list[str]:
             if name not in declared:
                 errors.append(f"{rel(root, shared / name)}: shared file not declared in {where}")
         for name, skills in declared.items():
-            if not name or "/" in name or "\\" in name or name.startswith("."):
+            if not name or "/" in name or "\\" in name or name.startswith(".") or name == SHARED_MANIFEST:
                 errors.append(f"{where}: {name!r} is not a plain file name")
                 continue
             if not (isinstance(skills, list) and skills and all(isinstance(s, str) and s for s in skills)):
@@ -646,7 +650,10 @@ def check_shared_references(root: Path) -> list[str]:
                     errors.append(f"{where}: {name!r} is declared for {skill!r}, which is not a skill directory")
                     continue
                 copy = skill_dir / "references" / name
-                if not copy.is_file():
+                if copy.is_symlink():
+                    # A skill directory must be self-contained; a link breaks when it is installed alone.
+                    errors.append(f"{rel(root, copy)}: is a symlink; carry a real copy of {rel(root, canonical)}")
+                elif not copy.is_file():
                     errors.append(f"{rel(root, copy)}: missing copy of {rel(root, canonical)}")
                 elif copy.read_bytes() != want:
                     errors.append(f"{rel(root, copy)}: differs from {rel(root, canonical)}; copy the canonical file over it")
@@ -796,6 +803,14 @@ VIOLATIONS = {
     "shared file not declared": ("shared-references", lambda r: (r / "plugins/p/shared/extra.md").write_text("# Extra\n", encoding="utf-8")),
     "shared file declared for a missing skill": ("shared-references", lambda r: _manifest(r, {"shared-note.md": ["demo", "gone"]})),
     "shared manifest malformed": ("shared-references", lambda r: _manifest(r, ["shared-note.md"])),
+    "shared manifest is not valid JSON": ("shared-references", lambda r: (r / "plugins/p/shared" / SHARED_MANIFEST).write_text("{", encoding="utf-8")),
+    "shared file name '..'": ("shared-references", lambda r: _manifest(r, {"shared-note.md": ["demo"], "..": ["demo"]})),
+    "shared file name with a slash": ("shared-references", lambda r: _manifest(r, {"shared-note.md": ["demo"], "a/b": ["demo"]})),
+    "shared file name starting with a dot": ("shared-references", lambda r: _manifest(r, {"shared-note.md": ["demo"], ".x": ["demo"]})),
+    "manifest declared as a shared file": ("shared-references", lambda r: _manifest(r, {"shared-note.md": ["demo"], SHARED_MANIFEST: ["demo"]})),
+    "shared file with an empty skill list": ("shared-references", lambda r: _manifest(r, {"shared-note.md": []})),
+    "shared file declared for a path-like skill name": ("shared-references", lambda r: _manifest(r, {"shared-note.md": ["../demo"]})),
+    "shared copy is a symlink": ("shared-references", lambda r: _symlink_copy(r)),
 }
 
 
@@ -816,6 +831,12 @@ def _guide(root: Path, old: str, new: str) -> None:
 def _evals(root: Path, ids=(1, 2), names=("a", "b"), skill="demo") -> None:
     data = {"skill_name": skill, "evals": [{"id": i, "name": n, "prompt": "p"} for i, n in zip(ids, names)]}
     (root / "S/evals/evals.json").write_text(json.dumps(data), encoding="utf-8")
+
+
+def _symlink_copy(root: Path) -> None:
+    copy = root / "S/references/shared-note.md"
+    copy.unlink()
+    copy.symlink_to(root / "plugins/p/shared/shared-note.md")
 
 
 def _manifest(root: Path, files) -> None:
