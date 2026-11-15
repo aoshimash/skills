@@ -32,7 +32,7 @@ The two modes share every phase below; they differ only at the marked decision p
 
 ## The post-merge safety net
 
-What happens around and after each merge — the deploy mechanism, drift, the verification plan and its preconditions, the A/B/C taxonomy, the merge call's result, verification, revert and escalation — is in [post-merge-safety-net.md](post-merge-safety-net.md), a file shared byte-for-byte with other skills. It links nothing outside itself and names **host-skill hooks** instead; in this skill they are:
+What happens around and after each merge — the deploy mechanism, drift, the verification plan and its preconditions, the A/B/C taxonomy, the merge call's result, verification, revert and escalation — is in [post-merge-safety-net.md](post-merge-safety-net.md), a file shared byte-for-byte with any other skill that carries it. It links nothing outside itself and names **host-skill hooks** instead; in this skill they are:
 
 | Hook | Here |
 |---|---|
