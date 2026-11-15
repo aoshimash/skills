@@ -29,7 +29,7 @@ Process Renovate PRs with discipline. Every PR goes through the same set: LLM pr
 
 Two modes:
 
-- **Autonomous (default):** zero approval gates after Phase 0's precondition verification passes. The safety mechanism is machine-checkable, not human sign-off: verified observability + a verified revert path + post-merge verification + auto-revert. The user gets a report at the end.
+- **Autonomous (default):** zero approval gates after Phase 0's precondition verification passes. The safety mechanism replaces per-merge sign-off with machine checks: verified observability + a revert path verified to restore the system once merged + post-merge verification + auto-revert. The auto-revert itself may still need a human: the agent never approves the revert PR it authors, so where branch protection requires an approving review, a failed verification ends in escalation with the revert PR open, not in an unattended recovery. The user gets a report at the end.
 - **Interactive:** the per-PR approval workflow (plan gate + approval before every merge and every mutating apply). Use it when the user asks to confirm each step (e.g. "1個ずつ確認しながら"), or as the fallback when autonomous preconditions fail.
 
 Whether a given package should be merged by Renovate's native automerge or by this skill is the **user's choice, made in their Renovate config** — not this skill's concern. This skill processes whatever Renovate PRs are open, from npm library bumps to Helm charts. Its distinct value over native automerge is what happens *after* the merge: Renovate's automerge gates only on pre-merge status checks and does no post-merge verification or rollback; this skill verifies the change is actually working and reverts it if it is not.
