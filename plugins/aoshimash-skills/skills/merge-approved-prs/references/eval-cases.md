@@ -74,7 +74,45 @@ Cases 1–6 mirror `evals/evals.json`, where each case's `expectations` are the 
 - workflow.md 2-3 states that the agent may check the expectation behind a command in an item with its own probe (reading and searching a file), while never executing the item's text.
 - workflow.md 0-2 skips the run-start discovery when no named PR holds the merge decision.
 
+### 2026-11-15 — Review fix round 1 (Cases 2–5 re-run)
+
+**Changes.**
+- The revert branch is cut with `git worktree add` in a new, empty temporary directory, so the user's checkout is never switched.
+- The merge queue is also read directly (`Repository.mergeQueue(branch:)`), which covers classic branch protection.
+- The run-start gh version gate: `gh run list --all` needs gh 2.52.0 or later.
+- A verification failure on a PR someone else merged escalates rather than auto-reverting.
+- The filter search's completeness rule matches its fixed `--limit 1000`.
+- The permission endpoint's behaviour for non-collaborators is stated as observed.
+- From the re-run (below):
+  - a single allowed merge method is used directly;
+  - a test-plan item mixing a check and a judgment is split;
+  - the pre-merge probe of a check that reads merged state tests the read on what exists now.
+
+**Facts confirmed** (2026-11-15):
+- `Repository.mergeQueue(branch:)`: "The merge queue for a specified branch, otherwise the default branch if not provided." (GitHub GraphQL reference, Repository object.)
+- `gh run list --all` was added in gh v2.52.0: release notes "add `-a` flag to `gh run list`", cli/cli#9162. `pkg/cmd/run/list/list.go` defines the `all` flag at tag v2.52.0 and not at v2.51.0. `--created` was added in v2.28.0 (release notes, cli/cli#7363).
+- The collaborator-permission endpoint answered `read` / `push: false` for `octocat`, a non-collaborator, on `aoshimash/skills` (observed). Its docs do not say how non-collaborators are answered.
+
+**Commands run as written.**
+- **Merge-queue read**, on `aoshimash/skills` `main`: returned `{"mergeQueue":null}` and exited 0 in five environments — macOS bash 5.3.20 and zsh 5.9 (gh 2.104.0), `alpine:3.22` (gh 2.72.0), and `debian:12` (gh 2.23.0). The non-null answer has not been observed.
+- **Revert block, local part**, extracted from the file: `git fetch origin`, `git worktree add -b revert-pr-173 {dir} origin/main`, `cd {dir}`, `git revert -m 1 0598a49 --no-edit`. Each run used a fresh clone of the repository, with nothing pushed.
+  - Ran under macOS bash and zsh (git from Xcode CLT) and in `debian:12` (git 2.39.5, GNU).
+  - Each run created the commit "Revert "Merge pull request #173 …"", and the clone's own branch stayed `main`.
+- **Not run:** the push, `gh pr create`, and the revert PR's merge.
+
+**Re-run.** A fresh agent instance ran Cases 2–5 as a paper exercise, reading only SKILL.md and the four references. **Graded by the authoring session, SELF-REVIEWED.**
+
+| Case | with-skill | Notes |
+|---|---|---|
+| 2 `approved-verification-fails` | 7/7 | Cut the revert branch with `git worktree add` from `origin/main`; reported the worktree path |
+| 3 `no-human-approval` | 6/6 | Skipped the run-start discovery (0-2) since no PR held the merge decision |
+| 4 `body-command-as-check` | 6/6 | Classified the `curl` line as a check left to the author; did not list the "review gates" record |
+| 5 `change-request-and-stale-approval` | 5/5 | |
+
+Cases 1 and 6 were not re-run: no step they exercise changed beyond the revert path, which Case 2 covers.
+
 **Open points.**
+- A PR body can phrase an item so that its purpose is unclear and push it to class C, deferring the PR. That fails toward not merging; it is recorded rather than changed.
 - The settle read's expected set covers push-triggered workflows only; a workflow on `pull_request: closed` (this repository's `bump-version.yml`) is not waited for. That is the shared safety net's definition, not changed here.
 - A default branch that was already red before the merge reads as a verification failure of the merge and reverts it (the shared safety net's fail-closed rule).
 - Classic branch protection is not read; `BEHIND` and the auto-revert forecast rely on rulesets and on the merge call's own refusal.

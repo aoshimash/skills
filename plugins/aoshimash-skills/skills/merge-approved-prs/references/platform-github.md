@@ -31,7 +31,7 @@ Resolved once per run as SKILL.md "Platform Access" describes: a connector for G
   - **The reviews** — every review, every page, each with its state, its reviewer's login and account type, and its `commit_id`. A tool that returns only the latest review, only a summary decision, or no commit cannot apply the merge decision ([targets.md](targets.md) "The merge decision").
   - **The reviewer's permission** — the collaborator-permission endpoint's answer for one login. A collaborator list or the review's author-association label does not cover it.
   - **The CI rollup** — every check run and every commit status on the head, each with its own state.
-  - **The rules on the default branch**, every page — a short list hides a merge queue.
+  - **The rules on the default branch**, every page — a short list hides a merge queue — and the repository's merge-queue read for the default branch.
   - **The gated-publish reads** — complete workflow-file and tree listings with a completeness signal, the PR's complete changed-file list with its count, and workflow runs on a commit and for one workflow across every branch, tag and event.
   - **The merge** — taking the repository's method **and** an expected head commit that makes the platform refuse the merge when the head moved.
   - **Writes** — merging, creating and merging the revert PR, commenting — each covered by a tool that performs that write and reports whether it succeeded. No operation in this file approves a review, and none may be added.
@@ -99,7 +99,7 @@ gh api "repos/{owner}/{repo}/collaborators/{login}/permission" \
   --jq '{permission, push: .user.permissions.push}'
 ```
 
-`push` true → the reviewer has write access. `push` false, or `permission` `read` or `none` → the approval does not qualify. The endpoint answers for any GitHub account, collaborator or not, so only the returned value counts; a read that fails is an unknown, and the PR defers.
+`push` true → the reviewer has write access. `push` false, or `permission` `read` or `none` → the approval does not qualify. A successful call is not evidence of access: observed 2026-11-15, the endpoint answered `read` / `push: false` for a non-collaborator (`octocat` on `aoshimash/skills`), so only the returned value counts; a read that fails is an unknown, and the PR defers.
 
 ## Read a PR
 
@@ -162,6 +162,19 @@ gh api --paginate "repos/{owner}/{repo}/rules/branches/{default_branch}?per_page
 ```
 
 `--paginate` reads every page. An empty result means no ruleset applies; it does not show classic branch protection (workflow.md 0-5). Read `type: merge_queue`, and for `type: pull_request` the `parameters.required_approving_review_count`, `parameters.require_code_owner_review`, and `parameters.allowed_merge_methods`.
+
+## Merge queue on the default branch
+
+Rulesets are not the only place a merge queue is required: classic branch protection has its own "Require merge queue" setting, which the rules read above does not show. Read the queue itself:
+
+```bash
+gh api graphql -F owner={owner} -F repo={repo} -F branch={default_branch} -f query='
+query($owner: String!, $repo: String!, $branch: String!) {
+  repository(owner: $owner, name: $repo) { mergeQueue(branch: $branch) { url } }
+}' --jq '.data.repository'
+```
+
+`Repository.mergeQueue(branch:)` is "The merge queue for a specified branch" (GitHub GraphQL reference, Repository). `null` → no merge queue (observed 2026-11-15 on `aoshimash/skills`, which has none); an object → the branch has one, and every PR defers (workflow.md 0-5). A read that fails is an unknown, and every PR defers. **Known limit:** the non-null answer has not been observed by this skill's evaluations; the `merge_queue` rule read above is the second signal, and either one defers.
 
 ## Workflow files (gated-publish recognition)
 
@@ -227,7 +240,7 @@ gh run list -R {owner}/{repo} --all --workflow {publishing_workflow_file} --crea
   --json databaseId,event,status,createdAt,headBranch,url
 ```
 
-No rows from every one → the check passes; any row fails it. A read that fails is verification that cannot be completed.
+No rows from every one → the check passes; any row fails it. A read that fails is verification that cannot be completed. `--all` needs gh 2.52.0 or later (added in gh v2.52.0, cli/cli#9162; `--created` dates from v2.28.0). An older gh rejects the flag (`unknown flag: --all`, observed with gh 2.23.0), so the read fails: run start records the gh version and treats a gated-publish target as unobservable before any merge (workflow.md 0-1), and a read that fails anyway after a merge fails closed as above.
 
 ## Merge
 
@@ -251,11 +264,12 @@ gh pr view {pr} -R {owner}/{repo} --json state,mergeCommit,mergedAt --jq '{state
 
 ## Create and merge a revert PR
 
-Used by the safety net's auto-revert procedure, in the run's checkout:
+Used by the safety net's auto-revert procedure. The revert branch is cut in its own worktree in a new, empty temporary directory, so the checkout's branch and any uncommitted work in it are untouched (the checkout is the user's own when the current directory is the target repository):
 
 ```bash
 git fetch origin
-git switch -c revert-pr-{pr} origin/{default_branch}
+git worktree add -b revert-pr-{pr} {revert_worktree_dir} origin/{default_branch}
+cd {revert_worktree_dir}
 
 # Merge-commit method: revert the merge commit against its first parent
 git revert -m 1 {merge_commit_sha} --no-edit

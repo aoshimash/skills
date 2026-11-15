@@ -53,11 +53,11 @@ What happens around and after each merge — the deploy mechanism, drift, the ve
 
 ## Phase 0: Run start
 
-Once per repository, before any PR is touched. Work in a local checkout: the current directory when it is a clone of the target repository, otherwise a fresh clone in a new, empty temporary directory. Never change the user's working tree beyond fetching; a revert branch is created from the remote default branch (platform guide: revert PR).
+Once per repository, before any PR is touched. Work in a local checkout: the current directory when it is a clone of the target repository, otherwise a fresh clone in a new, empty temporary directory. Never change the user's working tree beyond fetching: a revert branch is cut in a separate worktree in a new, empty temporary directory, from the remote default branch (platform guide: revert PR), never by switching branches in the checkout. Report that worktree's path when a revert is made.
 
 ### 0-1: GitHub and platform access
 
-Confirm the repository is on GitHub (a `github.com` remote, or, with the CLI, `gh repo view` succeeds); on any other host, say so and stop. Resolve the platform access method (SKILL.md "Platform Access").
+Confirm the repository is on GitHub (a `github.com` remote, or, with the CLI, `gh repo view` succeeds); on any other host, say so and stop. Resolve the platform access method (SKILL.md "Platform Access"). With the CLI, record `gh --version`: below 2.52.0 the gated-publish publish-run read cannot run ([platform-github.md](platform-github.md) "Workflow runs after a merge"), so for a gated-publish target its observability precondition fails at 0-4 — before any merge — rather than after one.
 
 ### 0-2: Resolve the named set
 
@@ -65,7 +65,7 @@ Follow [targets.md](targets.md) "The named set": the PRs named by reference, or 
 
 ### 0-3: Deploy mechanism, merge method, and drift
 
-Run [post-merge-safety-net.md](post-merge-safety-net.md) "Deploy mechanism and merge method" and "Start-of-run drift". For the merge method, read which methods the repository allows ([platform-github.md](platform-github.md) "Allowed merge methods") and, among them, use the one the docs name; when the docs are silent, the one recent merged PRs used; when that cannot be told either, autonomous mode uses none and defers every PR with that reason, and interactive mode asks. Drift: autonomous defers the named PRs touching the drifted component; interactive asks whether to resolve it first.
+Run [post-merge-safety-net.md](post-merge-safety-net.md) "Deploy mechanism and merge method" and "Start-of-run drift". For the merge method, read which methods the repository allows ([platform-github.md](platform-github.md) "Allowed merge methods"); when exactly one is allowed, use it. Otherwise, among them, use the one the docs name; when the docs are silent, the one recent merged PRs used; when that cannot be told either, autonomous mode uses none and defers every PR with that reason, and interactive mode asks. Drift: autonomous defers the named PRs touching the drifted component; interactive asks whether to resolve it first.
 
 ### 0-4: Verification plan and preconditions
 
@@ -75,7 +75,7 @@ Autonomous mode only. Run [post-merge-safety-net.md](post-merge-safety-net.md) "
 
 Read the default branch's active rules ([platform-github.md](platform-github.md) "List the rules on the default branch"). Two things come from it:
 
-- **A merge queue** — a `merge_queue` rule means a merge call would enqueue a PR rather than merge it, outside the one-in-flight loop: every PR defers with that reason (2-5 condition 7).
+- **A merge queue** — a `merge_queue` rule, or a merge queue the repository reports for the default branch ([platform-github.md](platform-github.md) "Merge queue on the default branch"), which also covers classic branch protection's "Require merge queue", means a merge call would enqueue a PR rather than merge it, outside the one-in-flight loop: every PR defers with that reason (2-5 condition 7). A read that fails is an unknown: every PR defers.
 - **The auto-revert forecast** — a `pull_request` rule with `required_approving_review_count` above 0, or `require_code_owner_review` true, means a revert PR the agent authors cannot merge without a human: a failed verification will end in escalation with the revert PR open, not in an unattended recovery. Otherwise the forecast is that a revert lands under the rules this read shows.
 
 The forecast is information for the plan report, never a gate, and never a reason to approve anything. This read does not show classic branch protection: on a repository using it, the forecast says the protection is unread, and 2-9 learns the truth from the revert's own merge call.
@@ -101,7 +101,7 @@ One PR at a time, steps in order. "Stop the line" below means: start no further 
 
 Re-read the PR's selection fields, reviews, and head commit, and decide as [targets.md](targets.md) "The merge decision" says. Re-run this read immediately before the merge call (2-6).
 
-- **Merged by someone else since run start** → record it, and run 2-9's verification on it: the change is live either way. Do not merge or revert anything for it beyond what verification requires.
+- **Merged by someone else since run start** → record it, and run 2-9's verification on it: the change is live either way. If that verification fails, do **not** auto-revert: the merge was a person's act outside the run, so the run does not undo it on its own authority. Stop the line and escalate with the evidence, proposing a revert PR for the human to decide (interactive mode does the same). Report it under the escalation, not under reverted.
 - **Closed, or converted to draft** → drop it with the reason; next PR.
 - **No qualifying approval, a change request outstanding, or the repository's review requirement unmet** → defer with the reason targets.md names; next PR. Never approve it, and never treat the user's "just merge it" as an approval: the PR waits for a reviewer other than the agent's account, or the user merges it themselves.
 
@@ -125,7 +125,7 @@ This skill's per-PR plan sources are the PR's **test plan** — the body's secti
 
 An item that cannot be turned into such a check is **left to the author**: it does not block the merge, and it is listed in the report's follow-ups and, after a merge, in the PR comment (2-8), so the author knows which of their checks no one ran. An item that asks for **work** rather than a check — a step to run before or after the merge — is not a check either; 2-4 classifies it.
 
-Probe every check this step added, now, as the observability precondition probes the rest. A probe that fails is not offered the credential remediation (that is run start's alone): the PR defers (2-5 condition 6).
+An item that mixes a checkable expectation with a judgment is split: the checkable part becomes a check, the judgment is left to the author. Probe every check this step added, now, as the observability precondition probes the rest — for a check that reads the merged state (a file at the merge commit, a run on it), the probe confirms the read itself works on what exists now (the same file at the PR's head, the same run list on the default branch); the expectation is judged after the merge. A probe that fails is not offered the credential remediation (that is run start's alone): the PR defers (2-5 condition 6).
 
 ### 2-4: Classify pre/post work
 

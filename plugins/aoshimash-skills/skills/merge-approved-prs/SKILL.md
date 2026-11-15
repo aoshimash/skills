@@ -60,7 +60,7 @@ The platform guide's commands specify each operation; they do not fix the tool t
 - **Before the merge call** — the approval read, the CI gate, the rules read, a probe — the PR is not merged: autonomous defers it, interactive surfaces it.
 - **From the merge call onward** the merge may have landed, so a method failure is never a deferral: a merge whose outcome platform state cannot confirm stops the line as **merge outcome unconfirmed** ([references/post-merge-safety-net.md](references/post-merge-safety-net.md) "Pre-merge steps and the merge call's result"). Once the merge is confirmed, verification that cannot be completed is a verification failure, and a revert PR the method cannot create or merge is a revert failure.
 
-Name the method in the report. **Known limit:** the guide's CLI commands are the verified path; no connector path has been exercised by this skill's evaluations.
+Name the method in the report. **Known limits:** the guide's CLI commands are the verified path; no connector path has been exercised by this skill's evaluations. The gated-publish publish-run read needs gh 2.52.0 or later (`gh run list --all`); with an older gh that target is unobservable, so it fails closed at run start instead of merging.
 
 ## Workflow
 
@@ -98,7 +98,7 @@ Stopped line or escalation first, then each named PR under the safety net's repo
 ## Edge Cases
 
 - **The head moved after the approval** → the approval does not stand on the current head: defer, with the commits added since. The skill never updates the branch itself, since that would move the head past the approval.
-- **The base requires a merge queue** → defer: a merge call would enqueue the PR and merge it later, outside the one-in-flight loop.
+- **The base requires a merge queue** — from a ruleset or classic branch protection, read directly at run start → defer: a merge call would enqueue the PR and merge it later, outside the one-in-flight loop.
 - **Someone else merged the PR mid-loop** → record it and still verify it: the change is live either way.
 - **The user asks the skill to approve a PR** → decline; approving is the reviewer's act. The PR defers until a human reviewer approves it.
 
