@@ -223,7 +223,7 @@ Decision:
 
 ## Workflow files (gated-publish recognition)
 
-Recognition of an artifact whose publish is gated behind a separate trigger ([verification.md](verification.md) "Gated publish", condition (1)) reads **every** workflow file on the default branch, not just the release workflow. List them:
+Recognition of an artifact whose publish is gated behind a separate trigger ([post-merge-safety-net.md](post-merge-safety-net.md) "Gated publish", condition (1)) reads **every** workflow file on the default branch, not just the release workflow. List them:
 
 ```bash
 gh api "repos/{owner}/{repo}/git/trees/{default_branch}:.github/workflows" \
@@ -247,7 +247,7 @@ A read that fails is verification that cannot be completed (SKILL.md "Platform A
 
 ## CI and build configuration outside Actions (gated-publish recognition)
 
-Recognition's condition (3) ([verification.md](verification.md) "Gated publish") looks for CI or build configuration other than GitHub Actions in the default branch's whole tree. One recursive listing returns the root entries and every path matching a common CI or build file anywhere in the tree:
+Recognition's condition (3) ([post-merge-safety-net.md](post-merge-safety-net.md) "Gated publish") looks for CI or build configuration other than GitHub Actions in the default branch's whole tree. One recursive listing returns the root entries and every path matching a common CI or build file anywhere in the tree:
 
 ```bash
 gh api "repos/{owner}/{repo}/git/trees/{default_branch}?recursive=1" \
@@ -255,11 +255,11 @@ gh api "repos/{owner}/{repo}/git/trees/{default_branch}?recursive=1" \
          ci: [.tree[].path | select(test("(^|/)(\\.gitlab-ci\\.ya?ml|Jenkinsfile[^/]*|cloudbuild[^/]*\\.(ya?ml|json)|\\.travis\\.ya?ml|\\.drone\\.ya?ml|azure-pipelines[^/]*\\.ya?ml|bitbucket-pipelines\\.ya?ml|buildspec[^/]*\\.ya?ml|\\.?appveyor\\.ya?ml)$|(^|/)\\.(circleci|buildkite|tekton|woodpecker)(/|$)"))]}'
 ```
 
-`truncated: false` on a read that succeeded → the listing is complete. `truncated: true` (GitHub caps a recursive tree read, so a very large repository returns it) or a read that fails → the listing may be incomplete, and the row does not apply. Read every path in `ci` at the same ref with the contents read above (`repos/{owner}/{repo}/contents/{path}?ref={default_branch}`); a directory entry such as `.circleci` stands for the files listed under it. Then scan `root` for configuration of any CI or build system the filter does not name — most read their configuration from the root. The filter matches common file names, not every one: below the root, a system it does not name, or a named one kept under another name or path (`build/azure-pipelines/*.yml`), is not caught (verification.md, known limit).
+`truncated: false` on a read that succeeded → the listing is complete. `truncated: true` (GitHub caps a recursive tree read, so a very large repository returns it) or a read that fails → the listing may be incomplete, and the row does not apply. Read every path in `ci` at the same ref with the contents read above (`repos/{owner}/{repo}/contents/{path}?ref={default_branch}`); a directory entry such as `.circleci` stands for the files listed under it. Then scan `root` for configuration of any CI or build system the filter does not name — most read their configuration from the root. The filter matches common file names, not every one: below the root, a system it does not name, or a named one kept under another name or path (`build/azure-pipelines/*.yml`), is not caught (post-merge-safety-net.md "Gated publish", known limit).
 
 ## PR changed files (gated-publish re-judgement)
 
-Recognition is re-judged for a PR whose changed files include anything it read or depends on ([verification.md](verification.md) "Gated publish", "Re-judge it for a PR that changes what recognition read"). Read the PR's head commit and changed-file count, then every changed file:
+Recognition is re-judged for a PR whose changed files include anything it read or depends on ([post-merge-safety-net.md](post-merge-safety-net.md) "Gated publish", "Re-judge it for a PR that changes what recognition read"). Read the PR's head commit and changed-file count, then every changed file:
 
 ```bash
 gh api "repos/{owner}/{repo}/pulls/{pr}" --jq '{head: .head.sha, changed_files}'
@@ -271,7 +271,7 @@ The list is complete only when the number of rows returned equals `changed_files
 
 ## Workflow runs (gated-publish V-2)
 
-Two reads for an artifact whose publish is gated behind a separate trigger ([verification.md](verification.md) "Gated publish"), taken after the merge, in this order.
+Two reads for an artifact whose publish is gated behind a separate trigger ([post-merge-safety-net.md](post-merge-safety-net.md) "Gated publish"), taken after the merge, in this order.
 
 **Settle read** — every run the merge is expected to start exists on the merge commit and has completed:
 
@@ -365,7 +365,7 @@ explicit refusal; after a call that was not, it is a *merge outcome unconfirmed*
 
 ## Create and merge a revert PR (auto-revert)
 
-Used by the autonomous auto-revert procedure (verification.md). Identify the
+Used by the autonomous auto-revert procedure (post-merge-safety-net.md). Identify the
 commit the merge produced on the default branch, revert it on a branch, then
 open and merge the revert PR — **without approving it**:
 
@@ -404,7 +404,7 @@ Notes:
   revert failure**, whatever the call printed: an explicit refusal — CI red on the
   revert, a required approving review or CODEOWNERS review, any other protection —
   as well as a call that was not a refusal, or a read that fails. **Escalate to the
-  human** (verification.md) with the revert PR's URL and the refusal text; do not
+  human** (post-merge-safety-net.md) with the revert PR's URL and the refusal text; do not
   retry, do not force it, do not approve it. On a repository whose protection
   requires an approving review, every auto-revert ends here: the revert PR is
   open and needs a human's approval and merge.

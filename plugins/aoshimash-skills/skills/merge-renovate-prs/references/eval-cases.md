@@ -741,3 +741,49 @@ Case 20 (b)'s expectation now also requires the compare to be complete and on th
 | 5 `autonomous-verify-fail-revert` | 7/7 | — | Re-run for the changed expectation 3: merged the revert without approving it, and named a required approving review as an escalation. |
 
 Cases 1–4 and 6–24 were not re-run: none of them reaches the revert PR's approval.
+
+### 2026-11-15 — The post-merge safety net becomes a shared reference (all 25 cases, issue #165)
+
+**Change.** `verification.md` and the general parts of workflow.md (0-1, 0-3, 0-4 with the credential-remediation rules, the A/B/C taxonomy and the gated-publish re-judgement of 2-4, the pre-merge steps and merge-call classification of 2-6, 2-7, the safety-net comment types of 2-8, and 2-9) moved into `references/post-merge-safety-net.md`, a byte-identical copy of the canonical `plugins/aoshimash-skills/shared/post-merge-safety-net.md` declared in `shared/manifest.json` (`shared-references` check). `verification.md` is deleted. The shared file has no Renovate-specific instruction and no link outside itself: where it needs this skill it names a **host-skill hook** (modes, run start, plan report, per-PR plan sources, CI gate, go/defer step, PR documentation step, report, platform access, and seven platform-guide operations), and workflow.md "The post-merge safety net" maps each hook to its step here, with links. workflow.md's steps keep their numbers and point at the shared sections, so SKILL.md's and platform-github.md's step references still resolve; their links and plain-text mentions of `verification.md` were retargeted to the copy (a first pass missed one in platform-github.md "CI and build configuration outside Actions", fixed in Stage 2 round 1). Earlier log entries keep naming `verification.md` as the file was then.
+
+**Stayed in this skill.** Renovate `prBodyNotes` as a per-PR plan source (0-4, now a hook paragraph there), the release-age re-run before the merge (2-6), the approval of the Renovate-authored PR and the CODEOWNERS no-bypass rule (2-6), the cooldown-wait comment (2-8, a comment the host requires), and the Renovate github-actions manager facts with the aoshimash/rx PR counts (2-4, beside the pointer to the external-ref rule). In the shared text those became neutral: "a PR can change either — dependency-update tooling commonly bumps refs in both"; "a runbook or a note on the PR"; "the original PR's author or a human"; "the pre-merge checks".
+
+**Behaviour unchanged, by construction.** Word-diffed against the base: the moved verification text differs only in cross-references (step numbers and platform-github.md section names became hook names or in-file anchors) and the Renovate wording above; the moved 0-4 differs only in the prBodyNotes paragraph, which moved to workflow.md 0-4 unchanged in substance. The revert-PR rule from issue #163 (never approve, anything short of `MERGED` escalates, the revert comment on escalation) is carried word for word.
+
+**Stage 2 round 1 wording (no behaviour change).** For a host whose PRs are human-authored and human-approved: "approval gate" in the shared text became the named hook "go/defer step"; "replaces the human approval" and "even if the merge was approved" now name what autonomous mode replaces, the operator's per-merge sign-off; the 2026-05-04 outage, which only this skill's SKILL.md explains, is stated inline as its lesson; "Library dependency bump" became "Library change"; "pre-merge CI gate" became the hook name "CI gate". In merge-renovate-prs these name the same steps as before (2-5 is both the go/defer step and the interactive approval gate; 2-3 is the CI gate), so its behaviour is unchanged; the eval run above predates this wording and was not repeated.
+
+**Placement.** The shared file is 336 lines and workflow.md fell from 406 to 310, both far under the ~800-line split threshold. Trade: a reader of one workflow step now opens two files; in return the safety net exists once for a second skill to carry.
+
+**Commands.** No shell command was added or changed. The one bash block that moved (the kubectl/jq exec-entry filter of 0-4) was compared byte for byte with the base and is identical, so its earlier macOS and Linux runs still stand; it was not re-run.
+
+**Run.** All 25 behavioural cases re-run with the skill as it is on this branch (SKILL.md, workflow.md, post-merge-safety-net.md, platform-github.md and the other references; eval-cases.md and evals.json withheld). Five executor instances in fresh contexts took five cases each, told to treat each case independently — not one fresh context per case as earlier entries used. Paper exercises, no GitHub or cluster commands. With-skill arm only: this is a regression check, so no baseline was run. **Graded by the authoring session against `expectations`, not by independent graders** — treat as SELF-REVIEWED.
+
+| Case | Score | Notes |
+|---|---|---|
+| 1 `manual-apply-routing` | 7/7 | Expectation 7 (serial) implicit: single PR, verified before anything else |
+| 2 `downtime-confirmation` | 6/6 | |
+| 3 `conflict-pair-ordering` | 5/5 | |
+| 4 `ci-red-no-merge` | 4/4 | |
+| 5 `autonomous-verify-fail-revert` | 7/7 | Revert PR merged without approval; escalation reserved for a failed revert or no recovery |
+| 6 `autonomous-defer-not-block` | 6/6 | |
+| 7 `autonomous-precondition-fallback` | 6/6 | Structural, no remediation question |
+| 8 `autonomous-library-repo` | 5/5 | Expectation 4 (serial) implicit in the per-PR order. Also ran gated-publish recognition for the npm package, which the shared text asks for |
+| 9 `human-supplied-verification` | 6/6 | |
+| 10 `cooldown-without-registry-timestamp` | 8/8 | |
+| 11 `grouping-split-proposal` | 8/8 | Added a second split proposal for Home Assistant on the "members need different handling" signal; not one of the members expectation 8 names |
+| 12 `platform-access-unauthenticated-connector` | 4/4 | |
+| 13 `platform-access-connector-fails-coverage` | 5/5 | |
+| 14 `platform-access-merge-call-failure` | 4/4 | |
+| 15 `merge-call-not-a-refusal` | 5/5 | |
+| 16 `prbodynotes-pre-merge-check` | 8/8 | |
+| 17 `prbodynotes-conditional` | 7/7 | Expectation 6 by absence: release-notes text never treated as a note |
+| 18 `autonomous-precondition-recoverable` | 7/7 | |
+| 19 `gated-publish-artifact` | 14/14 | Expectation 4 implicit: no V-3 claimed, reported as merged, not yet published |
+| 20 `disruption-resolved-spec` | 5/5 | |
+| 21 `cooldown-registry-publish-time` | 6/6 | |
+| 22 `cooldown-floating-value` | 5/5 | |
+| 23 `selection-review-requested` | 4/5 | Expectation 2 lost: with an empty selected set the executor ended before detection, as targets.md "Settle emptiness before the probes" says ("Read the selected set before Phase 0. Empty → end there"). A second fresh executor on this case alone did the same. Not caused by this change — targets.md and detection.md are untouched — but a conflict between that rule (added by the 2026-11-12 fixes, which were not re-run) and expectation 2, left for a follow-up |
+| 24 `org-parallel-relay` | 8/8 | |
+| 25 `revert-pr-required-review` | 6/6 | |
+
+No case lost an expectation to the moved text. The one loss (Case 23) sits in files this change did not touch.
