@@ -1,0 +1,5 @@
+{
+  "files": {
+    "post-merge-safety-net.md": ["merge-renovate-prs", "merge-approved-prs"]
+  }
+}

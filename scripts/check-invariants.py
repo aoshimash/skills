@@ -11,6 +11,9 @@ covers a change (see AGENTS.md "Repository Checks"):
                   (markdown files outside dot-directories)
   claude-paths    no `.claude/` path in skill instructions outside an
                   "On Claude Code, ..." note, in any skill
+  shared-references
+                  every copy of a shared reference file is byte-identical to
+                  its canonical file in plugins/<plugin>/shared/
 
 Standard library only, no network, no clock: the same tree always gives the
 same result. This is what lets the workflow serve as the merge gate's
@@ -27,6 +30,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 import unicodedata
@@ -585,6 +589,78 @@ def check_claude_paths(root: Path) -> list[str]:
 
 
 # --------------------------------------------------------------------------
+# Check: shared-references
+# --------------------------------------------------------------------------
+
+# A reference file shared between skills exists once, canonically, in
+# plugins/<plugin>/shared/, outside every skill directory, and each skill that
+# uses it carries a byte-identical copy at skills/<skill>/references/<file>:
+# a skill directory must be self-contained, because Codex installs skill
+# directories one at a time. The manifest declares which skills carry which
+# file:
+#
+#   {"files": {"<file>.md": ["<skill>", ...]}}
+#
+# No manifest and no shared directory means no shared files, which passes.
+SHARED_DIR = "shared"
+SHARED_MANIFEST = "manifest.json"
+
+
+def check_shared_references(root: Path) -> list[str]:
+    errors = []
+    for plugin in sorted(p for p in root.glob("plugins/*") if p.is_dir()):
+        shared = plugin / SHARED_DIR
+        manifest = shared / SHARED_MANIFEST
+        where = rel(root, manifest)
+        present = []
+        if shared.is_dir():
+            # Dotfiles (e.g. .DS_Store) are never shared files.
+            present = sorted(f.name for f in shared.iterdir()
+                             if f.is_file() and f.name != SHARED_MANIFEST and not f.name.startswith("."))
+        declared: dict = {}
+        if manifest.is_file():
+            try:
+                data = json.loads(manifest.read_text(encoding="utf-8"))
+            except (ValueError, UnicodeDecodeError) as e:
+                errors.append(f"{where}: not valid JSON: {e}")
+                continue
+            files = data.get("files") if isinstance(data, dict) else None
+            if not isinstance(files, dict):
+                errors.append(f"{where}: needs a top-level object `files` mapping a file name to a list of skills")
+                continue
+            declared = files
+        for name in present:
+            if name not in declared:
+                errors.append(f"{rel(root, shared / name)}: shared file not declared in {where}")
+        for name, skills in declared.items():
+            if not name or "/" in name or "\\" in name or name.startswith(".") or name == SHARED_MANIFEST:
+                errors.append(f"{where}: {name!r} is not a plain file name")
+                continue
+            if not (isinstance(skills, list) and skills and all(isinstance(s, str) and s for s in skills)):
+                errors.append(f"{where}: {name!r} must map to a non-empty list of skill names")
+                continue
+            canonical = shared / name
+            if not canonical.is_file():
+                errors.append(f"{where}: declared canonical file {rel(root, canonical)} is missing")
+                continue
+            want = canonical.read_bytes()
+            for skill in skills:
+                skill_dir = plugin / "skills" / skill
+                if not NAME_RE.match(skill) or not skill_dir.is_dir():
+                    errors.append(f"{where}: {name!r} is declared for {skill!r}, which is not a skill directory")
+                    continue
+                copy = skill_dir / "references" / name
+                if copy.is_symlink():
+                    # A skill directory must be self-contained; a link breaks when it is installed alone.
+                    errors.append(f"{rel(root, copy)}: is a symlink; carry a real copy of {rel(root, canonical)}")
+                elif not copy.is_file():
+                    errors.append(f"{rel(root, copy)}: missing copy of {rel(root, canonical)}")
+                elif copy.read_bytes() != want:
+                    errors.append(f"{rel(root, copy)}: differs from {rel(root, canonical)}; copy the canonical file over it")
+    return errors
+
+
+# --------------------------------------------------------------------------
 # Runner
 # --------------------------------------------------------------------------
 
@@ -594,6 +670,7 @@ CHECKS = {
     "skill-md-lines": check_skill_md_lines,
     "links": check_links,
     "claude-paths": check_claude_paths,
+    "shared-references": check_shared_references,
 }
 
 
@@ -720,6 +797,20 @@ VIOLATIONS = {
     ".claude/ path in a table cell without a note": ("claude-paths", lambda r: _skill(r, "| Config |", "| `.claude/x` |")),
     ".claude/ path in code after a note": ("claude-paths", lambda r: _skill(r, "`.claude/settings.json`.\n", "`.claude/settings.json`:\n\n```\ncat .claude/x\n```\n")),
     "compatibility naming Claude Code grants no exemption": ("claude-paths", lambda r: _skill(r, "---\n\n# Demo", "compatibility: Designed for Claude Code\n---\nEdit `.claude/x`.\n\n# Demo")),
+    "shared copy differs from its canonical file": ("shared-references", lambda r: (r / "S/references/shared-note.md").write_bytes(SHARED_NOTE.encode() + b" ")),
+    "shared copy missing": ("shared-references", lambda r: (r / "S/references/shared-note.md").unlink()),
+    "declared canonical file missing": ("shared-references", lambda r: (r / "plugins/p/shared/shared-note.md").unlink()),
+    "shared file not declared": ("shared-references", lambda r: (r / "plugins/p/shared/extra.md").write_text("# Extra\n", encoding="utf-8")),
+    "shared file declared for a missing skill": ("shared-references", lambda r: _manifest(r, {"shared-note.md": ["demo", "gone"]})),
+    "shared manifest malformed": ("shared-references", lambda r: _manifest(r, ["shared-note.md"])),
+    "shared manifest is not valid JSON": ("shared-references", lambda r: (r / "plugins/p/shared" / SHARED_MANIFEST).write_text("{", encoding="utf-8")),
+    "shared file name '..'": ("shared-references", lambda r: _manifest(r, {"shared-note.md": ["demo"], "..": ["demo"]})),
+    "shared file name with a slash": ("shared-references", lambda r: _manifest(r, {"shared-note.md": ["demo"], "a/b": ["demo"]})),
+    "shared file name starting with a dot": ("shared-references", lambda r: _manifest(r, {"shared-note.md": ["demo"], ".x": ["demo"]})),
+    "manifest declared as a shared file": ("shared-references", lambda r: _manifest(r, {"shared-note.md": ["demo"], SHARED_MANIFEST: ["demo"]})),
+    "shared file with an empty skill list": ("shared-references", lambda r: _manifest(r, {"shared-note.md": []})),
+    "shared file declared for a path-like skill name": ("shared-references", lambda r: _manifest(r, {"shared-note.md": ["../demo"]})),
+    "shared copy is a symlink": ("shared-references", lambda r: _symlink_copy(r)),
 }
 
 
@@ -742,6 +833,19 @@ def _evals(root: Path, ids=(1, 2), names=("a", "b"), skill="demo") -> None:
     (root / "S/evals/evals.json").write_text(json.dumps(data), encoding="utf-8")
 
 
+def _symlink_copy(root: Path) -> None:
+    copy = root / "S/references/shared-note.md"
+    copy.unlink()
+    copy.symlink_to(root / "plugins/p/shared/shared-note.md")
+
+
+def _manifest(root: Path, files) -> None:
+    (root / "plugins/p/shared" / SHARED_MANIFEST).write_text(json.dumps({"files": files}), encoding="utf-8")
+
+
+SHARED_NOTE = "# Shared Note\n\nCarried byte-for-byte by every skill declared for it.\n"
+
+
 def build_clean_tree(root: Path) -> None:
     skill = root / "plugins/p/skills/demo"
     (skill / "references").mkdir(parents=True)
@@ -751,6 +855,10 @@ def build_clean_tree(root: Path) -> None:
     (skill / "references/my notes.md").write_text("# Notes\n", encoding="utf-8")
     (skill / "references/notes_(v2).md").write_text("# Notes v2\n", encoding="utf-8")
     (skill / "evals/evals.json").write_text(json.dumps(GOOD_EVALS), encoding="utf-8")
+    (root / "plugins/p/shared").mkdir()
+    (root / "plugins/p/shared/shared-note.md").write_text(SHARED_NOTE, encoding="utf-8")
+    (skill / "references/shared-note.md").write_text(SHARED_NOTE, encoding="utf-8")
+    _manifest(root, {"shared-note.md": ["demo"]})
     (root / "S").symlink_to(skill, target_is_directory=True)
 
 
@@ -771,6 +879,14 @@ def self_test() -> int:
                 bad += 1
             else:
                 print("[ok] self-test: clean fixture passes every check")
+            shutil.rmtree(root / "plugins/p/shared")
+            (root / "plugins/p/skills/demo/references/shared-note.md").unlink()
+            found = check_shared_references(root)
+            if found:
+                print(f"[FAIL] self-test: shared-references fails on a tree with no shared files: {found}")
+                bad += 1
+            else:
+                print("[ok] self-test: shared-references passes when no shared files exist")
         for label, (check, mutate, *waivers) in VIOLATIONS.items():
             DESCRIPTION_WAIVERS = waivers[0] if waivers else {}
             with tempfile.TemporaryDirectory() as tmp:

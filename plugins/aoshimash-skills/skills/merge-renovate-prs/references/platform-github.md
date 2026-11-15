@@ -41,7 +41,7 @@ Resolved once per run as SKILL.md "Platform Access" describes: a connector for G
   - **The PR changed-file read** of the gated-publish re-judgement (below) is covered only by tools that return every file a PR changes, with its status and previous name, complete by the test above, together with the PR's changed-file count and head commit, and read a file's content at that head. A list that may stop short reads as "the PR changes no workflow file".
   - **The workflow-run reads** of gated-publish V-2 (below) are covered only by tools that return, for the settle read, every run on a given commit with each run's workflow path and status, complete by the test above; and, for the publish-run read, the runs of a given workflow created at or after a given time on **every** branch and tag and for every event, with each run's creation time. A tool confined to the default branch, or to one event, does not cover the publish-run read: it would return no rows for a tag-triggered or dispatched publish on another ref, which reads as a pass.
   - **The merge** is covered only by a tool that takes the repo's merge method, and the post-approval `mergeStateStatus` read only by one that returns it — without it a `BLOCKED` PR cannot be told from a mergeable one.
-  - **Writes** — approving a review, merging, updating a branch with the merge or the rebase form, creating, approving and merging the revert PR, closing with a comment, commenting — are covered by a tool that performs that write and reports whether it succeeded.
+  - **Writes** — approving a review, merging, updating a branch with the merge or the rebase form, creating and merging the revert PR, closing with a comment, commenting — are covered by a tool that performs that write and reports whether it succeeded.
 - **Outside this choice**: local git (fetch, branches, revert, push) and the deploy tooling the verification plan uses (`kubectl`, Flux/Argo CLIs, `talosctl`, …) always run as written, whatever the method. So does chart rendering (`helm show chart`, `helm template` against the chart repository; workflow.md 2-5), which is not a GitHub operation, and so do the package registry reads of the release-age gate (npm and PyPI publish times; release-age.md step 1) and its read of the Node.js release index (release-age.md "Floating values"). When it is unavailable, 2-5 falls back to reading the templates, and leaves unresolved anything only a render settles.
 
 ## List the review-requested PRs
@@ -223,7 +223,7 @@ Decision:
 
 ## Workflow files (gated-publish recognition)
 
-Recognition of an artifact whose publish is gated behind a separate trigger ([verification.md](verification.md) "Gated publish", condition (1)) reads **every** workflow file on the default branch, not just the release workflow. List them:
+Recognition of an artifact whose publish is gated behind a separate trigger ([post-merge-safety-net.md](post-merge-safety-net.md) "Gated publish", condition (1)) reads **every** workflow file on the default branch, not just the release workflow. List them:
 
 ```bash
 gh api "repos/{owner}/{repo}/git/trees/{default_branch}:.github/workflows" \
@@ -247,7 +247,7 @@ A read that fails is verification that cannot be completed (SKILL.md "Platform A
 
 ## CI and build configuration outside Actions (gated-publish recognition)
 
-Recognition's condition (3) ([verification.md](verification.md) "Gated publish") looks for CI or build configuration other than GitHub Actions in the default branch's whole tree. One recursive listing returns the root entries and every path matching a common CI or build file anywhere in the tree:
+Recognition's condition (3) ([post-merge-safety-net.md](post-merge-safety-net.md) "Gated publish") looks for CI or build configuration other than GitHub Actions in the default branch's whole tree. One recursive listing returns the root entries and every path matching a common CI or build file anywhere in the tree:
 
 ```bash
 gh api "repos/{owner}/{repo}/git/trees/{default_branch}?recursive=1" \
@@ -255,11 +255,11 @@ gh api "repos/{owner}/{repo}/git/trees/{default_branch}?recursive=1" \
          ci: [.tree[].path | select(test("(^|/)(\\.gitlab-ci\\.ya?ml|Jenkinsfile[^/]*|cloudbuild[^/]*\\.(ya?ml|json)|\\.travis\\.ya?ml|\\.drone\\.ya?ml|azure-pipelines[^/]*\\.ya?ml|bitbucket-pipelines\\.ya?ml|buildspec[^/]*\\.ya?ml|\\.?appveyor\\.ya?ml)$|(^|/)\\.(circleci|buildkite|tekton|woodpecker)(/|$)"))]}'
 ```
 
-`truncated: false` on a read that succeeded → the listing is complete. `truncated: true` (GitHub caps a recursive tree read, so a very large repository returns it) or a read that fails → the listing may be incomplete, and the row does not apply. Read every path in `ci` at the same ref with the contents read above (`repos/{owner}/{repo}/contents/{path}?ref={default_branch}`); a directory entry such as `.circleci` stands for the files listed under it. Then scan `root` for configuration of any CI or build system the filter does not name — most read their configuration from the root. The filter matches common file names, not every one: below the root, a system it does not name, or a named one kept under another name or path (`build/azure-pipelines/*.yml`), is not caught (verification.md, known limit).
+`truncated: false` on a read that succeeded → the listing is complete. `truncated: true` (GitHub caps a recursive tree read, so a very large repository returns it) or a read that fails → the listing may be incomplete, and the row does not apply. Read every path in `ci` at the same ref with the contents read above (`repos/{owner}/{repo}/contents/{path}?ref={default_branch}`); a directory entry such as `.circleci` stands for the files listed under it. Then scan `root` for configuration of any CI or build system the filter does not name — most read their configuration from the root. The filter matches common file names, not every one: below the root, a system it does not name, or a named one kept under another name or path (`build/azure-pipelines/*.yml`), is not caught (post-merge-safety-net.md "Gated publish", known limit).
 
 ## PR changed files (gated-publish re-judgement)
 
-Recognition is re-judged for a PR whose changed files include anything it read or depends on ([verification.md](verification.md) "Gated publish", "Re-judge it for a PR that changes what recognition read"). Read the PR's head commit and changed-file count, then every changed file:
+Recognition is re-judged for a PR whose changed files include anything it read or depends on ([post-merge-safety-net.md](post-merge-safety-net.md) "Gated publish", "Re-judge it for a PR that changes what recognition read"). Read the PR's head commit and changed-file count, then every changed file:
 
 ```bash
 gh api "repos/{owner}/{repo}/pulls/{pr}" --jq '{head: .head.sha, changed_files}'
@@ -271,7 +271,7 @@ The list is complete only when the number of rows returned equals `changed_files
 
 ## Workflow runs (gated-publish V-2)
 
-Two reads for an artifact whose publish is gated behind a separate trigger ([verification.md](verification.md) "Gated publish"), taken after the merge, in this order.
+Two reads for an artifact whose publish is gated behind a separate trigger ([post-merge-safety-net.md](post-merge-safety-net.md) "Gated publish"), taken after the merge, in this order.
 
 **Settle read** — every run the merge is expected to start exists on the merge commit and has completed:
 
@@ -301,7 +301,7 @@ gh pr review {pr} --approve --body "Dependency update reviewed: release notes re
 
 Notes:
 - The `--body` is optional but leaves a human-readable audit trail on the PR.
-- GitHub prevents approving your own PRs — for Renovate-authored PRs this is never an issue.
+- GitHub prevents approving your own PRs — for Renovate-authored PRs this is never an issue. It is why the revert PR, which the agent authors, is never approved ([below](#create-and-merge-a-revert-pr-auto-revert)).
 - If the repo requires CODEOWNERS or team-based required reviewers, an agent approval may not satisfy the requirement. Check `mergeStateStatus` after approving; if it still shows `BLOCKED`, never bypass it — autonomous: defer the PR; interactive: surface the gap and ask the user to approve manually.
 
 ## Merge (respect the repo merge method)
@@ -365,9 +365,9 @@ explicit refusal; after a call that was not, it is a *merge outcome unconfirmed*
 
 ## Create and merge a revert PR (auto-revert)
 
-Used by the autonomous auto-revert procedure (verification.md). Identify the
+Used by the autonomous auto-revert procedure (post-merge-safety-net.md). Identify the
 commit the merge produced on the default branch, revert it on a branch, then
-open, approve, and merge the revert PR:
+open and merge the revert PR — **without approving it**:
 
 ```bash
 # The commit the merge created on the default branch (merge/squash methods)
@@ -386,15 +386,28 @@ git revert {merge_commit_sha} --no-edit
 git push -u origin revert-pr-{pr}
 gh pr create --title "Revert: {original PR title}" \
   --body "Auto-revert of #{pr}: post-merge verification failed — {one-line cause}. Details on #{pr}."
-gh pr review {revert_pr} --approve --body "Auto-revert of a failed dependency update."
 gh pr merge {revert_pr} --<method>
+gh pr view {revert_pr} --json state,mergeCommit --jq '{state, merge_commit: .mergeCommit.oid}'
 ```
 
 Notes:
 
-- The revert PR goes through the normal merge path (approval + required checks) —
-  never `--admin`. If the revert itself is blocked (CI red on the revert, required
-  reviewers), **escalate to the human** (verification.md); do not force it.
+- **Never approve the revert PR.** The agent authored it, and GitHub states that
+  "Pull request authors cannot approve their own pull requests"
+  ([Approving a pull request with required reviews](https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/approving-a-pull-request-with-required-reviews)).
+  Do not route around that with another identity the agent can reach (a second
+  account, an app token): an approval the agent arranges for its own change is
+  not the review a required-review rule asks for.
+- The revert PR goes through the normal merge path (required checks, and any
+  required review a human gives) — never `--admin`. Read its state after the
+  merge call, as for any merge ("Merge" above). **Anything short of `MERGED` is a
+  revert failure**, whatever the call printed: an explicit refusal — CI red on the
+  revert, a required approving review or CODEOWNERS review, any other protection —
+  as well as a call that was not a refusal, or a read that fails. **Escalate to the
+  human** (post-merge-safety-net.md) with the revert PR's URL and the refusal text; do not
+  retry, do not force it, do not approve it. On a repository whose protection
+  requires an approving review, every auto-revert ends here: the revert PR is
+  open and needs a human's approval and merge.
 - Revert Git **before** undoing any B-class apply, so a GitOps controller does not
   re-apply the bad version over the rollback.
 
