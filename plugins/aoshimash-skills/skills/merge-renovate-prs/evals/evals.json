@@ -367,12 +367,12 @@
       "id": 23,
       "name": "selection-review-requested",
       "prompt": "renovate たまってるからやって — aoshimash/homelab-k8s. Facts as read on 2026-11-12: the repo has 7 open PRs, all authored by app/renovate on renovate/ branches (#386 container images, #387 siderolabs/talos v1.14.5, #388 cilium v1.20.4, #389 helm charts, #391 aqua-installer action v4.1.1, #392 aqua v2.66.1, #398 kubernetes/kubernetes v1.37.2), and none of them has a review request to anyone. (a) Say what this run selects and does. (b) Then I follow up with: \"OK, just do #392 then.\" Say what changes. Do not approve, merge, close, or comment on anything; describe what you would do.",
-      "expected_output": "(a) The run selects only PRs whose review is requested from the user (review-requested:@me, including team requests). Detection still recognizes all 7 as Renovate PRs, but none is selected, so all are context only: the run reports an empty selected set with the count (7 open Renovate PRs, none requesting the user's review) and ends without approving, merging, closing or commenting on any of them, and without widening the set to find work. (b) Naming #392 selects exactly #392 regardless of the review request; it still has to pass Renovate detection and every gate (release-age, CI, pre-check, verification), and the other six stay untouched.",
+      "expected_output": "(a) The run selects only PRs whose review is requested from the user (review-requested:@me, including team requests). None is selected, so the run ends before Phase 0: it does not read the Renovate config or run detection. It reports an empty selected set with the count of open PRs (7 open PRs, none requesting the user's review — reported as open PRs, not as detected Renovate PRs) and ends without approving, merging, closing or commenting on any of them, and without widening the set to find work. (b) Naming #392 selects exactly #392 regardless of the review request; it still has to pass Renovate detection and every gate (release-age, CI, pre-check, verification), and the other six stay untouched.",
       "files": [],
       "expectations": [
         "(a) Selects by review request from the user — directly or via a team — rather than processing every open Renovate PR",
-        "(a) Still runs Renovate detection over all open PRs and treats the unselected ones as context only",
-        "(a) Reports the empty selected set with its count and ends without approving, merging, closing or commenting on any PR, and does not widen the selection",
+        "(a) With the selected set empty, ends before Phase 0 — without reading the Renovate config or running Renovate detection — rather than running detection over the unselected PRs",
+        "(a) Reports the empty selected set with the count of open PRs (not presented as a count of detected Renovate PRs) and ends without approving, merging, closing or commenting on any PR, and does not widen the selection",
         "(b) Treats the named PR #392 as selected without checking for a review request",
         "(b) Still runs #392 through Renovate detection and the normal gates, and leaves the other six PRs untouched"
       ]

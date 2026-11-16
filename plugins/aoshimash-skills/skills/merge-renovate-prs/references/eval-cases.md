@@ -304,7 +304,7 @@ Why it matters: the gate aged `node` by what Renovate picked or by the lower bou
 **Setup** (aoshimash/homelab-k8s as read on 2026-11-12): 7 open PRs, all authored by `app/renovate` on `renovate/` branches (#386, #387, #388, #389, #391, #392, #398), none with a review request. **(a)** "renovate たまってるからやって" on that repository. **(b)** The user follows up naming #392.
 
 **Expected behavior**:
-- **(a)**: selects by review request from the user (`review-requested:@me`, team requests included), not every open Renovate PR. Detection still runs over all seven, which stay context only. The run reports the empty selected set with its count and ends — nothing approved, merged, closed or commented on, and the set is not widened to find work.
+- **(a)**: selects by review request from the user (`review-requested:@me`, team requests included), not every open Renovate PR. The selected set is empty, so the run ends before Phase 0 — it does not read the Renovate config or run detection, and none of the seven is touched. It reports the empty selected set with the count of open PRs (seven, reported as open PRs, not as detected Renovate PRs) and ends — nothing approved, merged, closed or commented on, and the set is not widened to find work.
 - **(b)**: naming #392 selects it without a review-request check; it still passes Renovate detection and every gate, and the other six stay untouched.
 
 ### Case 24: Multi-repository run with a relayed question (`org-parallel-relay`) — autonomous
@@ -782,8 +782,24 @@ Cases 1–4 and 6–24 were not re-run: none of them reaches the revert PR's app
 | 20 `disruption-resolved-spec` | 5/5 | |
 | 21 `cooldown-registry-publish-time` | 6/6 | |
 | 22 `cooldown-floating-value` | 5/5 | |
-| 23 `selection-review-requested` | 4/5 | Expectation 2 lost: with an empty selected set the executor ended before detection, as targets.md "Settle emptiness before the probes" says ("Read the selected set before Phase 0. Empty → end there"). A second fresh executor on this case alone did the same. Not caused by this change — targets.md and detection.md are untouched — but a conflict between that rule (added by the 2026-11-12 fixes, which were not re-run) and expectation 2, left for a follow-up |
+| 23 `selection-review-requested` | 4/5 | Expectation 2 lost: with an empty selected set the executor ended before detection, as targets.md "Settle emptiness before the probes" says ("Read the selected set before Phase 0. Empty → end there"). A second fresh executor on this case alone did the same. Not caused by this change — targets.md and detection.md are untouched — but a conflict between that rule (added by the 2026-11-12 fixes, which were not re-run) and expectation 2, left for a follow-up. Closed out by the 2026-11-16 entry below (issue #183): the case was corrected, and the re-run scored 5/5 |
 | 24 `org-parallel-relay` | 8/8 | |
 | 25 `revert-pr-required-review` | 6/6 | |
 
 No case lost an expectation to the moved text. The one loss (Case 23) sits in files this change did not touch.
+
+### 2026-11-16 — Case 23 agrees with "Settle emptiness before the probes" (issue #183)
+
+**Conflict.** Case 23's expectation 2 required Renovate detection over all seven open PRs when the selected set is empty. targets.md "Settle emptiness before the probes" ends the run before that ("Empty → end there"). Every run lost expectation 2 (4/5 in the 2026-11-15 entry above, on two fresh executors).
+
+**Decision: the case changes, the rule stays.** The rule's reason holds: reading the Renovate config and running detection exist to make merging safe and to give selected PRs their conflict and ordering context; with nothing selected, neither has a use. No reason emerged for detection to run on an empty set.
+
+**Changes.** Case 23 (a), its `expected_output`, and expectations 2 and 3 now say the run ends before Phase 0 without reading the config or running detection, and reports the count of **open PRs** — not of Renovate PRs, since nothing classified them. targets.md had the same contradiction in the other direction: "An empty set is a result" told the run to report "how many Renovate PRs the repository has open", a number only detection can give. It now says open PRs and says why, and "Settle emptiness" names itself as the one exception to detection.md's "Detection runs over every open PR … whatever the run's selected set". detection.md was not edited (outside this change's scope); the exception is stated on the targets.md side only, so a reader of detection.md alone still sees the unconditional sentence — a known limit.
+
+**Run.** Case 23 only, one executor in a fresh context reading SKILL.md and every reference except eval-cases.md (evals.json withheld), paper exercise, with-skill arm only. **Graded by the authoring session against `expectations`, not by independent graders** — treat as SELF-REVIEWED.
+
+| Case | Score | Notes |
+|---|---|---|
+| 23 `selection-review-requested` | 5/5 | (a) Read the review-requested set, found it empty, ended without the config read, detection, drift check or probes, and reported "7 open PRs; none requests your review", explicitly not as Renovate PRs. (b) Selected #392 without a review-request check and ran it through detection and every gate, with #391 as a possible unselected prerequisite |
+
+No other case was re-run: the targets.md edits change only the empty-set path, which no other case reaches.
