@@ -1365,8 +1365,8 @@ derived as not landed, and a declared unmerged status for work that landed in an
 remain divergences. The rule narrows divergence and confers nothing: rows, closing keywords
 and the merged total still come from the gate's own derivation.
 
-**Placement.** milestone-pr.md was already 920 lines before this change, past the ~800-line
-split threshold. The addition (about 30 lines) is a clause of F1's divergence definition and
+**Placement.** milestone-pr.md was already 923 lines before this change, past the ~800-line
+split threshold. The addition (31 lines) is a clause of F1's divergence definition and
 does not read apart from it, so it stays in F1; splitting milestone-pr.md is a separate
 refactor and is not done here.
 
