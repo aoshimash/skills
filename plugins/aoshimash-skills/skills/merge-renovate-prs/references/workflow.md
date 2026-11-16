@@ -270,7 +270,7 @@ Present what happened across the run:
 - **Disruptive changes executed** — flagged prominently with what downtime occurred, each with its recomputed class (2-5): the workloads that restart, the values or controller that move them, and the Phase 1 estimate it replaced when they differ.
 - **Follow-ups** — anything that needs a human later, including a gated-publish merge 0-3 found without its not-yet-published comment.
 - **Platform access** — the method the run used (SKILL.md "Platform Access"), and any operation whose failure under it deferred a PR, stopped the line, or escalated.
-- **Selection** — the target, how the set was selected (review-requested, as which account; or the named PRs), the number of open Renovate PRs that were context only, the selected PRs that were not Renovate PRs, superseded PRs left open because they were outside the set, and every PR the run approved without merging, with the note that it leaves the next run's review-requested set ([targets.md](targets.md)). An empty selected set is reported here and ends the run.
+- **Selection** — the target, how the set was selected (review-requested, as which account; or the named PRs), the number of open Renovate PRs that were context only, the selected PRs that were not Renovate PRs, superseded PRs left open because they were outside the set, and every PR the run approved without merging, with the note that it leaves the next run's review-requested set ([targets.md](targets.md)). An empty selected set is reported here and ends the run; detection did not run, so report the number of open PRs, never as Renovate PRs (targets.md).
 - **Local checkout** — the clone's path when the run cloned the repository.
 
 ### 3-2: Surface improvements (do not auto-fix)
