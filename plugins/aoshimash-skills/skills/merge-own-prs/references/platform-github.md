@@ -19,8 +19,11 @@ The commands are written for the `gh` CLI and are the reference specification of
 - [List the rules on the base branch](#list-the-rules-on-the-base-branch)
 - [Allowed merge methods](#allowed-merge-methods)
 - [Post the self-review](#post-the-self-review)
+- [Workflow files (gated-publish recognition)](#workflow-files-gated-publish-recognition)
+- [CI and build configuration outside Actions (gated-publish recognition)](#ci-and-build-configuration-outside-actions-gated-publish-recognition)
+- [PR changed files](#pr-changed-files)
+- [Workflow runs after a merge](#workflow-runs-after-a-merge)
 - [Merge](#merge)
-- [Runs for the merge commit](#runs-for-the-merge-commit)
 - [Retarget a stacked PR](#retarget-a-stacked-pr)
 - [Create a revert PR](#create-a-revert-pr)
 - [Comment on the PR](#comment-on-the-pr)
@@ -251,6 +254,74 @@ A review of type COMMENT (the author cannot approve or request changes on their 
 gh pr review {pr} -R {owner}/{repo} --comment --body-file {review_file}
 ```
 
+## Workflow files (gated-publish recognition)
+
+The safety net's "default branch" is the PR's base branch in this skill ([workflow.md](workflow.md) "The post-merge safety net"), so these reads take `{base_branch}`.
+
+Recognition of an artifact whose publish is gated behind a separate trigger ([post-merge-safety-net.md](post-merge-safety-net.md) "Gated publish", condition (1)) reads **every** workflow file on the base branch:
+
+```bash
+gh api "repos/{owner}/{repo}/git/trees/{base_branch}:.github/workflows" \
+  --jq '{truncated, files: [.tree[] | select(.type == "blob") | .path]}'
+```
+
+`truncated: false` on a read that succeeded → the listing is complete. `truncated: true`, or a read that fails (a 404 included) → the listing may be incomplete, and the row does not apply. Names are relative to the directory: prefix each with `.github/workflows/` to match the reads below, which return each workflow's `path` from the repository root. Read each file at a ref (the base branch, or the ref a reusable-workflow call names):
+
+```bash
+gh api "repos/{owner}/{repo}/contents/.github/workflows/{file}?ref={ref}" --jq .content | base64 -d
+```
+
+A file that cannot be read is a workflow whose publishing cannot be determined: the row does not apply. Which workflows can start runs at all — taken after the merge, with the settle read:
+
+```bash
+gh api --paginate "repos/{owner}/{repo}/actions/workflows?per_page=100" \
+  --jq '.workflows[] | {path, state}'
+```
+
+## CI and build configuration outside Actions (gated-publish recognition)
+
+Condition (3) of recognition looks for CI or build configuration other than GitHub Actions in the base branch's whole tree:
+
+```bash
+gh api "repos/{owner}/{repo}/git/trees/{base_branch}?recursive=1" \
+  --jq '{truncated, root: [.tree[] | select(.path | contains("/") | not) | .path],
+         ci: [.tree[].path | select(test("(^|/)(\\.gitlab-ci\\.ya?ml|Jenkinsfile[^/]*|cloudbuild[^/]*\\.(ya?ml|json)|\\.travis\\.ya?ml|\\.drone\\.ya?ml|azure-pipelines[^/]*\\.ya?ml|bitbucket-pipelines\\.ya?ml|buildspec[^/]*\\.ya?ml|\\.?appveyor\\.ya?ml)$|(^|/)\\.(circleci|buildkite|tekton|woodpecker)(/|$)"))]}'
+```
+
+`truncated: false` on a read that succeeded → complete; `truncated: true` or a failed read → may be incomplete, and the row does not apply. Read every path in `ci` with the contents read above; scan `root` for configuration of any CI or build system the filter does not name. Below the root, a system the filter does not name is not caught (post-merge-safety-net.md "Gated publish", known limit).
+
+## PR changed files
+
+Every file the PR changes, for the gated-publish re-judgement and the drift check:
+
+```bash
+gh api "repos/{owner}/{repo}/pulls/{pr}" --jq '{head: .head.sha, changed_files}'
+gh api --paginate "repos/{owner}/{repo}/pulls/{pr}/files?per_page=100" \
+  --jq '.[] | {filename, status, previous_filename}'
+```
+
+The list is complete only when the number of rows returned equals `changed_files` and is below 3000, the most files this endpoint returns; otherwise, or when a read fails, it may be incomplete. Read the head's version of a file with the contents read above at `ref={head}`.
+
+## Workflow runs after a merge
+
+**Settle read** — every run the merge is expected to start exists on the merge commit and has completed:
+
+```bash
+gh api --paginate "repos/{owner}/{repo}/actions/runs?head_sha={merge_commit_sha}&per_page=100" \
+  --jq '.workflow_runs[] | {id, path, event, status, conclusion, html_url}'
+```
+
+GitHub creates runs asynchronously after the merge: an empty or partial result right after it means "not yet". The expected set is every active workflow whose `push` trigger admits the base branch and whose path filters admit a file the merge changed. For a library or CI-deploy repository this read is V-2 (and, for a library, V-3): every expected run completed with `success`; for a CI-deploy repository, the deploy workflow's run is the one V-2 names.
+
+**Publish-run read** (gated publish only) — no run of a publishing workflow started at or after the merge, on any branch or tag, from any event; once for each publishing workflow:
+
+```bash
+gh run list -R {owner}/{repo} --all --workflow {publishing_workflow_file} --created ">={merge_time}" \
+  --json databaseId,event,status,createdAt,headBranch,url
+```
+
+No rows from every one → the check passes; any row fails it. A read that fails is verification that cannot be completed. `--all` needs gh 2.52.0 or later (added in gh v2.52.0, cli/cli#9162; `--created` dates from v2.28.0). An older gh rejects the flag (`unknown flag: --all`, observed with gh 2.23.0), so the read fails: the probe at 2-4 item 6 ([workflow.md](workflow.md) "2-4") runs it before the merge, so an older gh shows in the brief as a check that cannot be read now, and a read that fails anyway after a merge fails closed as above.
+
 ## Merge
 
 Pinned to the reviewed head, with the chosen method (`--merge`, `--squash`, or `--rebase`):
@@ -261,7 +332,7 @@ gh pr merge {pr} -R {owner}/{repo} --merge --match-head-commit {sha}
 
 When the gate decided the merge uses the bypass ([workflow.md](workflow.md) "2-4" item 5), add `--admin`. `--admin` merges a PR that does not meet the base branch's requirements, so it is used only after the gate showed every other requirement met, or the human accepted the listed ones. It also skips a merge queue — never use it where the base branch has a `merge_queue` rule.
 
-Classify the result, then **always** read the state:
+Classify the result as [post-merge-safety-net.md](post-merge-safety-net.md) "Pre-merge steps and the merge call's result" defines, then **always** read the state:
 
 ```bash
 gh pr view {pr} -R {owner}/{repo} --json state,mergeCommit,mergedAt --jq '{state, merge_commit: .mergeCommit.oid, mergedAt}'
@@ -272,15 +343,6 @@ gh pr view {pr} -R {owner}/{repo} --json state,mergeCommit,mergedAt --jq '{state
 - Anything else — a timeout, a network or HTTP error, a non-`MERGED` state after exit 0 (a merge queue took it), a failed read — → *merge outcome unconfirmed*: stop the line.
 
 Do not pass `--delete-branch` unless the repository's convention deletes merged branches.
-
-## Runs for the merge commit
-
-```bash
-gh api --paginate "repos/{owner}/{repo}/actions/runs?head_sha={merge_commit_sha}&per_page=100" \
-  --jq '.workflow_runs[] | {id, name, path, event, status, conclusion, html_url}'
-```
-
-GitHub creates runs shortly after the merge: an empty or partial list right after it means "not yet". Wait until every workflow the plan expects has a run and every run has `status: completed`.
 
 ## Retarget a stacked PR
 
@@ -311,11 +373,11 @@ gh pr create -R {owner}/{repo} --base {base_branch} --head revert-pr-{pr} \
   --title "Revert: {original title}" --body-file {revert_body_file}
 ```
 
-The revert PR's body says what failed and links the original PR. It then goes through the same gate, review, and merge as any PR ([verification.md](verification.md) "The revert").
+The revert PR's body says what failed and links the original PR. It then goes through the same gate, review, and merge as any PR, on the human's "revert" answer only ([verification.md](verification.md) "The revert"); the safety net's auto-revert procedure and its required-check wait do not run in this skill.
 
 ## Comment on the PR
 
-The verified comment after 2-7, and the failure comment after a revert:
+The safety net's comments — the result and not-yet-published comments after 2-7, and the revert comment — in English:
 
 ```bash
 gh pr comment {pr} -R {owner}/{repo} --body-file {comment_file}

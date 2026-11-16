@@ -82,3 +82,37 @@ Cases 1–6 mirror `evals/evals.json`, where each case's `expectations` are the 
 - Case 4's with-skill run could not make the working check concrete (proving that the approval gate writes its status needs a test PR), and the skill has no rule for it. The brief already flags a `high`-risk PR whose plan holds only the baseline checks, and the human decides there.
 - Trigger evals were written but not run.
 - Fixture facts beyond the real artifacts (Case 3's human comment, Case 4's `required_deployments` rule) are stated in the prompts.
+
+### 2026-11-16 — Post-merge verification moved onto the shared safety net (issue #182)
+
+**Change.** The skill now carries `references/post-merge-safety-net.md` (a byte-identical copy of `plugins/aoshimash-skills/shared/post-merge-safety-net.md`, declared in `shared/manifest.json`) and runs it in its interactive form only. workflow.md "The post-merge safety net" maps each host-skill hook to this skill's steps. verification.md keeps only what holds for this skill alone: always interactive, the per-PR plan built before the brief, two repo-type rows the safety net lacks (VCS-driven infrastructure; settings or docs only), and the human's recovery choice with this skill's revert path. Its own "Release on a separate trigger" row gave way to the safety net's gated-publish row, so platform-github.md gained the four reads that row needs (workflow files, CI configuration outside Actions, PR changed files, workflow runs after a merge), taking `{base_branch}`. Carrying the whole file also brings its interactive-mode A/B/C, downtime, and rollback-readiness rules into 2-4 item 7, the brief, and 2-6/2-7. Each adds a human confirmation; none adds autonomy.
+
+**The human decision is preserved.** The safety net's autonomous parts never run here: the auto-revert procedure, its required-check wait, the precondition fallback. A failure enters the safety net's interactive stop-the-line. verification.md then adds the revert / fix forward / hold choice, makes no answer a hold, and keeps the line stopped after a verified revert until the human says to continue. Three readings are stated in workflow.md. "Default branch" means the PR's base. The revert PR goes through this skill's gate and merge. The safety net's "never bypassing a required check or protection" admits only the bypass 2-4 item 5 showed the human.
+
+**Commands run as written.** The seven bash blocks added to platform-github.md were extracted from the file by a script. Placeholders were filled with aoshimash/skills, base `integration/2026-11-16-follow-ups` (a base containing `/`), PR #187 and its merge commit `77aaf89`, and `bump-version.yml` as the publishing workflow. They were run with `-e` under bash and zsh 5.9 on macOS (gh 2.104.0): every block exited 0, and bash and zsh output was identical. They were also run under bash 5.2.37 in `alpine:3.22` (gh 2.72.0, GNU/musl userland), where every block exited 0 too.
+
+**Run.** One fresh agent instance ran all six cases as a paper exercise, with no gh, git, or network use. It read SKILL.md and every reference on this branch except this file and `evals/evals.json`, and it did not see `expectations`. **Graded by the implementing session against `expectations`, so treat this as SELF-REVIEWED.** No baseline arm was run.
+
+| Case | with-skill | Changed since 2026-11-12? |
+|---|---|---|
+| 1 `selection-org-bypass` | 5/6 | Yes, though not because of this change. With exactly one selected PR, the run skipped the proceed / reorder / stop question. That follows the 2026-11-12 fix "with one selected PR, the plan question is skipped", made after that run, so the expectation now contradicts the skill. Selection and exclusions were all correct. |
+| 2 `named-pr-no-request` | 6/6 | No |
+| 3 `comments-human-individual-bot-batch` | 6/6 | No |
+| 4 `brief-and-bypass-gate` | 6/6 | No. The brief also gained the plan-only-baseline note for a `high`-risk PR. |
+| 5 `post-merge-failure-stop` | 5/5 | No. The run used the safety net's residue table to call the persisting 503 a real failure. |
+| 6 `head-moved-after-approval` | 4/4 | No |
+
+**Fixes from the run** (not re-run):
+- The safety net's "never bypassing a required check or protection" contradicted this skill's `--admin` bypass. workflow.md now states how this skill reads it.
+- With one selected PR, nothing asked whether to resolve drift first. The brief gained a drift line, and the hook table says the brief asks that question.
+- SKILL.md's Phase 3 categories now match workflow.md and the safety net's report categories.
+
+**Open points.** The run raised points that predate this change and are out of its scope:
+- a review-only invocation;
+- how the bypass of a listed rule is accepted (SKILL.md step 6 against workflow.md 2-6);
+- `require_code_owner_review` being bypassed silently;
+- the revert's brief having no bypassed-rules line;
+- no read for a PR's commit authors;
+- a conversation comment approved as "no reply" being re-collected.
+
+Case 1's expectation should be revisited. Gated-publish recognition here runs per base branch, but the skill does not say whether PRs with different bases in one repository each get their own recognition.
