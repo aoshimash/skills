@@ -1181,8 +1181,8 @@ statuses #163 `MERGED`, #164 `MERGED`, #165 `REVERTED`, #166 `NOT_ATTEMPTED`; an
 assertion that no implementer is running. In this run the gate merges #178 at `d3e5154`, and
 its `push` run on that head concludes `success`. This run also re-reads a `push` run
 concluding `success` on the merge commits of #174 and #175. F2–F4 otherwise hold. Three variants:
-**(a)** as stated; **(b)** as (a), except that the platform shows #175 reverted by an
-**earlier** run (`merge-gate:reverted` label, revert commit on the branch) while the
+**(a)** as stated; **(b)** as (a), except that after that group run a human pushed a revert
+of #175's merge commit to the branch (a revert commit on the branch, no gate label), while the
 declaration still says #163 `MERGED`; **(c)** as (a), except that the declaration lists #166
 as `BLOCKED`.
 
@@ -1193,7 +1193,8 @@ as `BLOCKED`.
   partial, with #165's revert under Needs Human Attention. #166's row, closing keyword and
   merged total come from the gate's own derivation, not from the declaration.
 - **(b)**: #166 is exempt as in (a), but #163 is a genuine divergence: declared merged, derived
-  not landed, and the revert was not made by this run. Reports both views in Needs Human
+  not landed (the revert commit undoes the verified merge), and the revert was not made by
+  this run. Reports both views in Needs Human
   Attention, uses its own derivation for everything downstream, and **withholds the flip**.
 - **(c)**: the exemption does not apply. `BLOCKED` says the orchestrator expected no PR of
   #166 to land, so this run's merge of #178 contradicts the declaration about which work
@@ -1210,7 +1211,7 @@ as `BLOCKED`.
 | 2026-08-07 | Cases 1–34, trigger evals | **benchmarked** — 21/21 trigger, 24 Pass / 10 Partial / 0 Fail behavioral | The deferral above is discharged. The run found defects in the skill and in the suite: an under-matching E1c linking-keyword pattern that **attributes** rather than defers (fail-open), a zero-merge definition contradicting M0 on a reverted first merge, an escalation path that stops before recording its exclusion, and a merge onto a branch whose milestone already merged (strands the branch). All ten Partials were placement, not policy — correct material sitting away from the decision point. Fixed in the same pass, with Cases 35–36 added and 17, 18, 24, 25, 26 widened so each defect now has a case that fails if it returns. Suite is 36 behavioral + 21 trigger. **Re-run owed against the amended suite**, since these results predate the fixes. |
 | 2026-10-25 | Cases 37–41 (platform access) | **desk-checked**, not benchmarked — see below | Platform access resolution added; separate agent instance against the shipped text |
 | 2026-10-25 | Case 42, Case 23 amended (merge-call classification) | **desk-checked** — round 3: Cases 23 and 42 Pass (rounds 1–2 Conditional, fixed); not benchmarked | Only an explicit refusal means "not merged"; separate agent instance against the shipped text |
-| 2026-11-16 | Case 43 (declaration snapshot) | **desk-checked** — round 1: Pass on all three variants; not benchmarked | F1 states the send-time snapshot; separate agent instance against the shipped text |
+| 2026-11-16 | Case 43 (declaration snapshot) | **desk-checked** — round 1: Pass on all three variants; (b) fixture corrected afterwards and not re-run; not benchmarked | F1 states the send-time snapshot; separate agent instance against the shipped text |
 
 ### 2026-10-25 — Platform access resolution
 
@@ -1391,3 +1392,14 @@ changed here: whether a divergent issue that this run merged still gets its clos
 (F1's "everything downstream" says yes), and whether a gate that already sees a divergence
 in the declaration should still merge (nothing in the declaration confers authority over
 eligibility, so yes).
+
+**Fixture fix after review** (Stage 2 round 1). Variant (b) labelled #175's revert
+`merge-gate:reverted`, which means a verification failure, while the shared setup says #175 was
+merged and verified and that this run re-reads a successful `push` run on its merge commit.
+(b) now has a human revert #175's merge commit after the group run, with no gate label, which
+is consistent with that setup. The expected verdict is unchanged. The round-1 Pass for (b)
+was obtained on the earlier fixture, and (b) was **not re-run** on the corrected one, so its
+desk-check result for the current text is unrecorded. F1's reason for keeping `REVERTED`
+outside the exemption was also corrected: a `REVERTED` issue did land, so the reason is that
+`REVERTED` is final, not that no PR was expected. That change does not alter any case's
+expected behaviour.

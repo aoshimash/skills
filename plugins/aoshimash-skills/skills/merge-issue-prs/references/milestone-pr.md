@@ -681,9 +681,11 @@ ready PR that isn't.
   - The merge is one **this run** performed and confirmed, by its own merge and post-merge
     verification. The declaration's word and an earlier run's observation never qualify.
   - The declared status is `NOT_ATTEMPTED` or `DEFERRED`. Every other unmerged status
-    (`BLOCKED`, `NEEDS_CONTEXT`, `SKIPPED`, `REVERTED`) means the orchestrator expected no PR
-    of this issue to land. A merge this run made for such an issue contradicts the
-    declaration about which work exists, and it remains a divergence.
+    (`BLOCKED`, `NEEDS_CONTEXT`, `SKIPPED`, `REVERTED`) means the orchestrator expected no
+    further PR of this issue to land in this batch: the first three produced no mergeable PR,
+    and `REVERTED` is final in the orchestrator's status table. A merge this run made for
+    such an issue contradicts the declaration about which work exists, and it remains a
+    divergence.
   - Nothing else is exempt. A declared `MERGED` that the gate derives as not landed, and a
     declared unmerged status for work that landed in an **earlier** run, are divergences
     exactly as above.
