@@ -34,7 +34,7 @@ Resolved once per run as SKILL.md "Platform Access" describes: a connector for G
   - **The rules on the default branch**, every page — a short list hides a merge queue — and the repository's merge-queue read for the default branch.
   - **The gated-publish reads** — complete workflow-file and tree listings with a completeness signal, the PR's complete changed-file list with its count, and workflow runs on a commit and for one workflow across every branch, tag and event.
   - **The merge** — taking the repository's method **and** an expected head commit that makes the platform refuse the merge when the head moved.
-  - **Writes** — merging, creating and merging the revert PR, commenting — each covered by a tool that performs that write and reports whether it succeeded. No operation in this file approves a review, and none may be added.
+  - **Writes** — merging, creating and merging the revert PR (its merge-readiness read, below, is covered only by a tool returning the PR's state, merge state status and review decision, the base ref's classic-protection `requiresStatusChecks` and the types of every ruleset rule on it (from which `base_requires_checks` is derived), and every check run and commit status on its head with whether each is required for that PR, plus a total to compare the list against), commenting — each covered by a tool that performs that write and reports whether it succeeded. No operation in this file approves a review, and none may be added.
 - **Outside this choice**: local git (fetch, branch, revert, push) and the deploy tooling the verification plan uses (`kubectl`, Flux/Argo CLIs, cloud CLIs) run as written whatever the method.
 
 ## The account
@@ -281,6 +281,45 @@ git revert {merge_commit_sha} --no-edit
 git push -u origin revert-pr-{pr}
 gh pr create -R {owner}/{repo} --base {default_branch} --head revert-pr-{pr} \
   --title "Revert: {original title}" --body-file {revert_body_file}
+```
+
+Before the merge call, wait for the revert PR's pending required checks ([post-merge-safety-net.md](post-merge-safety-net.md#waiting-for-the-revert-prs-required-checks) "Waiting for the revert PR's required checks"). Its merge readiness, read right after creating it and every 30 seconds after that:
+
+```bash
+gh api graphql -F owner={owner} -F repo={repo} -F pr={revert_pr} -f query='
+query($owner: String!, $repo: String!, $pr: Int!) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $pr) {
+      state mergeStateStatus reviewDecision
+      baseRef { branchProtectionRule { requiresStatusChecks } rules(first: 100) { totalCount nodes { type } } }
+      commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) {
+        totalCount
+        nodes {
+          __typename
+          ... on CheckRun { name status conclusion isRequired(pullRequestNumber: $pr) }
+          ... on StatusContext { context state isRequired(pullRequestNumber: $pr) }
+        }
+      } } } } }
+    }
+  }
+}' --jq '.data.repository.pullRequest | (.commits.nodes[0].commit.statusCheckRollup.contexts // {totalCount: 0, nodes: []}) as $c | {state, merge_state: .mergeStateStatus, review_decision: .reviewDecision, base_requires_checks: ((.baseRef.branchProtectionRule.requiresStatusChecks == true) or ([.baseRef.rules.nodes[]?.type] | any(. == "REQUIRED_STATUS_CHECKS" or . == "REQUIRED_WORKFLOW_STATUS_CHECKS" or . == "WORKFLOWS" or . == "CODE_SCANNING"))), fetched: ($c.nodes | length), total: $c.totalCount, required: [$c.nodes[] | select(.isRequired) | {type: .__typename, name: (.name // .context), status, conclusion, state}]}'
+```
+
+How the read maps to the safety net's wait conditions:
+
+- `state` other than `OPEN` → no longer open.
+- `merge_state` `UNKNOWN` → the platform cannot yet determine whether the merge is possible. `BLOCKED` → the merge is reported blocked. Any other value (`CLEAN`, `UNSTABLE`, `HAS_HOOKS`, `BEHIND`, `DIRTY`) → not blocked: make the merge call now.
+- `review_decision` `REVIEW_REQUIRED` or `CHANGES_REQUESTED` → a review the agent cannot give; null or `APPROVED` → not that.
+- `fetched` below `total` → the read may be incomplete.
+- `base_requires_checks` `true` → the revert PR's base is positively known to require status checks: a classic branch protection rule with required status checks, or an active repository or organization ruleset rule on the base ref of a type that makes checks report before the merge — `REQUIRED_STATUS_CHECKS`, `REQUIRED_WORKFLOW_STATUS_CHECKS`, `WORKFLOWS` (required workflows), or `CODE_SCANNING` (required code scanning results). A rule type outside these four is not counted. `false` covers both "not required" and "not readable" (a null `baseRef`, a protection rule this account cannot see, a rule past the first 100), so an empty `required` list then never counts as waiting.
+- In `required`: a `CheckRun` whose `status` is not `COMPLETED`, or a `StatusContext` whose `state` is `PENDING` or `EXPECTED`, is pending. A `CheckRun` `COMPLETED` with a `conclusion` other than `SUCCESS`, `NEUTRAL`, or `SKIPPED`, or a `StatusContext` `FAILURE` or `ERROR`, has failed. An empty `required` list means no required check has reported; it is a reason to wait only when `base_requires_checks` is `true`.
+- A non-zero exit, or output that does not parse into these fields → a read that fails.
+
+A classic branch protection rule is not visible to every account: on 2026-11-16 `branchProtectionRule` read null on cli/cli and microsoft/vscode, whose PRs report required checks, so `base_requires_checks` was `false` there while `required` was non-empty; github/docs and astral-sh/uv, which require checks through rulesets, read `true`. `isRequired` takes the PR's number; the GraphQL schema describes it as "Whether this is required to pass before merging for a specific pull request." Never pass `--admin` or approve the revert PR to end the wait.
+
+Then merge it and read its state:
+
+```bash
 gh pr merge {revert_pr} -R {owner}/{repo} --<method>
 gh pr view {revert_pr} -R {owner}/{repo} --json state,mergeCommit --jq '{state, merge_commit: .mergeCommit.oid}'
 ```
@@ -289,7 +328,7 @@ The revert PR's body says what failed and links the original PR.
 
 - **Never approve the revert PR.** The agent authored it, and GitHub states that "Pull request authors cannot approve their own pull requests" ([Approving a pull request with required reviews](https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/approving-a-pull-request-with-required-reviews)). Do not route around that with another identity the agent can reach.
 - **Anything short of `MERGED` is a revert that did not land** — an explicit refusal (a required approving review, a code-owner review, red CI on the revert, any other protection), a call that was not a refusal, or a failed read. Leave the PR open and escalate with its URL and the refusal text; never retry, force, or bypass it.
-- **Known limit (inherited from the shared safety net):** the merge call is made right after the revert PR is created, without waiting for its checks. On a repository with required status checks the call can be refused while they are still running, so an auto-revert there can escalate merely because checks had not finished — the revert PR is then open with its checks running, and a human merges it.
+- **Pending required checks are waited out, nothing else.** The merge call waits, bounded, until the read above shows no required check pending; on a repository with required status checks that pass, the revert then lands without a human. Red required checks, a required review, and any other refusal still escalate at once, and checks still pending at the bound escalate as a failed revert. The wait's known limits are the safety net's ([post-merge-safety-net.md](post-merge-safety-net.md#waiting-for-the-revert-prs-required-checks)).
 
 ## Comment on the PR
 
