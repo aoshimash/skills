@@ -264,11 +264,11 @@ gh pr view {pr} -R {owner}/{repo} --json state,mergeCommit,mergedAt --jq '{state
 
 ## Create and merge a revert PR
 
-Used by the safety net's auto-revert procedure. The revert branch is cut in its own worktree in a new, empty temporary directory, so the checkout's branch and any uncommitted work in it are untouched (the checkout is the user's own when the current directory is the target repository):
+Used by the safety net's auto-revert procedure. The revert branch is cut in its own worktree in a new, empty temporary directory, so the checkout's branch and any uncommitted work in it are untouched (the checkout is the user's own when the current directory is the target repository). Each attempt gets its own branch name, `{revert_branch}` = `revert-pr-{pr}-{utc_timestamp}` with the timestamp from `date -u +%Y%m%d%H%M%S`, and its own directory from `mktemp -d`. An earlier attempt on the same PR that escalated leaves its branch pushed and its revert PR open, so reusing a name would collide with that remote branch, and the push would be refused for a reason unrelated to the failure being reverted:
 
 ```bash
 git fetch origin
-git worktree add -b revert-pr-{pr} {revert_worktree_dir} origin/{default_branch}
+git worktree add -b {revert_branch} {revert_worktree_dir} origin/{default_branch}
 cd {revert_worktree_dir}
 
 # Merge-commit method: revert the merge commit against its first parent
@@ -278,8 +278,8 @@ git revert {merge_commit_sha} --no-edit
 # Rebase method: the PR's commits landed individually; identify them on the
 # default branch (git log) and revert each, newest first
 
-git push -u origin revert-pr-{pr}
-gh pr create -R {owner}/{repo} --base {default_branch} --head revert-pr-{pr} \
+git push -u origin {revert_branch}
+gh pr create -R {owner}/{repo} --base {default_branch} --head {revert_branch} \
   --title "Revert: {original title}" --body-file {revert_body_file}
 ```
 
@@ -329,6 +329,17 @@ The revert PR's body says what failed and links the original PR.
 - **Never approve the revert PR.** The agent authored it, and GitHub states that "Pull request authors cannot approve their own pull requests" ([Approving a pull request with required reviews](https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/approving-a-pull-request-with-required-reviews)). Do not route around that with another identity the agent can reach.
 - **Anything short of `MERGED` is a revert that did not land** — an explicit refusal (a required approving review, a code-owner review, red CI on the revert, any other protection), a call that was not a refusal, or a failed read. Leave the PR open and escalate with its URL and the refusal text; never retry, force, or bypass it.
 - **Pending required checks are waited out, nothing else.** The merge call waits, bounded, until the read above shows no required check pending; on a repository with required status checks that pass, the revert then lands without a human. Red required checks, a required review, and any other refusal still escalate at once, and checks still pending at the bound escalate as a failed revert. The wait's known limits are the safety net's ([post-merge-safety-net.md](post-merge-safety-net.md#waiting-for-the-revert-prs-required-checks)).
+- **An earlier attempt's revert PR is left as it is.** A revert PR from an earlier attempt on the same PR that is still open is never closed, edited, retargeted, or pushed to; the report names it beside the new one.
+
+**Clean up the local worktree and branch** when the attempt ends: once the revert PR's state has been read after the merge call, whether the revert landed or not, or as soon as the attempt stops short of that. `{checkout_dir}` is the run's checkout (workflow.md Phase 0):
+
+```bash
+cd {checkout_dir}
+git worktree remove {revert_worktree_dir}
+git branch -d {revert_branch}
+```
+
+The cleanup is local only. The pushed branch and the revert PR stay for the human on an escalation. Without `--force`, `git worktree remove` refuses a worktree with modified or untracked files, and `git branch -d` refuses a branch still checked out in a worktree or one whose commits are not on its upstream — `origin/{default_branch}` from the `worktree add` until the push makes it the pushed branch. So a revert that never reached the remote is kept: after a conflicting `git revert` both the dirty worktree and its branch stay, and after a failed push the clean worktree is removed but the branch holding the revert commit stays. Report what was kept, by path and branch name; the next attempt's own name and directory do not collide with them. If the revert PR was created and either command refuses, report the refusal and the path rather than forcing it.
 
 ## Comment on the PR
 

@@ -60,7 +60,7 @@ The platform guide's commands specify each operation; they do not fix the tool t
 - **Before the merge call** — the approval read, the CI gate, the rules read, a probe — the PR is not merged: autonomous defers it, interactive surfaces it.
 - **From the merge call onward** the merge may have landed, so a method failure is never a deferral: a merge whose outcome platform state cannot confirm stops the line as **merge outcome unconfirmed** ([references/post-merge-safety-net.md](references/post-merge-safety-net.md) "Pre-merge steps and the merge call's result"). Once the merge is confirmed, verification that cannot be completed is a verification failure, and a revert PR the method cannot create or merge is a revert failure.
 
-Name the method in the report. **Known limits:** the guide's CLI commands are the verified path; no connector path has been exercised by this skill's evaluations. The gated-publish publish-run read needs gh 2.52.0 or later (`gh run list --all`); with an older gh that target is unobservable, so it fails closed at run start instead of merging.
+Name the method in the report. **Known limits:** the guide's CLI commands are the verified path; no connector path has been exercised by this skill's evaluations. The gated-publish publish-run read needs gh 2.52.0 or later (`gh run list --all`); with an older gh that target is unobservable, so its autonomous observability precondition fails at run start (references/workflow.md 0-1, 0-4) and the run falls back to interactive mode, where each merge waits for the user's yes; it does not stop the run. A merge the user then approves still cannot pass the publish-run read, so its verification fails and the line stops (references/workflow.md 2-9).
 
 ## Workflow
 

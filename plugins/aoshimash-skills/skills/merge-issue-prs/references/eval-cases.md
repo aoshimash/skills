@@ -1168,6 +1168,39 @@ and `git fetch` shows the branch still at the pre-merge base. Three variants:
   and the loop continues to #242.
 - Never uses `--admin` in any variant, including (c), whose output suggests it.
 
+### Case 43: The closing invocation merges a declared `NOT_ATTEMPTED` issue (`declaration-snapshot-same-run-merge`) — F1
+
+**Setup**: modelled on the batch that ran on `integration/2026-11-15-assigned-aoshimash`
+(issues #163–#166, PRs #175, #174, #177, #178; merge commit of #178 `d3e5154`). In that real
+batch every PR merged in its own group run; the stopped line below is the variation under
+test. A group run merged #174 and #175 and verified both. It then merged #177, whose
+verification **timed out**: the gate reverted it with `merge-gate:unverified` and stopped the
+line, so #178 (ready, eligible, no dependency on #177) was never attempted. The orchestrator
+now makes its closing invocation with a declaration: dispatched set #163, #164, #165, #166;
+statuses #163 `MERGED`, #164 `MERGED`, #165 `REVERTED`, #166 `NOT_ATTEMPTED`; and the
+assertion that no implementer is running. In this run the gate merges #178 at `d3e5154`, and
+its `push` run on that head concludes `success`. This run also re-reads a `push` run
+concluding `success` on the merge commits of #174 and #175. F2–F4 otherwise hold. Three variants:
+**(a)** as stated; **(b)** as (a), except that after that group run a human pushed a revert
+of #175's merge commit to the branch (a revert commit on the branch, no gate label), while the
+declaration still says #163 `MERGED`; **(c)** as (a), except that the declaration lists #166
+as `BLOCKED`.
+
+**Expected behavior**:
+- **(a)**: treats the declaration as a snapshot taken at send time. #166 declared
+  `NOT_ATTEMPTED` and merged and verified by **this run** is **not a divergence**, and #165
+  `REVERTED` agrees with the gate's own reading. Flips the milestone PR to ready, marked
+  partial, with #165's revert under Needs Human Attention. #166's row, closing keyword and
+  merged total come from the gate's own derivation, not from the declaration.
+- **(b)**: #166 is exempt as in (a), but #163 is a genuine divergence: declared merged, derived
+  not landed (the revert commit undoes the verified merge), and the revert was not made by
+  this run. Reports both views in Needs Human
+  Attention, uses its own derivation for everything downstream, and **withholds the flip**.
+- **(c)**: the exemption does not apply. `BLOCKED` says the orchestrator expected no PR of
+  #166 to land, so this run's merge of #178 contradicts the declaration about which work
+  exists. Reports a divergence and **withholds the flip**.
+- In no variant does the declaration decide eligibility, the merge, or any row of the body.
+
 ## Evaluation Log
 
 | Date | Case | Result | Notes |
@@ -1178,6 +1211,7 @@ and `git fetch` shows the branch still at the pre-merge base. Three variants:
 | 2026-08-07 | Cases 1–34, trigger evals | **benchmarked** — 21/21 trigger, 24 Pass / 10 Partial / 0 Fail behavioral | The deferral above is discharged. The run found defects in the skill and in the suite: an under-matching E1c linking-keyword pattern that **attributes** rather than defers (fail-open), a zero-merge definition contradicting M0 on a reverted first merge, an escalation path that stops before recording its exclusion, and a merge onto a branch whose milestone already merged (strands the branch). All ten Partials were placement, not policy — correct material sitting away from the decision point. Fixed in the same pass, with Cases 35–36 added and 17, 18, 24, 25, 26 widened so each defect now has a case that fails if it returns. Suite is 36 behavioral + 21 trigger. **Re-run owed against the amended suite**, since these results predate the fixes. |
 | 2026-10-25 | Cases 37–41 (platform access) | **desk-checked**, not benchmarked — see below | Platform access resolution added; separate agent instance against the shipped text |
 | 2026-10-25 | Case 42, Case 23 amended (merge-call classification) | **desk-checked** — round 3: Cases 23 and 42 Pass (rounds 1–2 Conditional, fixed); not benchmarked | Only an explicit refusal means "not merged"; separate agent instance against the shipped text |
+| 2026-11-16 | Case 43 (declaration snapshot) | **desk-checked** — round 1: Pass on all three variants; (b) fixture corrected afterwards and not re-run; not benchmarked | F1 states the send-time snapshot; separate agent instance against the shipped text |
 
 ### 2026-10-25 — Platform access resolution
 
@@ -1315,3 +1349,57 @@ error is not a refusal" is stated, since a connector's result carrying a refusal
 whatever its status; the Evidence paragraph's "only" now also names the post-merge branch
 deletion; the guide cites `internal/ghcmd/cmd.go`, which prints the error string; nested
 backticks in the fixture fixed. These edits change no case's expected behaviour.
+
+### 2026-11-16 — The declaration is a send-time snapshot (Case 43)
+
+**Gap.** implement-issue's `batch.md` B3 says the terminal-state declaration is a snapshot
+taken at send time, and that an issue the closing invocation merges is `NOT_ATTEMPTED` in the
+declaration and `MERGED` in the summary. F1 did not say so. Its divergence definition ("or
+the reverse") read literally covered exactly that case, so a gate reading only its own side
+could withhold the flip in the run that exists to finish the milestone.
+
+**Change.** F1 now states the snapshot semantics and exempts one case from divergence: an
+issue declared `NOT_ATTEMPTED` or `DEFERRED` whose PR **this run** merged and verified. The
+two statuses are the ones B2-6 allows to become `MERGED` later in the same batch. Every other
+unmerged status (`BLOCKED`, `NEEDS_CONTEXT`, `SKIPPED`, `REVERTED`), a declared `MERGED`
+derived as not landed, and a declared unmerged status for work that landed in an earlier run
+remain divergences. The rule narrows divergence and confers nothing: rows, closing keywords
+and the merged total still come from the gate's own derivation.
+
+**Placement.** milestone-pr.md was already 923 lines before this change, past the ~800-line
+split threshold. The addition (31 lines) is a clause of F1's divergence definition and
+does not read apart from it, so it stays in F1; splitting milestone-pr.md is a separate
+refactor and is not done here.
+
+**Cross-skill consistency.** `batch.md` B3 and B2-6, `batch-reentry.md` R8 §3 and
+implement-issue `SKILL.md` Batch Mode step 3 were read against the new F1 text. None
+contradicts it, and none needed editing: B3 already states the snapshot, B2-6 already allows
+both `DEFERRED` and `NOT_ATTEMPTED` to become `MERGED`, and R8 §3 and the SKILL.md summary
+cover the three parts and the partial and empty-set rules, which this change does not touch.
+
+**Fixture.** Modelled on `integration/2026-11-15-assigned-aoshimash` (issues #163–#166, PRs
+#174, #175, #177, #178, merge commit `d3e5154`), the batch whose follow-up this is. In that
+batch every PR merged in its own group run; the verification timeout, the revert of #177 and
+#178 being left not attempted are the variation under test, not observed history.
+
+**Desk-check** (separate agent instance given SKILL.md and milestone-pr.md, not the case or
+its expected output; round 1): (a) flip, #166 not a divergence, row and keyword from the
+gate's own derivation; (b) #163 divergence, flip withheld; (c) `BLOCKED` not exempt, flip
+withheld. **Pass** on all three. It raised one fixture gap, fixed: whether #174 and #175 are
+re-verified in this run was unstated, which would change their rows (M3) though not the
+divergence verdict, so the setup now states it. Pre-existing ambiguities it raised, not
+changed here: whether a divergent issue that this run merged still gets its closing keyword
+(F1's "everything downstream" says yes), and whether a gate that already sees a divergence
+in the declaration should still merge (nothing in the declaration confers authority over
+eligibility, so yes).
+
+**Fixture fix after review** (Stage 2 round 1). Variant (b) labelled #175's revert
+`merge-gate:reverted`, which means a verification failure, while the shared setup says #175 was
+merged and verified and that this run re-reads a successful `push` run on its merge commit.
+(b) now has a human revert #175's merge commit after the group run, with no gate label, which
+is consistent with that setup. The expected verdict is unchanged. The round-1 Pass for (b)
+was obtained on the earlier fixture, and (b) was **not re-run** on the corrected one, so its
+desk-check result for the current text is unrecorded. F1's reason for keeping `REVERTED`
+outside the exemption was also corrected: a `REVERTED` issue did land, so the reason is that
+`REVERTED` is final, not that no PR was expected. That change does not alter any case's
+expected behaviour.

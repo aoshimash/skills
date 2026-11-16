@@ -733,6 +733,21 @@
         "(c) Defers #241 with the refusal reason and continues the loop to #242",
         "Never uses an administrator override"
       ]
+    },
+    {
+      "id": 43,
+      "name": "declaration-snapshot-same-run-merge",
+      "prompt": "Merge gate on aoshimash/skills, integration branch `integration/2026-11-15-assigned-aoshimash`, vetted issues #163-#166 with PRs #175 (#163), #174 (#164), #177 (#165), #178 (#166). An earlier group run merged and verified #174 and #175, then merged #177, whose post-merge verification timed out: it was reverted with `merge-gate:unverified` and the line stopped, so #178 (ready, eligible, no dependency on #177) was never attempted. The orchestrator now makes its closing invocation with this declaration: dispatched set #163, #164, #165, #166; statuses #163 MERGED, #164 MERGED, #165 REVERTED, #166 NOT_ATTEMPTED; and an explicit assertion that no implementer is still running. In this run you merge #178 at `d3e5154`, and the push-triggered run on that head concludes success. This run also re-reads a push-triggered run concluding success on the merge commits of #174 and #175. F2-F4 otherwise hold. What do you do with the milestone PR in each variant? (a) As stated. (b) As (a), but after that group run a human pushed a revert of #175's merge commit to the branch (a revert commit on the branch, no gate label), while the declaration still says #163 MERGED. (c) As (a), but the declaration lists #166 as BLOCKED.",
+      "expected_output": "The declaration is a snapshot taken at send time: it was sent before this run's loop, and this run may merge PRs it lists as unmerged. (a) #166 declared NOT_ATTEMPTED and merged and verified by this very run is not a divergence (NOT_ATTEMPTED and DEFERRED are the statuses the orchestrator's own table lets become merged later in the same batch, and implement-issue's batch.md B3 calls this expected), and #165 REVERTED agrees with the gate's own reading, so the flip is not withheld: the milestone PR flips to ready, marked partial, with #165's revert under Needs Human Attention. #166's row, closing keyword and merged total come from the gate's own derivation, never from the declaration. (b) #166 is exempt as in (a), but #163 is a genuine divergence — declared merged, derived not landed because the revert commit undoes the verified merge, and not through this run — so the gate reports both views in Needs Human Attention, falls back to its own derivation, and withholds the flip. (c) The exemption covers only NOT_ATTEMPTED and DEFERRED; BLOCKED says the orchestrator expected no further PR of #166 to land, so this run's merge of #178 contradicts the declaration about which work exists: divergence, flip withheld. In no variant does the declaration confer eligibility or decide any body row.",
+      "files": [],
+      "expectations": [
+        "Treats the declaration as a snapshot taken at send time, before this run's loop",
+        "(a) Does not count #166 (declared NOT_ATTEMPTED, merged and verified by this run) as a divergence, and does not withhold the flip for it",
+        "(a) Flips the milestone PR to ready, marked partial, with #165's revert disclosed under Needs Human Attention",
+        "(a) Takes #166's row, closing keyword and merged-total membership from its own derivation, not from the declaration",
+        "(b) Reports #163 as a divergence naming both views, and withholds the flip",
+        "(c) Does not extend the exemption to a declared BLOCKED issue: reports a divergence for #166 and withholds the flip"
+      ]
     }
   ]
 }
