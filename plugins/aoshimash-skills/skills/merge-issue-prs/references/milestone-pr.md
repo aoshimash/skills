@@ -651,7 +651,8 @@ ready PR that isn't.
   what the declaration is expected to report back, and treating them as disagreement would
   withhold the flip in the case the deferred-items rule below exists to permit. Divergence
   means the two views contradict each other about whether an issue's work **landed on the
-  integration branch**: declared merged where the gate derives otherwise, or the reverse. On
+  integration branch**: declared merged where the gate derives otherwise, or the reverse —
+  apart from the one reverse this very run produces itself, set out in the next paragraph. On
   **divergence**,
   the two views of the batch have come apart, which is a real signal and worth more than
   either view alone: report it in Needs Human Attention naming the issues and **both** views,
@@ -661,6 +662,36 @@ ready PR that isn't.
   Core Principle 1 puts it on the defer side. It is a cheap failure to recover from — the next
   run re-derives and re-compares — and an expensive one to get wrong, since the flip is the
   invitation to merge into the default branch.
+
+  **The declaration is a snapshot taken at send time.** The orchestrator sends it with its
+  closing invocation, before this run's loop starts, and this run may then merge PRs the
+  declaration lists as unmerged: the not-attempted set a stopped line left behind reaches its
+  next run here, and for the batch's last group that run is this one. implement-issue's
+  [batch.md](../../implement-issue/references/batch.md) B3 states the same fact from its side
+  — an issue this invocation merges is `NOT_ATTEMPTED` in the declaration and `MERGED` in the
+  orchestrator's summary, which is expected rather than a disagreement. So a declared status
+  is compared with the state it described when it was sent, not with the state this run left
+  behind: **an issue declared `NOT_ATTEMPTED` or `DEFERRED` whose PR this run merged and
+  verified is not a divergence, and it does not withhold the flip.** Those are the two
+  statuses the orchestrator's own status table allows to become merged later in the same
+  batch (batch.md B2-6), so this is the advance the declaration already anticipated. Without
+  the rule, the closing invocation would withhold the flip in exactly the case it exists to
+  finish. The exemption is narrow, and each of its conditions rests on the gate's own
+  evidence:
+  - The merge is one **this run** performed and confirmed, by its own merge and post-merge
+    verification. The declaration's word and an earlier run's observation never qualify.
+  - The declared status is `NOT_ATTEMPTED` or `DEFERRED`. Every other unmerged status
+    (`BLOCKED`, `NEEDS_CONTEXT`, `SKIPPED`, `REVERTED`) means the orchestrator expected no PR
+    of this issue to land. A merge this run made for such an issue contradicts the
+    declaration about which work exists, and it remains a divergence.
+  - Nothing else is exempt. A declared `MERGED` that the gate derives as not landed, and a
+    declared unmerged status for work that landed in an **earlier** run, are divergences
+    exactly as above.
+
+  The rule narrows what counts as a divergence and confers nothing. The issue's row, its
+  closing keyword, and the merged total still come from the gate's own derivation, as they do
+  for every other issue. A PR this run merged and then reverted reads as not landed on both
+  sides, so the two views agree and the exemption is not needed.
 - **Standalone:** derive it from platform state — every vetted issue has either a
   merged-and-verified PR or a recorded deferral/exclusion, and no open PR on the integration
   branch is still in a non-terminal state (draft, checks unsettled inside their window,
