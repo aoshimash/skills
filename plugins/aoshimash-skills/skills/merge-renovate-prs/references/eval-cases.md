@@ -326,7 +326,7 @@ Why it matters: the gate aged `node` by what Renovate picked or by the lower bou
 
 ### Case 26: A revert PR whose required check is still running (`revert-pr-pending-checks`) — autonomous
 
-**Setup** (aoshimash/homelab-k8s as read on 2026-11-16, one rule added): the default branch's real ruleset — `deletion`, `non_fast_forward`, and a `pull_request` rule with `required_approving_review_count` 0 — plus a constructed `required_status_checks` rule requiring "Lint & Security", the real job of the repo's "K8s Lint & Security" workflow, which took 13 seconds on #400. PR #400 is real, as in Case 25; its failure (kube-state-metrics in `CrashLoopBackOff`) and the revert PR #401's merge-readiness reads are constructed in the shape the real read returns. Variants: (a) the required check is in progress, then succeeds; (b) it fails; (c) it is still in progress at 30 minutes.
+**Setup** (aoshimash/homelab-k8s as read on 2026-11-16, one rule added): the default branch's real ruleset — `deletion`, `non_fast_forward`, and a `pull_request` rule with `required_approving_review_count` 0 — plus a constructed `required_status_checks` rule requiring "Lint & Security", the real job of the repo's "K8s Lint & Security" workflow, which took 13 seconds on #400. PR #400 is real, as in Case 25; its failure (kube-state-metrics in `CrashLoopBackOff`) and the revert PR #401's merge-readiness reads are constructed in the shape the real read returns. Variants: (a) the required check is in progress, then succeeds; (b) it fails; (c) it is still in progress at 30 minutes; (d) the real ruleset with no check rule, and #401 reads `BLOCKED` with no required check.
 
 **Expected behavior**:
 - Starts the auto-revert without asking, creates #401, and never approves it.
@@ -334,6 +334,7 @@ Why it matters: the gate aged `node` by what Renovate picked or by the lower bou
 - (a) Calls merge once the check succeeds, reads `MERGED`, verifies the recovery, and reports a revert that landed without a human.
 - (b) Stops waiting on the failed check, calls merge, and escalates immediately with #401's URL and the refusal text.
 - (c) Calls merge at the 30-minute bound; the refusal is a failed revert that escalates, saying the bound ran out with the check pending.
+- (d) Does not wait: the base is not known to require checks, so it calls merge at once and escalates the refusal immediately.
 - Never `--admin`, an approval, a retry, a re-run, or a ruleset change; reads #401's state after every merge call; stops the line.
 
 ## Evaluation Log
@@ -813,3 +814,17 @@ No case lost an expectation to the moved text. The one loss (Case 23) sits in fi
 | 26 `revert-pr-pending-checks` | 7/7 | Waited on (a)'s first read and merged on the CLEAN read; (b) ended the wait on the failed check and escalated with #401 open and the system still on the failed change; (c) called merge at the bound and said the check was still pending. It flagged that `gh` may refuse a `BLOCKED` PR with `is not mergeable:` before submitting — an explicit refusal either way, so no change. |
 
 Cases 1–25 were not re-run: Cases 5 and 25 reach the revert, but in neither does the revert PR have a pending required check, so the wait does not change their outcome.
+
+### 2026-11-16 — The none-reported wait needs a known check requirement (Case 26 re-run)
+
+**Change (Stage 1 review round 1).** Issue #180 Decision 2 allows waiting out only "checks still pending". The previous wait also kept waiting on a blocked revert PR with no required check reported, so on a base with no check requirement, a block from another rule (signed commits, conversation resolution) escalated up to 30 minutes late. The "none has reported yet" branch now applies only when the read shows the base **positively known** to require status checks. That means a classic branch protection rule with `requiresStatusChecks`, or an active repository or organization ruleset rule of type `REQUIRED_STATUS_CHECKS` or `REQUIRED_WORKFLOW_STATUS_CHECKS` on the base ref, both read in the same GraphQL query (new field `base_requires_checks`). An unreadable or unknown requirement counts as absent: no wait, and the refusal escalates at once. The shared file's known limits were restated to match. The previous entry's limit, "waits out the bound before escalating", now holds only on a base that does require checks.
+
+**Command re-run as written.** The changed read was extracted again from both `platform-github.md` files (still byte-identical) and run on 2026-11-16 on six real PRs: the four of the previous entry plus github/docs#46954 and astral-sh/uv#23251, whose bases carry a `REQUIRED_STATUS_CHECKS` ruleset rule. Results: `base_requires_checks` `true` on those two, and `false` on aoshimash/skills#173 (no ruleset), aoshimash/homelab-k8s#400 (ruleset without a check rule), cli/cli#14927 and microsoft/vscode#348447. The last two report required checks, but `branchProtectionRule` read null for this account, so the classic protection behind them is invisible — the fail-closed direction, recorded in the platform guide. Every run exited 0 with identical output on macOS bash 5.3.20 and zsh 5.9 (gh 2.104.0), `debian:12` (gh 2.23.0, GNU) and `alpine:3.22` (gh 2.72.0). `RepositoryRuleType` values `REQUIRED_STATUS_CHECKS` / `REQUIRED_WORKFLOW_STATUS_CHECKS`, `Ref.rules` ("A list of rules from active Repository and Organization rulesets that apply to this ref.") and `BranchProtectionRule.requiresStatusChecks` were confirmed by introspection.
+
+**Case 26** gained variant (d) (the real homelab-k8s ruleset, no check rule, #401 `BLOCKED` with no required check) and an eighth expectation. **Re-run:** one fresh agent instance ran the updated Case 26 once (paper exercise, eval files withheld). **Graded by the authoring session, SELF-REVIEWED.**
+
+| Case | with-skill | Notes |
+|---|---|---|
+| 26 `revert-pr-pending-checks` | 8/8 | (a)–(c) unchanged; (d) read `base_requires_checks` false, did not wait, called merge at once, and escalated the refusal |
+
+Cases 1–25 were not re-run, for the reason the previous entry gives.

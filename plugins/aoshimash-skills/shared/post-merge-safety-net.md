@@ -42,7 +42,7 @@ The skill carrying this file provides each of these and says where it lives. Tex
   - **PR changed files** — every file a PR changes, with status and previous name, its changed-file count and head commit;
   - **workflow runs after a merge** — the runs on a merge commit, and each publishing workflow's runs started at or after the merge, on every branch and tag and for every event;
   - **merge** — the merge call in the repository's merge method, what its result looks like when it is an explicit refusal, and the PR state read after it;
-  - **revert PR** — building the revert in the merge-method-dependent form, creating the revert PR, reading its merge readiness (its state, whether the platform reports the merge blocked, its review decision, and each required check's status), merging it without approving it, and reading its state;
+  - **revert PR** — building the revert in the merge-method-dependent form, creating the revert PR, reading its merge readiness (its state, whether the platform reports the merge blocked, its review decision, each required check's status, and whether the base is positively known to require status checks), merging it without approving it, and reading its state;
   - **PR comment**.
 
 ## Deploy mechanism and merge method
@@ -332,16 +332,17 @@ A revert PR is new, so on a repository with required status checks those checks 
 Read the revert PR's merge readiness (platform guide: revert PR) right after creating it, and again every 30 seconds while either of these holds:
 
 - the PR is open and the platform reports that it cannot yet determine whether the merge is possible;
-- the PR is open, the platform reports the merge **blocked**, its review decision is neither "review required" nor "changes requested", the read is complete, no required check has failed, and a required check is still pending or none has reported yet.
+- the PR is open, the platform reports the merge **blocked**, its review decision is neither "review required" nor "changes requested", the read is complete, no required check has failed, and either a required check is still pending, or none has reported yet **and** the read shows the base positively known to require status checks (a branch protection or ruleset rule the platform guide reads).
 
-As soon as a read shows neither, make the merge call. So the wait ends at once on a required check that failed, a required review the agent cannot give, a PR that is no longer open, a read that fails, or a read that may be incomplete: the merge call then meets whatever refusal it would have met without the wait, and step 5 escalates with the revert PR's URL and the refusal text — no retry, no bypass, no approval. A merge the platform does not report blocked is not waited on at all, which keeps a check that is not required from delaying the revert.
+As soon as a read shows neither, make the merge call. So the wait ends at once on a required check that failed, a required review the agent cannot give, a PR that is no longer open, a read that fails, or a read that may be incomplete: the merge call then meets whatever refusal it would have met without the wait, and step 5 escalates with the revert PR's URL and the refusal text — no retry, no bypass, no approval. A merge the platform does not report blocked is not waited on at all, which keeps a check that is not required from delaying the revert. A blocked merge with no required check reported is waited on only where the base is known to require checks, so a block from any other rule escalates at once: where that requirement is unreadable or unknown, the read counts it as absent and the agent does not wait.
 
 The wait is **bounded**: 30 minutes from the revert PR's creation, unless the repository's agent instructions name another bound. At the bound, make the merge call anyway. A refusal because checks are still pending is then a failed revert like any other, and the escalation says the bound ran out with those checks pending. Never shorten the wait by approving, bypassing, or re-running anything.
 
 **Known limits.** The wait reads only what the platform reports, so:
 
 - A required check that has not reported yet while another one has is not waited for. Once every reported required check is complete, the wait ends, and if a required check reports after that, the platform refuses the merge call and the revert escalates.
-- A merge blocked by something other than checks or reviews, such as a rule requiring signed commits or resolved conversations, is waited on until the bound when no required check has reported, so it reaches step 5 after the bound rather than at once.
+- On a base that requires status checks, a merge blocked by something else as well, such as a rule requiring signed commits or resolved conversations, is waited on until the required checks report — or until the bound, if none ever does — before the refusal reaches step 5.
+- A check requirement the read cannot see (a protection rule hidden from this account, a ruleset rule past what the read fetches) counts as absent, so a revert there whose required checks have not reported yet is not waited on, and its refusal escalates as before the wait existed.
 - That a required check with no report yet keeps the merge reported as blocked was not observed in this file's verification. Where the platform reports anything else, the wait ends and the merge call is refused as before, so the procedure never does worse than merging at once.
 
 ### Interactive: stop-the-line

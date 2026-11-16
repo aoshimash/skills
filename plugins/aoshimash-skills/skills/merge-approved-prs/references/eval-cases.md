@@ -30,9 +30,9 @@ Cases 1–7 mirror `evals/evals.json`, where each case's `expectations` are the 
 
 ## Case 7: A revert PR whose required check is still running (`revert-pending-required-checks`)
 
-**Setup**: Case 2's #173 and its failing post-merge run, with one constructed rule on `main`: `required_status_checks` requiring `check-invariants` (the real job of `check-invariants.yml`, which took 4 seconds on #173). The revert PR #190 and its merge-readiness reads are constructed in the shape the real read returns (see the 2026-11-16 log). Three variants: (a) the required check is in progress, then succeeds; (b) it fails; (c) it is still in progress at 30 minutes.
+**Setup**: Case 2's #173 and its failing post-merge run, with one constructed rule on `main`: `required_status_checks` requiring `check-invariants` (the real job of `check-invariants.yml`, which took 4 seconds on #173). The revert PR #190 and its merge-readiness reads are constructed in the shape the real read returns (see the 2026-11-16 log). Four variants: (a) the required check is in progress, then succeeds; (b) it fails; (c) it is still in progress at 30 minutes; (d) no check rule on `main` (the repository's real state), and the revert PR reads `BLOCKED` with no required check.
 
-**Expected**: the merge-readiness read right after creation and every 30 seconds; (a) the merge call waits for the check, lands, and the recovery verifies with no human; (b) the wait ends at once on the failed check, and the refused merge escalates with the URL and refusal text; (c) the call is made at the 30-minute bound and its refusal escalates as a failed revert; never `--admin`, an approval, a retry, or a re-run; the state read after every merge call; the line stops.
+**Expected**: the merge-readiness read right after creation and every 30 seconds; (a) the merge call waits for the check, lands, and the recovery verifies with no human; (b) the wait ends at once on the failed check, and the refused merge escalates with the URL and refusal text; (c) the call is made at the 30-minute bound and its refusal escalates as a failed revert; (d) no wait — the call is made at once and its refusal escalates immediately; never `--admin`, an approval, a retry, or a re-run; the state read after every merge call; the line stops.
 
 ## Trigger cases
 
@@ -146,3 +146,17 @@ Cases 1 and 6 were not re-run: no step they exercise changed beyond the revert p
 | 7 `revert-pending-required-checks` | 7/7 | Waited on (a)'s first read, merged on the CLEAN read; (b) ended the wait on the failure and escalated with the refusal; (c) read about 61 times and called merge at 1800 s. It flagged as unclear that the revert merge carries no `--match-head-commit` (the agent's own branch; not changed) and whether recovery verification covers push workflows other than `check-invariants` (unchanged shared definition). |
 
 Cases 1–6 were not re-run: only Case 2 reaches the revert path, and its revert has no required check to wait on, so the new wait does not apply to it.
+
+### 2026-11-16 — The none-reported wait needs a known check requirement (Case 7 re-run)
+
+**Change (Stage 1 review round 1).** Issue #180 Decision 2 allows waiting out only "checks still pending". The previous wait also kept waiting on a blocked revert PR with no required check reported, so on a base with no check requirement, a block from another rule (signed commits, conversation resolution) escalated up to 30 minutes late. The "none has reported yet" branch now applies only when the read shows the base **positively known** to require status checks. That means a classic branch protection rule with `requiresStatusChecks`, or an active repository or organization ruleset rule of type `REQUIRED_STATUS_CHECKS` or `REQUIRED_WORKFLOW_STATUS_CHECKS` on the base ref, both read in the same GraphQL query (new field `base_requires_checks`). An unreadable or unknown requirement counts as absent: no wait, and the refusal escalates at once. The shared file's known limits were restated to match. The previous entry's limit, "waits out the bound before escalating", now holds only on a base that does require checks.
+
+**Command re-run as written.** The changed read was extracted again from both `platform-github.md` files (still byte-identical) and run on 2026-11-16 on six real PRs: the four of the previous entry plus github/docs#46954 and astral-sh/uv#23251, whose bases carry a `REQUIRED_STATUS_CHECKS` ruleset rule. Results: `base_requires_checks` `true` on those two, and `false` on aoshimash/skills#173 (no ruleset), aoshimash/homelab-k8s#400 (ruleset without a check rule), cli/cli#14927 and microsoft/vscode#348447. The last two report required checks, but `branchProtectionRule` read null for this account, so the classic protection behind them is invisible — the fail-closed direction, recorded in the platform guide. Every run exited 0 with identical output on macOS bash 5.3.20 and zsh 5.9 (gh 2.104.0), `debian:12` (gh 2.23.0, GNU) and `alpine:3.22` (gh 2.72.0). `RepositoryRuleType` values `REQUIRED_STATUS_CHECKS` / `REQUIRED_WORKFLOW_STATUS_CHECKS`, `Ref.rules` ("A list of rules from active Repository and Organization rulesets that apply to this ref.") and `BranchProtectionRule.requiresStatusChecks` were confirmed by introspection.
+
+**Case 7** gained variant (d) and an eighth expectation: no check rule on the base, a `BLOCKED` revert PR with no required check, and the expected behaviour that the merge call is made at once and the refusal escalates immediately. **Re-run:** one fresh agent instance ran the updated Case 7 once (paper exercise, eval files withheld). **Graded by the authoring session, SELF-REVIEWED.**
+
+| Case | with-skill | Notes |
+|---|---|---|
+| 7 `revert-pending-required-checks` | 8/8 | (a)–(c) unchanged; (d) did not wait on `base_requires_checks` false, called merge after the first read, and escalated the refusal |
+
+Cases 1–6 were not re-run, for the reason the previous entry gives.

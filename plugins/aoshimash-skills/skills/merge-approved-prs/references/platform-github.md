@@ -291,6 +291,7 @@ query($owner: String!, $repo: String!, $pr: Int!) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $pr) {
       state mergeStateStatus reviewDecision
+      baseRef { branchProtectionRule { requiresStatusChecks } rules(first: 100) { totalCount nodes { type } } }
       commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) {
         totalCount
         nodes {
@@ -301,7 +302,7 @@ query($owner: String!, $repo: String!, $pr: Int!) {
       } } } } }
     }
   }
-}' --jq '.data.repository.pullRequest | (.commits.nodes[0].commit.statusCheckRollup.contexts // {totalCount: 0, nodes: []}) as $c | {state, merge_state: .mergeStateStatus, review_decision: .reviewDecision, fetched: ($c.nodes | length), total: $c.totalCount, required: [$c.nodes[] | select(.isRequired) | {type: .__typename, name: (.name // .context), status, conclusion, state}]}'
+}' --jq '.data.repository.pullRequest | (.commits.nodes[0].commit.statusCheckRollup.contexts // {totalCount: 0, nodes: []}) as $c | {state, merge_state: .mergeStateStatus, review_decision: .reviewDecision, base_requires_checks: ((.baseRef.branchProtectionRule.requiresStatusChecks == true) or ([.baseRef.rules.nodes[]?.type] | any(. == "REQUIRED_STATUS_CHECKS" or . == "REQUIRED_WORKFLOW_STATUS_CHECKS"))), fetched: ($c.nodes | length), total: $c.totalCount, required: [$c.nodes[] | select(.isRequired) | {type: .__typename, name: (.name // .context), status, conclusion, state}]}'
 ```
 
 How the read maps to the safety net's wait conditions:
@@ -310,10 +311,11 @@ How the read maps to the safety net's wait conditions:
 - `merge_state` `UNKNOWN` → the platform cannot yet determine whether the merge is possible. `BLOCKED` → the merge is reported blocked. Any other value (`CLEAN`, `UNSTABLE`, `HAS_HOOKS`, `BEHIND`, `DIRTY`) → not blocked: make the merge call now.
 - `review_decision` `REVIEW_REQUIRED` or `CHANGES_REQUESTED` → a review the agent cannot give; null or `APPROVED` → not that.
 - `fetched` below `total` → the read may be incomplete.
-- In `required`: a `CheckRun` whose `status` is not `COMPLETED`, or a `StatusContext` whose `state` is `PENDING` or `EXPECTED`, is pending. A `CheckRun` `COMPLETED` with a `conclusion` other than `SUCCESS`, `NEUTRAL`, or `SKIPPED`, or a `StatusContext` `FAILURE` or `ERROR`, has failed. An empty `required` list means no required check has reported.
+- `base_requires_checks` `true` → the revert PR's base is positively known to require status checks: a classic branch protection rule with required status checks, or an active repository or organization ruleset rule of type `REQUIRED_STATUS_CHECKS` or `REQUIRED_WORKFLOW_STATUS_CHECKS` on the base ref. `false` covers both "not required" and "not readable" (a null `baseRef`, a protection rule this account cannot see, a rule past the first 100), so an empty `required` list then never counts as waiting.
+- In `required`: a `CheckRun` whose `status` is not `COMPLETED`, or a `StatusContext` whose `state` is `PENDING` or `EXPECTED`, is pending. A `CheckRun` `COMPLETED` with a `conclusion` other than `SUCCESS`, `NEUTRAL`, or `SKIPPED`, or a `StatusContext` `FAILURE` or `ERROR`, has failed. An empty `required` list means no required check has reported; it is a reason to wait only when `base_requires_checks` is `true`.
 - A non-zero exit, or output that does not parse into these fields → a read that fails.
 
-`isRequired` takes the PR's number; the GraphQL schema describes it as "Whether this is required to pass before merging for a specific pull request." Never pass `--admin` or approve the revert PR to end the wait.
+A classic branch protection rule is not visible to every account: on 2026-11-16 `branchProtectionRule` read null on cli/cli and microsoft/vscode, whose PRs report required checks, so `base_requires_checks` was `false` there while `required` was non-empty; github/docs and astral-sh/uv, which require checks through rulesets, read `true`. `isRequired` takes the PR's number; the GraphQL schema describes it as "Whether this is required to pass before merging for a specific pull request." Never pass `--admin` or approve the revert PR to end the wait.
 
 Then merge it and read its state:
 
