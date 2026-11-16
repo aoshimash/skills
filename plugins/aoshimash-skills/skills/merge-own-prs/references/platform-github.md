@@ -311,7 +311,7 @@ gh api --paginate "repos/{owner}/{repo}/actions/runs?head_sha={merge_commit_sha}
   --jq '.workflow_runs[] | {id, path, event, status, conclusion, html_url}'
 ```
 
-GitHub creates runs asynchronously after the merge: an empty or partial result right after it means "not yet". The expected set is every active workflow whose `push` trigger admits the base branch and whose path filters admit a file the merge changed. For a library or CI-deploy repository this read is V-2 (and, for a library, V-3): every expected run completed with `success`; for a CI-deploy repository, the deploy workflow's run is the one V-2 names.
+GitHub creates runs asynchronously after the merge: an empty or partial result right after it means "not yet". The expected set is every active workflow whose `push` trigger admits the base branch and whose path filters admit a file the merge changed. Match each expected workflow to a row by `path` **and** `event: push`. When the base branch is itself another open PR's head (a stacked PR's base, an integration branch with its milestone PR), the merge commit also carries that PR's `pull_request` runs for the same paths, and those never stand in for the merge's `push` run. For a library or CI-deploy repository this read is V-2 (and, for a library, V-3): every expected run completed with `success`; for a CI-deploy repository, the deploy workflow's run is the one V-2 names.
 
 **Publish-run read** (gated publish only) — no run of a publishing workflow started at or after the merge, on any branch or tag, from any event; once for each publishing workflow:
 

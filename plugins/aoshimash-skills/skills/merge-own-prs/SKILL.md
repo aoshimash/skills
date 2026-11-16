@@ -100,7 +100,7 @@ See [references/workflow.md](references/workflow.md) "Phase 2" for each step.
 
 ### Phase 3: Report
 
-See [references/workflow.md](references/workflow.md) "Phase 3". Stopped lines first; then one row per PR in the post-merge safety net's report categories — merged & verified, merged, not yet published (with the follow-up), reverted, deferred / human queue (skipped by the human, or deferred with reason), merge outcome unconfirmed; the excluded candidates with reasons; replies posted and threads resolved per PR; the enumeration's completeness and the platform access method; issues created for tracked comments. Issues noticed outside the selected set are listed as "別件" proposals, never acted on.
+See [references/workflow.md](references/workflow.md) "Phase 3". Stopped lines first; then one row per PR in one of the post-merge safety net's five report categories — "merged & verified"; "merged, not yet published" (with the follow-up: what and who); "reverted"; "deferred / human queue" (one category: skipped by the human, or deferred with its reason); "merge outcome unconfirmed"; the excluded candidates with reasons; replies posted and threads resolved per PR; the enumeration's completeness and the platform access method; issues created for tracked comments. Issues noticed outside the selected set are listed as "別件" proposals, never acted on.
 
 ## Edge Cases
 

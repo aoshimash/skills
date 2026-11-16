@@ -89,7 +89,7 @@ Cases 1–6 mirror `evals/evals.json`, where each case's `expectations` are the 
 
 **The human decision is preserved.** The safety net's autonomous parts never run here: the auto-revert procedure, its required-check wait, the precondition fallback. A failure enters the safety net's interactive stop-the-line. verification.md then adds the revert / fix forward / hold choice, makes no answer a hold, and keeps the line stopped after a verified revert until the human says to continue. Three readings are stated in workflow.md. "Default branch" means the PR's base. The revert PR goes through this skill's gate and merge. The safety net's "never bypassing a required check or protection" admits only the bypass 2-4 item 5 showed the human.
 
-**Commands run as written.** The seven bash blocks added to platform-github.md were extracted from the file by a script. Placeholders were filled with aoshimash/skills, base `integration/2026-11-16-follow-ups` (a base containing `/`), PR #187 and its merge commit `77aaf89`, and `bump-version.yml` as the publishing workflow. They were run with `-e` under bash and zsh 5.9 on macOS (gh 2.104.0): every block exited 0, and bash and zsh output was identical. They were also run under bash 5.2.37 in `alpine:3.22` (gh 2.72.0, GNU/musl userland), where every block exited 0 too.
+**Commands run as written.** The seven bash blocks added to platform-github.md were extracted from the file by a script. Placeholders were filled with aoshimash/skills, base `integration/2026-11-16-follow-ups` (a base containing `/`), PR #187 and its merge commit `77aaf89`, and `bump-version.yml` as the publishing workflow. They were run with `-e` under bash and zsh 5.9 on macOS (gh 2.104.0): every block exited 0, and bash and zsh output was identical. They were also run under bash 5.2.37 in `alpine:3.22` (gh 2.72.0), where every block exited 0 too. That image's userland is BusyBox, not GNU; the GNU run is in the fix round below.
 
 **Run.** One fresh agent instance ran all six cases as a paper exercise, with no gh, git, or network use. It read SKILL.md and every reference on this branch except this file and `evals/evals.json`, and it did not see `expectations`. **Graded by the implementing session against `expectations`, so treat this as SELF-REVIEWED.** No baseline arm was run.
 
@@ -116,3 +116,15 @@ Cases 1–6 mirror `evals/evals.json`, where each case's `expectations` are the 
 - a conversation comment approved as "no reply" being re-collected.
 
 Case 1's expectation should be revisited. Gated-publish recognition here runs per base branch, but the skill does not say whether PRs with different bases in one repository each get their own recognition.
+
+#### 2026-11-16 — Review fix round 1
+
+**Fixes:**
+- The settle read in platform-github.md "Workflow runs after a merge" now matches each expected workflow by `path` **and** `event: push`. When the base branch is another open PR's head, the merge commit also carries that PR's `pull_request` runs for the same paths. Observed: `actions/runs?head_sha=78b3972` returned `check-invariants.yml` once as `pull_request` and once as `push`. This was a prose change; the command itself did not change.
+- workflow.md 2-7 now acts on the result through the safety net's "Verify, then proceed". 2-8 re-recognizes the gated-publish row after a merge that changed one of recognition's inputs, and a lost recognition is shown in each remaining affected PR's 戻し方 line.
+- verification.md says that the safety net's run-start limits on remediation ("run start's probes only", "one such round per run") do not apply to this skill's per-PR probes.
+- The report categories in SKILL.md and workflow.md are now quoted and separated by semicolons, so "deferred / human queue" reads as one category.
+
+**Commands re-run as written.** The seven bash blocks of the four gated-publish reads were extracted from the file again. On macOS (bash and zsh 5.9, gh 2.104.0) all exited 0 with identical output. In `debian:12` (GNU bash 5.2.15, GNU coreutils 9.1 `base64`, gh 2.23.0 from Debian's archive), six exited 0. The publish-run read failed with `unknown flag: --all`, the documented behaviour of a gh older than 2.52.0. So under GNU userland the publish-run read was exercised only up to that refusal. That block uses no userland tool besides gh, and its success path ran on macOS and under BusyBox.
+
+**Eval cases were not re-run** for this round. The changes touch the settle read, gated-publish re-recognition, per-PR remediation, and report wording, and none of the six cases exercises them.

@@ -160,7 +160,7 @@ Only after "merge" for this PR, on the head the brief described (2-1 first; a mo
 
 ### 2-7: Verify
 
-Run the safety net's "Running the pre/post work" (a B step only after its approval; a C step handed to the user, waiting for their confirmation), then its three-state verification against the plan from 2-4, with its repo-type rows and [verification.md](verification.md)'s two extra rows. Pass → post the result comment only when verification went beyond the base branch's CI (a deploy, a reconcile, an apply, a functioning check), then 2-8. Gated publish passing V-2 → post the mandatory not-yet-published comment and report the PR as merged, not yet published, then 2-8. Fail or unknown → stop the line and follow [verification.md](verification.md) "On failure".
+Run the safety net's "Running the pre/post work" (a B step only after its approval; a C step handed to the user, waiting for their confirmation), then its three-state verification against the plan from 2-4, with its repo-type rows and [verification.md](verification.md)'s two extra rows. Then act on the result as the safety net's "Verify, then proceed" says, in its interactive branches. Pass → post the result comment only when verification went beyond the base branch's CI (a deploy, a reconcile, an apply, a functioning check), then 2-8. Gated publish passing V-2 → post the mandatory not-yet-published comment and report the PR as merged, not yet published, then 2-8. Fail or unknown → stop the line and follow [verification.md](verification.md) "On failure".
 
 ### 2-8: Next PR
 
@@ -169,13 +169,14 @@ Before the next PR, re-check what the merge changed:
 - **Stacked PRs** of the merged one → read their base. GitHub retargets a PR whose base branch was deleted after its merge; when the branch was kept, the stacked PR still targets it. A stacked PR still based on the merged branch gets a retarget onto the merged PR's base, proposed in its own brief, never done silently ([platform-github.md](platform-github.md) "Retarget a stacked PR").
 - **Overlapping PRs** → they may now be `BEHIND` or conflicting; 2-4 handles it when their turn comes.
 - **Order** → if a dependency changed, show the new remaining order in one line before continuing.
+- **Gated-publish recognition** → when the merge changed one of recognition's inputs, recognize the row again on the base branch's new head before the next PR, as the safety net's "Verify, then proceed" says. If it is no longer recognized, it is lost for the rest of the run: every remaining PR to that artifact, and every remaining PR that changes one of recognition's inputs, has no verified rollback path, and its brief says so in the 戻し方 line. The line does not stop for this; report the lost recognition beside the merge.
 
 ## Phase 3: Report
 
 In the user's language, the first line saying whether the run finished, stopped, or ended early, and why.
 
 1. **Stopped line** first, if any: the PR, what failed, what is live now, what was proposed, the worktree path.
-2. One row per selected PR, in the safety net's report categories: merged & verified / merged, not yet published (the follow-up: what and who) / reverted / deferred / human queue (skipped by the human, or deferred with its reason) / merge outcome unconfirmed. Then disruptive changes executed, and follow-ups — including a gated-publish merge found at run start without its follow-up comment.
+2. One row per selected PR, in one of the safety net's five report categories: "merged & verified"; "merged, not yet published" (with the follow-up: what and who); "reverted"; "deferred / human queue" (one category: skipped by the human, or deferred with its reason); "merge outcome unconfirmed". Then disruptive changes executed, and follow-ups — including a gated-publish merge found at run start without its follow-up comment.
 3. Per PR: replies posted, threads resolved, issues created (with links), commits pushed.
 4. Excluded candidates with reasons, the enumeration's completeness, team-list completeness, the platform access method.
 5. PRs the run handled but did not merge — a later run may not select them by review request ([targets.md](targets.md) "Rules that follow from the set").
