@@ -41,7 +41,7 @@ Resolved once per run as SKILL.md "Platform Access" describes: a connector for G
   - **The PR changed-file read** of the gated-publish re-judgement (below) is covered only by tools that return every file a PR changes, with its status and previous name, complete by the test above, together with the PR's changed-file count and head commit, and read a file's content at that head. A list that may stop short reads as "the PR changes no workflow file".
   - **The workflow-run reads** of gated-publish V-2 (below) are covered only by tools that return, for the settle read, every run on a given commit with each run's workflow path and status, complete by the test above; and, for the publish-run read, the runs of a given workflow created at or after a given time on **every** branch and tag and for every event, with each run's creation time. A tool confined to the default branch, or to one event, does not cover the publish-run read: it would return no rows for a tag-triggered or dispatched publish on another ref, which reads as a pass.
   - **The merge** is covered only by a tool that takes the repo's merge method, and the post-approval `mergeStateStatus` read only by one that returns it — without it a `BLOCKED` PR cannot be told from a mergeable one.
-  - **Writes** — approving a review, merging, updating a branch with the merge or the rebase form, creating and merging the revert PR, closing with a comment, commenting — are covered by a tool that performs that write and reports whether it succeeded.
+  - **Writes** — approving a review, merging, updating a branch with the merge or the rebase form, creating and merging the revert PR (its merge-readiness read, below, is covered only by a tool returning the PR's state, merge state status and review decision, and every check run and commit status on its head with whether each is required for that PR, plus a total to compare the list against), closing with a comment, commenting — are covered by a tool that performs that write and reports whether it succeeded.
 - **Outside this choice**: local git (fetch, branches, revert, push) and the deploy tooling the verification plan uses (`kubectl`, Flux/Argo CLIs, `talosctl`, …) always run as written, whatever the method. So does chart rendering (`helm show chart`, `helm template` against the chart repository; workflow.md 2-5), which is not a GitHub operation, and so do the package registry reads of the release-age gate (npm and PyPI publish times; release-age.md step 1) and its read of the Node.js release index (release-age.md "Floating values"). When it is unavailable, 2-5 falls back to reading the templates, and leaves unresolved anything only a render settles.
 
 ## List the review-requested PRs
@@ -386,6 +386,43 @@ git revert {merge_commit_sha} --no-edit
 git push -u origin revert-pr-{pr}
 gh pr create --title "Revert: {original PR title}" \
   --body "Auto-revert of #{pr}: post-merge verification failed — {one-line cause}. Details on #{pr}."
+```
+
+Before the merge call, wait for the revert PR's pending required checks ([post-merge-safety-net.md](post-merge-safety-net.md#waiting-for-the-revert-prs-required-checks) "Waiting for the revert PR's required checks"). Its merge readiness, read right after creating it and every 30 seconds after that:
+
+```bash
+gh api graphql -F owner={owner} -F repo={repo} -F pr={revert_pr} -f query='
+query($owner: String!, $repo: String!, $pr: Int!) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $pr) {
+      state mergeStateStatus reviewDecision
+      commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) {
+        totalCount
+        nodes {
+          __typename
+          ... on CheckRun { name status conclusion isRequired(pullRequestNumber: $pr) }
+          ... on StatusContext { context state isRequired(pullRequestNumber: $pr) }
+        }
+      } } } } }
+    }
+  }
+}' --jq '.data.repository.pullRequest | (.commits.nodes[0].commit.statusCheckRollup.contexts // {totalCount: 0, nodes: []}) as $c | {state, merge_state: .mergeStateStatus, review_decision: .reviewDecision, fetched: ($c.nodes | length), total: $c.totalCount, required: [$c.nodes[] | select(.isRequired) | {type: .__typename, name: (.name // .context), status, conclusion, state}]}'
+```
+
+How the read maps to the safety net's wait conditions:
+
+- `state` other than `OPEN` → no longer open.
+- `merge_state` `UNKNOWN` → the platform cannot yet determine whether the merge is possible. `BLOCKED` → the merge is reported blocked. Any other value (`CLEAN`, `UNSTABLE`, `HAS_HOOKS`, `BEHIND`, `DIRTY`) → not blocked: make the merge call now.
+- `review_decision` `REVIEW_REQUIRED` or `CHANGES_REQUESTED` → a review the agent cannot give; null or `APPROVED` → not that.
+- `fetched` below `total` → the read may be incomplete.
+- In `required`: a `CheckRun` whose `status` is not `COMPLETED`, or a `StatusContext` whose `state` is `PENDING` or `EXPECTED`, is pending. A `CheckRun` `COMPLETED` with a `conclusion` other than `SUCCESS`, `NEUTRAL`, or `SKIPPED`, or a `StatusContext` `FAILURE` or `ERROR`, has failed. An empty `required` list means no required check has reported.
+- A non-zero exit, or output that does not parse into these fields → a read that fails.
+
+`isRequired` takes the PR's number; the GraphQL schema describes it as "Whether this is required to pass before merging for a specific pull request." Never pass `--admin` or approve the revert PR to end the wait.
+
+Then merge it and read its state:
+
+```bash
 gh pr merge {revert_pr} --<method>
 gh pr view {revert_pr} --json state,mergeCommit --jq '{state, merge_commit: .mergeCommit.oid}'
 ```
@@ -399,7 +436,9 @@ Notes:
   account, an app token): an approval the agent arranges for its own change is
   not the review a required-review rule asks for.
 - The revert PR goes through the normal merge path (required checks, and any
-  required review a human gives) — never `--admin`. Read its state after the
+  required review a human gives) — never `--admin`. The merge call waits,
+  bounded, only for required checks still pending (above); on a repository with
+  required status checks that pass, the revert then lands without a human. Read its state after the
   merge call, as for any merge ("Merge" above). **Anything short of `MERGED` is a
   revert failure**, whatever the call printed: an explicit refusal — CI red on the
   revert, a required approving review or CODEOWNERS review, any other protection —
