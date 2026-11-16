@@ -53,7 +53,7 @@ What happens around and after each merge — the deploy mechanism, drift, the ve
 
 ## Phase 0: Run start
 
-Once per repository, before any PR is touched. Work in a local checkout: the current directory when it is a clone of the target repository, otherwise a fresh clone in a new, empty temporary directory. Never change the user's working tree beyond fetching: a revert branch is cut in a separate worktree in a new, empty temporary directory, from the remote default branch (platform guide: revert PR), never by switching branches in the checkout. Report that worktree's path when a revert is made.
+Once per repository, before any PR is touched. Work in a local checkout: the current directory when it is a clone of the target repository, otherwise a fresh clone in a new, empty temporary directory. Never change the user's working tree beyond fetching: a revert branch is cut in a separate worktree in a new, empty temporary directory, from the remote default branch (platform guide: revert PR), never by switching branches in the checkout. Each attempt uses its own branch name and directory, and removes both locally when it ends (platform guide: revert PR); a worktree kept because its revert never reached the remote is reported with its path.
 
 ### 0-1: GitHub and platform access
 

@@ -1,6 +1,6 @@
 # Evaluation Test Cases
 
-Cases 1–7 mirror `evals/evals.json`, where each case's `expectations` are the grading list. Every case is built on a real PR of `aoshimash/skills`, read on 2026-11-15 and replayed as if it were still open: #173 (head `2b7d652`, merge commit `0598a49` with two parents, a `check-invariants.yml` push run on it that concluded `success`, no reviews), #49 (one `COMMENTED` review from `devin-ai-integration[bot]`, `reviewDecision` null), #98 (its real `## Test Plan` section, head `bfd1261`, closes #92), and #171 (two commits, `289f54a` then `c7117b4`). The repository facts are real too: only merge commits are allowed, no ruleset applies to `main`, `main` is unprotected, and no workflow publishes anything. This repository has never had a human approving review, so every approval in a fixture, and the facts a prompt marks as added (the `curl | bash` line in Case 4, the body sentence in Case 6, the failing run in Case 2), are stated in the prompt.
+Cases 1–8 mirror `evals/evals.json`, where each case's `expectations` are the grading list. Every case is built on a real PR of `aoshimash/skills`, read on 2026-11-15 and replayed as if it were still open: #173 (head `2b7d652`, merge commit `0598a49` with two parents, a `check-invariants.yml` push run on it that concluded `success`, no reviews), #49 (one `COMMENTED` review from `devin-ai-integration[bot]`, `reviewDecision` null), #98 (its real `## Test Plan` section, head `bfd1261`, closes #92), and #171 (two commits, `289f54a` then `c7117b4`). The repository facts are real too: only merge commits are allowed, no ruleset applies to `main`, `main` is unprotected, and no workflow publishes anything. This repository has never had a human approving review, so every approval in a fixture, and the facts a prompt marks as added (the `curl | bash` line in Case 4, the body sentence in Case 6, the failing run in Case 2), are stated in the prompt.
 
 ## Case 1: An approved PR verified clean (`approved-verified-clean`)
 
@@ -33,6 +33,12 @@ Cases 1–7 mirror `evals/evals.json`, where each case's `expectations` are the 
 **Setup**: Case 2's #173 and its failing post-merge run, with one constructed rule on `main`: `required_status_checks` requiring `check-invariants` (the real job of `check-invariants.yml`, which took 4 seconds on #173). The revert PR #190 and its merge-readiness reads are constructed in the shape the real read returns (see the 2026-11-16 log). Four variants: (a) the required check is in progress, then succeeds; (b) it fails; (c) it is still in progress at 30 minutes; (d) no check rule on `main` (the repository's real state), and the revert PR reads `BLOCKED` with no required check.
 
 **Expected**: the merge-readiness read right after creation and every 30 seconds; (a) the merge call waits for the check, lands, and the recovery verifies with no human; (b) the wait ends at once on the failed check, and the refused merge escalates with the URL and refusal text; (c) the call is made at the 30-minute bound and its refusal escalates as a failed revert; (d) no wait — the call is made at once and its refusal escalates immediately; never `--admin`, an approval, a retry, or a re-run; the state read after every merge call; the line stops.
+
+## Case 8: A revert retried after an escalated one (`revert-rerun-after-escalation`)
+
+**Setup**: Case 2's #173 and its failing post-merge run, with one constructed rule on `main` requiring an approving review. An earlier attempt in the session opened revert PR #190 from the pushed branch `revert-pr-173-20261116010203`, its merge was refused, and it escalated; the user then asks for another attempt, leaving #190 alone. The checkout is on `main` with uncommitted changes. The new revert PR #191 is refused for the same reason.
+
+**Expected**: the earlier attempt left no local worktree or branch; the new attempt cuts a new `revert-pr-173-<timestamp>` branch in a new `mktemp -d` worktree from `origin/main`, pushes only that branch, and opens #191; #190 is not closed, edited, retargeted, or pushed to, and is named in the report; #191 is never approved and its refusal escalates; after #191's state is read, `git worktree remove` and `git branch -d` without `--force` remove the local worktree and branch, keeping the remote branch and #191.
 
 ## Trigger cases
 
@@ -168,3 +174,34 @@ Cases 1–6 were not re-run, for the reason the previous entry gives.
 **Command re-run as written.** The changed read was extracted from both guides (byte-identical) and run on the same six PRs as the previous entry. It exited 0 with identical output on macOS bash 5.3.20 and zsh 5.9, `debian:12` (gh 2.23.0) and `alpine:3.22` (gh 2.72.0), and `base_requires_checks` was unchanged (true for github/docs#46954 and astral-sh/uv#23251, false for the rest). **Not observed:** a base with a `WORKFLOWS` or `CODE_SCANNING` rule. None was found among github/codeql, github/docs, actions/runner, microsoft/TypeScript, dotnet/runtime and kubernetes/kubernetes, so the two new types are counted from the schema's descriptions only.
 
 **Run.** Not re-run. No eval case has a base with those rule types, and the coverage clause is not exercised by a paper case.
+
+### 2026-11-16 — Older-gh statement and revert worktree cleanup (Case 8, issue #181)
+
+**Change.**
+- `SKILL.md` "Known limits": with gh older than 2.52.0 a gated-publish target's observability precondition fails at run start and the run falls back to interactive mode, as workflow.md 0-1 / 0-4 and the safety net's structural-failure rule define it. It no longer says the run "fails closed at run start instead of merging". A merge the user then approves fails the publish-run read and stops the line at 2-9.
+- `platform-github.md` "Create and merge a revert PR": each attempt names its branch `revert-pr-{pr}-{utc_timestamp}` and takes a `mktemp -d` directory. When the attempt ends, it removes the local worktree and branch with `git worktree remove` and `git branch -d`, without `--force`. An earlier attempt's open revert PR is left as it is and named in the report. workflow.md Phase 0 now says the worktree is reported only when it is kept.
+
+**Decisions (implementation time).**
+- A unique branch name per attempt, rather than cleanup alone. Local cleanup cannot clear the collision that matters: an escalated attempt leaves `revert-pr-{pr}` pushed with its PR open, so a second push under that name is refused non-fast-forward. Force-pushing would change the open revert PR, which issue #181 rules out.
+- No `--force` on either cleanup command, so git's own refusals keep a revert that never reached the remote. A conflicting revert keeps both the dirty worktree and its branch. A failed push keeps the branch holding the revert commit, whose upstream is still `origin/{default_branch}`, while the clean worktree is removed.
+
+**Commands run as written.** A harness (scratchpad, not shipped) extracted the local lines of the revert block (`git fetch origin`, `git worktree add -b {revert_branch} …`, `cd`, `git revert -m 1 …`, `git push -u origin {revert_branch}`) and the cleanup block from `platform-github.md` by section and fence. It filled the placeholders with `date -u +%Y%m%d%H%M%S`, `mktemp -d`, and a merge commit made in a scratch repository whose `origin` is a local bare repository. It ran four attempts in sequence:
+1. Pushed: worktree and local branch removed, remote branch present.
+2. Re-run on the same PR: a distinct name, the same cleanup result, the first remote branch's SHA unchanged.
+3. Push failure: clean worktree removed, branch kept with its revert commit (`not fully merged`).
+4. Conflicting revert: worktree kept (`contains modified or untracked files`), branch kept (`used by worktree`).
+
+The checkout stayed on `main` throughout. Identical results in all three environments: macOS bash 5.3.20 and zsh 5.9 (git 2.56.1), and `debian:12` bash 5.2.15 (git 2.39.5, GNU userland). The push in attempt 4 ran because the harness does not stop on a failed `git revert` the way the procedure does; it pushed the unchanged `origin/main` tip under the new name. **Not run:** `gh pr create` and the revert PR's merge against GitHub.
+
+**Run.** One fresh agent instance ran Case 8 once as a paper exercise (no gh, git, or network use), reading SKILL.md and the references other than this file; it did not see `expectations`. **Graded by the authoring session, SELF-REVIEWED.**
+
+| Case | with-skill | Notes |
+|---|---|---|
+| 8 `revert-rerun-after-escalation` | 6/6 | It also noted that in a no-push test `git branch -d` would refuse and keep the branch |
+
+Cases 1–7 were not re-run. Case 2's expectations are unchanged; its `expected_output` now names the new branch form and the cleanup.
+
+**Open points** (from the run, not changed here):
+- The skill has no stated entry for retrying a revert of a PR already merged: targets.md excludes merged PRs, and the auto-revert is entered only from 2-9. Case 8 models the retry as a user's direction after the escalation.
+- Before a new attempt, nothing checks whether the earlier revert PR has since been merged by a human, so a retry could revert twice.
+- Whether a second revert comment is posted on the original PR is not stated.
