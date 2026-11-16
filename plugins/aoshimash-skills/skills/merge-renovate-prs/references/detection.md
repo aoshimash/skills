@@ -60,4 +60,4 @@ A confirmed, deduped set of Renovate PRs, each annotated with:
 
 Plus a list of **out-of-scope bot PRs** noticed along the way (e.g. Dependabot) for the report.
 
-Detection runs over every open PR in the repository, whatever the run's selected set ([targets.md](targets.md)): workflow.md 1-1 then marks which candidates are selected, and only those are processed. This set feeds conflict/ordering detection and the processing-order proposal in workflow.md.
+Detection runs over every open PR in the repository, whatever the run's selected set ([targets.md](targets.md)), except when that set is empty: then the run ends before detection (targets.md "Settle emptiness before the probes"). Otherwise workflow.md 1-1 marks which candidates are selected, and only those are processed. This set feeds conflict/ordering detection and the processing-order proposal in workflow.md.
