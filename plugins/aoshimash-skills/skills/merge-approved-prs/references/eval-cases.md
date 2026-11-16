@@ -160,3 +160,11 @@ Cases 1–6 were not re-run: only Case 2 reaches the revert path, and its revert
 | 7 `revert-pending-required-checks` | 8/8 | (a)–(c) unchanged; (d) did not wait on `base_requires_checks` false, called merge after the first read, and escalated the refusal |
 
 Cases 1–6 were not re-run, for the reason the previous entry gives.
+
+### 2026-11-16 — Stage 2 round 1 fixes (no case re-run)
+
+**Change.** `base_requires_checks` now also counts ruleset rules of type `WORKFLOWS` (required workflows) and `CODE_SCANNING` (required code scanning results), whose descriptions in the GraphQL schema (introspection, 2026-11-16) require workflows or tool results to pass before the merge. Previously such a base read `false`, so a revert there was not waited on: fail-closed, but the requirement was visible and ignored. A rule type outside the four listed is still not counted, and the shared file's known limit now names that. The connector-coverage clause for the merge-readiness read now also requires the base ref's classic-protection `requiresStatusChecks` and its ruleset rule types, so the coverage test matches the reference command.
+
+**Command re-run as written.** The changed read was extracted from both guides (byte-identical) and run on the same six PRs as the previous entry. It exited 0 with identical output on macOS bash 5.3.20 and zsh 5.9, `debian:12` (gh 2.23.0) and `alpine:3.22` (gh 2.72.0), and `base_requires_checks` was unchanged (true for github/docs#46954 and astral-sh/uv#23251, false for the rest). **Not observed:** a base with a `WORKFLOWS` or `CODE_SCANNING` rule. None was found among github/codeql, github/docs, actions/runner, microsoft/TypeScript, dotnet/runtime and kubernetes/kubernetes, so the two new types are counted from the schema's descriptions only.
+
+**Run.** Not re-run. No eval case has a base with those rule types, and the coverage clause is not exercised by a paper case.

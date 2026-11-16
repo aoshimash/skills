@@ -342,7 +342,7 @@ The wait is **bounded**: 30 minutes from the revert PR's creation, unless the re
 
 - A required check that has not reported yet while another one has is not waited for. Once every reported required check is complete, the wait ends, and if a required check reports after that, the platform refuses the merge call and the revert escalates.
 - On a base that requires status checks, a merge blocked by something else as well, such as a rule requiring signed commits or resolved conversations, is waited on until the required checks report — or until the bound, if none ever does — before the refusal reaches step 5.
-- A check requirement the read cannot see (a protection rule hidden from this account, a ruleset rule past what the read fetches) counts as absent, so a revert there whose required checks have not reported yet is not waited on, and its refusal escalates as before the wait existed.
+- A check requirement the read cannot see or does not count (a protection rule hidden from this account, a ruleset rule past what the read fetches, a ruleset rule type the platform guide does not list as a check requirement) counts as absent, so a revert there whose required checks have not reported yet is not waited on, and its refusal escalates as before the wait existed.
 - That a required check with no report yet keeps the merge reported as blocked was not observed in this file's verification. Where the platform reports anything else, the wait ends and the merge call is refused as before, so the procedure never does worse than merging at once.
 
 ### Interactive: stop-the-line
