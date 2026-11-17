@@ -53,7 +53,7 @@ What happens around and after each merge — the deploy mechanism, drift, the ve
 
 ## Phase 0: Run start
 
-Once per repository, before any PR is touched. Work in a local checkout: the current directory when it is a clone of the target repository, otherwise a fresh clone in a new, empty temporary directory. Never change the user's working tree beyond fetching: a revert branch is cut in a separate worktree in a new, empty temporary directory, from the remote default branch (platform guide: revert PR), never by switching branches in the checkout. Report that worktree's path when a revert is made.
+Once per repository, before any PR is touched. Work in a local checkout: the current directory when it is a clone of the target repository, otherwise a fresh clone in a new, empty temporary directory. Never change the user's working tree beyond fetching: a revert branch is cut in a separate worktree in a new, empty temporary directory, from the remote default branch (platform guide: revert PR), never by switching branches in the checkout. Each attempt uses its own branch name and directory, and removes both locally when it ends (platform guide: revert PR); a worktree kept because its revert never reached the remote is reported with its path.
 
 ### 0-1: GitHub and platform access
 
@@ -184,7 +184,7 @@ Post the safety net's comment types as [post-merge-safety-net.md](post-merge-saf
 Run [post-merge-safety-net.md](post-merge-safety-net.md) "Verify, then proceed — or auto-revert / stop the line": three-state verification adapted to the repo type, including the checks 2-3 added, with the extended settle window for a disruptive change.
 
 - **Pass** → the post-comment where 2-8 calls for one, then the next PR. A gated publish whose V-2 passes → the not-yet-published comment, reported as merged, not yet published, then the next PR.
-- **Fail, autonomous** → the safety net's auto-revert procedure: create the revert PR and merge it, **never approving it**. Where it merges and the recovery verifies, post the revert and hand-back comment, then **stop the line** — the remaining named PRs are not processed this run. Where the revert PR cannot merge — a required approving review, a code-owner review, red CI on the revert, any other protection, or an unconfirmed outcome — leave it open, post the revert comment saying it is open and unmerged and what it needs, stop, and **escalate** to the user with the full state. A recovery that does not verify escalates the same way.
+- **Fail, autonomous** → the safety net's auto-revert procedure: create the revert PR, wait, bounded, for its pending required checks, and merge it, **never approving it**. Where it merges and the recovery verifies, post the revert and hand-back comment, then **stop the line** — the remaining named PRs are not processed this run. Where the revert PR cannot merge — a required approving review, a code-owner review, red CI on the revert, any other protection, or an unconfirmed outcome — leave it open, post the revert comment saying it is open and unmerged and what it needs, stop, and **escalate** to the user with the full state. A recovery that does not verify escalates the same way.
 - **Fail, interactive** → stop the line, surface the failure, propose the rollback, and wait for the user's direction.
 
 ## Phase 3: Report
