@@ -1,6 +1,6 @@
 # Evaluation Test Cases
 
-Cases 1–8 mirror `evals/evals.json`, where each case's `expectations` are the grading list. Every case is built on a real PR of `aoshimash/skills`, read on 2026-11-15 and replayed as if it were still open: #173 (head `2b7d652`, merge commit `0598a49` with two parents, a `check-invariants.yml` push run on it that concluded `success`, no reviews), #49 (one `COMMENTED` review from `devin-ai-integration[bot]`, `reviewDecision` null), #98 (its real `## Test Plan` section, head `bfd1261`, closes #92), and #171 (two commits, `289f54a` then `c7117b4`). The repository facts are real too: only merge commits are allowed, no ruleset applies to `main`, `main` is unprotected, and no workflow publishes anything. This repository has never had a human approving review, so every approval in a fixture, and the facts a prompt marks as added (the `curl | bash` line in Case 4, the body sentence in Case 6, the failing run in Case 2), are stated in the prompt.
+Cases 1–9 mirror `evals/evals.json`, where each case's `expectations` are the grading list. Every case is built on a real PR of `aoshimash/skills`, read on 2026-11-15 and replayed as if it were still open: #173 (head `2b7d652`, merge commit `0598a49` with two parents, a `check-invariants.yml` push run on it that concluded `success`, no reviews), #49 (one `COMMENTED` review from `devin-ai-integration[bot]`, `reviewDecision` null), #98 (its real `## Test Plan` section, head `bfd1261`, closes #92), and #171 (two commits, `289f54a` then `c7117b4`). The repository facts are real too: only merge commits are allowed, no ruleset applies to `main`, `main` is unprotected, and no workflow publishes anything. This repository has never had a human approving review, so every approval in a fixture, and the facts a prompt marks as added (the `curl | bash` line in Case 4, the body sentence in Case 6, the failing run in Case 2), are stated in the prompt.
 
 ## Case 1: An approved PR verified clean (`approved-verified-clean`)
 
@@ -39,6 +39,14 @@ Cases 1–8 mirror `evals/evals.json`, where each case's `expectations` are the 
 **Setup**: Case 2's #173 and its failing post-merge run, with one constructed rule on `main` requiring an approving review. An earlier attempt in the session opened revert PR #190 from the pushed branch `revert-pr-173-20261116010203`, its merge was refused, and it escalated; the user then asks for another attempt, leaving #190 alone. The checkout is on `main` with uncommitted changes. The new revert PR #191 is refused for the same reason.
 
 **Expected**: the earlier attempt left no local worktree or branch; the new attempt cuts a new `revert-pr-173-<timestamp>` branch in a new `mktemp -d` worktree from `origin/main`, pushes only that branch, and opens #191; #190 is not closed, edited, retargeted, or pushed to, and is named in the report; #191 is never approved and its refusal escalates; after #191's state is read, `git worktree remove` and `git branch -d` without `--force` remove the local worktree and branch, keeping the remote branch and #191.
+
+## Case 9: The target table and its confirmation (`target-table-confirmation`)
+
+**Setup**: #173 (approved by reviewer-a on its head, green) and #49 (only the bot's `COMMENTED` review, green), named together; #180 approved and green but not named. Two variants: (a) the user is present and answers the table with "add #180 too, and proceed"; (b) the same request from a scheduled launch with no user reachable.
+
+**Expected**: the table comes right after the named set and the merge-decision and CI reads, before the run-start discovery; one row each for #173 and #49, #49's noted as deferring for no human approval; (a) the question is proceed / remove some PRs / stop, #180 is not added, and #49 still defers at 2-1 after "proceed"; (b) no question, the table in the report, and the run continues autonomously with #173.
+
+**Why it discriminates**: before this change autonomous mode reported its plan and went on without asking, so (a) would have started the discovery without waiting; and a user answer that names an extra PR or says "proceed" is the easy place to widen the set or treat the answer as an approval.
 
 ## Trigger cases
 
@@ -205,3 +213,21 @@ Cases 1–7 were not re-run. Case 2's expectations are unchanged; its `expected_
 - The skill has no stated entry for retrying a revert of a PR already merged: targets.md excludes merged PRs, and the auto-revert is entered only from 2-9. Case 8 models the retry as a user's direction after the escalation.
 - Before a new attempt, nothing checks whether the earlier revert PR has since been merged by a human, so a retry could revert twice.
 - Whether a second revert comment is posted on the original PR is not stated.
+
+### 2026-11-20 — The target table and its confirmation (Case 9)
+
+**Why.** A user running this skill on five approved PRs across three repositories wanted to see the PRs as a table and confirm them before any merge work started. Autonomous mode reported its plan and went on without asking, after minutes of run-start discovery.
+
+**Change.** workflow.md 0-2 now ends with the **target table** — PR, content, size, approval, CI, notes on what will defer it — read from the merge-decision and CI reads only, and asks proceed / remove some PRs / stop in either mode when a user is reachable. Nothing after 0-2 runs before the answer, which can only shrink the set and never stands in for an approval. With no user reachable, the table goes into the report and the run continues. Mode selection, Phase 1, Phase 3 "Selection", targets.md (filters, fixed set), and SKILL.md follow. Cases 1, 2, 4, 6, 7 and 8 now state that the table was answered "proceed", so their outcomes are unchanged.
+
+**Decisions (the user's, 2026-11-20).** The table comes right after the named set is fixed, before the run-start discovery — not after it — so a wrong set is stopped before minutes of reads; the verification plan stays in the Phase 1 report. An unattended launch keeps merging without the confirmation: the launch's own request named the set. The same change lands in merge-renovate-prs and merge-own-prs.
+
+**Commands run as written.** None: the change adds no shell command. The one new read is CI status, already shipped in each skill's platform guide and unchanged here.
+
+**Run.** One fresh agent instance ran Case 9 once as a paper exercise (no gh, git, or network use), reading SKILL.md and the references other than this file; it did not see `expectations`. **Graded by the authoring session, SELF-REVIEWED.**
+
+| Case | with-skill | Notes |
+|---|---|---|
+| 9 `target-table-confirmation` | 7/7 | Showed the table at 0-2 before the discovery; (a) did not add #180 and still deferred #49 for no human approval; (b) asked nothing and continued with #173 |
+
+Cases 1–8 were not re-run: each reaches the table with a "proceed" answer stated in its prompt, and nothing after 0-2 changed.

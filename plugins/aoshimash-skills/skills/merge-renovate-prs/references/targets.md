@@ -66,7 +66,7 @@ This context is the **parent**: it enumerates, dispatches, relays questions, and
 1. Confirm GitHub and resolve the platform access method once for the whole run (SKILL.md "Platform Access"). Every instance uses this method; none resolves its own.
 2. **Owner target** → run the review-requested search across the owner ([platform-github.md](platform-github.md) "List the review-requested PRs"), excluding archived repositories, and group the hits by repository. **PR targets** → group the named PRs by repository.
 3. The owner search is complete only when every page reports `incomplete_results: false`, the total is at most 1,000 (the search API returns no more), and the number of hits fetched equals that total. An incomplete enumeration only misses repositories — they are not processed, which is the safe direction — so the run proceeds with the hits it has and the report says the enumeration was incomplete and why.
-4. A hit is not yet a Renovate PR: detection happens in each repository's instance, against that repository's own Renovate config (detection.md). Report the plan — the repositories and their hit counts — and dispatch. In interactive mode the per-repository plan gates (1-5) arrive through the relay.
+4. A hit is not yet a Renovate PR: detection happens in each repository's instance, against that repository's own Renovate config (detection.md). Report the plan — the repositories and their hit counts — and dispatch. Each repository's target table and its confirmation (workflow.md 1-5) arrive through the relay, in either mode.
 
 ### M-2: Dispatch one instance per repository
 
@@ -86,7 +86,7 @@ If the environment cannot run separate agent instances, run the repositories **o
 
 ### M-3: Relay questions
 
-An instance cannot ask the user. Where the single-repository workflow would use **user choice** — the knowledge-gap and credential questions (0-4), interactive gates (1-5, 2-5, 2-7), an escalation that needs a human decision (2-9) — the instance does this instead:
+An instance cannot ask the user. Where the single-repository workflow would use **user choice** — the knowledge-gap and credential questions (0-4), the target confirmation (1-5, both modes), interactive gates (2-5, 2-7), an escalation that needs a human decision (2-9) — the instance does this instead:
 
 1. It stops at a point where waiting is safe — before a merge, or with the line already stopped — and returns the question to the parent: the repository, the step, the question written to stand alone (what was found, each option with its effect), and what is in flight (nothing, or the PR whose line is stopped).
 2. The parent asks the user (user choice), one question at a time, in arrival order. Other instances keep running.

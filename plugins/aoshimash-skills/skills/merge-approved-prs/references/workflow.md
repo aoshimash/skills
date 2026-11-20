@@ -8,7 +8,7 @@ Detailed procedure for Phases 0–3. The named set and the merge decision are in
 - [The post-merge safety net](#the-post-merge-safety-net)
 - [Phase 0: Run start](#phase-0-run-start)
   - [0-1: GitHub and platform access](#0-1-github-and-platform-access)
-  - [0-2: Resolve the named set](#0-2-resolve-the-named-set)
+  - [0-2: Resolve the named set and confirm it](#0-2-resolve-the-named-set-and-confirm-it)
   - [0-3: Deploy mechanism, merge method, and drift](#0-3-deploy-mechanism-merge-method-and-drift)
   - [0-4: Verification plan and preconditions](#0-4-verification-plan-and-preconditions)
   - [0-5: Default-branch rules](#0-5-default-branch-rules)
@@ -29,10 +29,10 @@ Detailed procedure for Phases 0–3. The named set and the merge decision are in
 
 Pick the mode once, at run start:
 
-- **Autonomous (default).** The human's approving review is the merge decision, so the run needs no further sign-off: once run start's preconditions pass, it proceeds through the named set with no gate and ends with the report. Machine checks cover what the review cannot — CI, rollback readiness, and verification after the merge.
+- **Autonomous (default).** The human's approving review is the merge decision, so the run needs no further sign-off: once the user has confirmed the target table (0-2) and run start's preconditions pass, it proceeds through the confirmed set with no further gate and ends with the report. With no user reachable, the table goes into the report and the run proceeds without that confirmation. Machine checks cover what the review cannot — CI, rollback readiness, and verification after the merge.
 - **Interactive.** When the user asks to confirm each merge ("1個ずつ確認して", "ask me before each merge"), or as the fallback when an autonomous precondition fails at run start and is not cleared there (0-4). The user then says yes to each merge and each mutating apply, on top of the reviewer's approval — a yes from the user never replaces a missing approval.
 
-The modes share every step; they differ only where marked. Neither mode merges a PR without a qualifying approval.
+The modes share every step; they differ only where marked. Both ask for the target confirmation (0-2) when a user is reachable. Neither mode merges a PR without a qualifying approval.
 
 ## The post-merge safety net
 
@@ -59,9 +59,25 @@ Once per repository, before any PR is touched. Work in a local checkout: the cur
 
 Confirm the repository is on GitHub (a `github.com` remote, or, with the CLI, `gh repo view` succeeds); on any other host, say so and stop. Resolve the platform access method (SKILL.md "Platform Access"). With the CLI, record `gh --version`: below 2.52.0 the gated-publish publish-run read cannot run ([platform-github.md](platform-github.md) "Workflow runs after a merge"), so for a gated-publish target its observability precondition fails at 0-4 — before any merge — rather than after one.
 
-### 0-2: Resolve the named set
+### 0-2: Resolve the named set and confirm it
 
-Follow [targets.md](targets.md) "The named set": the PRs named by reference, or the PRs a filter the user stated returns from a complete read; drop each excluded PR with its reason. An empty set → Phase 3. Then read the merge decision for each remaining PR (2-1's read); when none of them holds it, skip 0-3 to 0-5 and go to Phase 3 with each PR deferred — nothing will merge, so the run-start discovery buys nothing. 2-1 reads the decision again before each PR.
+Follow [targets.md](targets.md) "The named set": the PRs named by reference, or the PRs a filter the user stated returns from a complete read; drop each excluded PR with its reason. An empty set → Phase 3. Then, for each remaining PR, read the merge decision (2-1's read) and the CI state once (2-2's read, without waiting on pending checks), and show the **target table** before anything else runs. One row per PR, named and dropped alike, in the order the run will take them; column headers in the user's language:
+
+| Column | Content |
+|---|---|
+| PR | `owner/repo#N` |
+| Content | The title, or a one-line summary when the title does not say what changes |
+| Size | Additions / deletions and changed files |
+| Approval | Each qualifying approver and that the approval stands on the current head, or what is missing ([targets.md](targets.md) "The decision") |
+| CI | Green, pending, or not green with the checks that are not |
+| Notes | What will defer or drop the PR on what was read so far — an exclusion, no qualifying approval, a change request, CI not green — so the user sees before the run which PRs will not merge |
+
+A request naming PRs in several repositories gets one table and one question for all of them, before the first repository's 0-3.
+
+- **A user is reachable** (either mode) → ask (user choice): **proceed** / **remove some PRs** (the user names which; the report lists them as removed by the user) / **stop**. Wait for the answer: nothing after this step — the run-start discovery, probes, merges — runs before it. The answer can only shrink the set. A PR the user adds is not in it; it joins only in a new run that names it. Confirming a row never stands in for a missing approval or a check that is not green: such a row still defers at 2-1 or 2-2.
+- **No user reachable** (an unattended launch) → put the table at the top of the report and continue. The launch's own request named the set, which stands in for the confirmation.
+
+When none of the PRs holds the merge decision, ask nothing, skip 0-3 to 0-5, and go to Phase 3 with each PR deferred — nothing will merge, so neither the question nor the run-start discovery buys anything; the table opens the report. 2-1 reads the decision again before each PR.
 
 ### 0-3: Deploy mechanism, merge method, and drift
 
@@ -84,7 +100,7 @@ The forecast is information for the plan report, never a gate, and never a reaso
 
 Show, in the user's language:
 
-- the named set in the order the user gave, with a stacked PR after its base; when the user gave no order, the order named;
+- the set as confirmed at 0-2, in the order the user gave, with a stacked PR after its base; when the user gave no order, the order named;
 - each dropped PR with its reason (targets.md "Exclusions"), and for a filter, the filter, the search it ran, and whether the read was complete;
 - the deploy mechanism, the merge method and where it came from, and the verification plan per target with its sources;
 - the auto-revert forecast (0-5);
@@ -201,6 +217,6 @@ In the user's language. The first line says whether the run finished, stopped, o
    - **not processed** — named PRs after a stopped line.
 3. **Disruptive changes executed**, prominently.
 4. **Follow-ups** — test-plan items left to the author per PR, gated-publish follow-ups, drift.
-5. **Selection** — what the user named or the filter they stated, the PRs dropped and why, and the read's completeness.
+5. **Selection** — what the user named or the filter they stated, the PRs dropped and why, the PRs the user removed at the target table (0-2), and the read's completeness; in an unattended launch, the target table itself.
 6. The **platform access method**, and any operation whose failure under it deferred, stopped, or escalated.
 7. Anything noticed outside the named set, one line each, never acted on.

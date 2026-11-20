@@ -39,7 +39,7 @@ Phrases that **should** invoke `merge-renovate-prs` (a backlog of Renovate PRs t
 
 Each maps to an entry in `evals/evals.json` with objective expectations.
 
-The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 pin interactive mode** (their prompts explicitly ask to confirm each step) and exercise the approval-gate discipline. **Cases 5–9 exercise autonomous mode**: zero gates, precondition verification, defer-don't-block, auto-revert, repo-type-adapted verification, and human-supplied verification checks. **Cases 10–11** (added 2026-10-19) cover the release-age gate and grouping proposals; both fixtures are taken from real aoshimash/homelab-k8s PRs (#374, #345) with their actual tables, commits, and dates. **Cases 16–17** (added 2026-10-27) cover Renovate `prBodyNotes` as a classification input; both fixtures are real homelab-k8s PRs (#387, #374) and its config's actual notes. **Case 18** (added 2026-10-29) covers the split of Phase 0 precondition failures into structural and recoverable; its scenario is the run issue #140 records. **Case 21** (added 2026-10-30) covers the registry publish time as the release-age gate's first source; its fixture is the real PR whose false wait motivated it. **Case 22** (added 2026-10-30) covers floating values on the same PR. **Cases 23–24** (added 2026-11-12) cover targets and selection: the review-requested selected set with its named-PR exemption (a real homelab-k8s state), and the multi-repository run with its question relay (a real owner-wide search, anonymized). **Case 25** (added 2026-11-15, issue #163) covers a revert PR the agent cannot approve on a repository that requires an approving review. **Case 26** (added 2026-11-16, issue #180) covers a revert PR whose required check is still running when it is created.
+The skill has two modes since the 2026-07-23 autonomous redesign. **Cases 1–4 pin interactive mode** (their prompts explicitly ask to confirm each step) and exercise the approval-gate discipline. **Cases 5–9 exercise autonomous mode**: no gates past the target table (their prompts, and every later autonomous case's, answer it Approve — Case 27 exercises it), precondition verification, defer-don't-block, auto-revert, repo-type-adapted verification, and human-supplied verification checks. **Cases 10–11** (added 2026-10-19) cover the release-age gate and grouping proposals; both fixtures are taken from real aoshimash/homelab-k8s PRs (#374, #345) with their actual tables, commits, and dates. **Cases 16–17** (added 2026-10-27) cover Renovate `prBodyNotes` as a classification input; both fixtures are real homelab-k8s PRs (#387, #374) and its config's actual notes. **Case 18** (added 2026-10-29) covers the split of Phase 0 precondition failures into structural and recoverable; its scenario is the run issue #140 records. **Case 21** (added 2026-10-30) covers the registry publish time as the release-age gate's first source; its fixture is the real PR whose false wait motivated it. **Case 22** (added 2026-10-30) covers floating values on the same PR. **Cases 23–24** (added 2026-11-12) cover targets and selection: the review-requested selected set with its named-PR exemption (a real homelab-k8s state), and the multi-repository run with its question relay (a real owner-wide search, anonymized). **Case 25** (added 2026-11-15, issue #163) covers a revert PR the agent cannot approve on a repository that requires an approving review. **Case 26** (added 2026-11-16, issue #180) covers a revert PR whose required check is still running when it is created.
 
 ### Case 1: Manual-apply routing (`manual-apply-routing`) — interactive
 
@@ -336,6 +336,14 @@ Why it matters: the gate aged `node` by what Renovate picked or by the lower bou
 - (c) Calls merge at the 30-minute bound; the refusal is a failed revert that escalates, saying the bound ran out with the check pending.
 - (d) Does not wait: the base is not known to require checks, so it calls merge at once and escalates the refusal immediately.
 - Never `--admin`, an approval, a retry, a re-run, or a ruleset change; reads #401's state after every merge call; stops the line.
+
+### Case 27: The target table and its confirmation (`target-table-confirmation`) — autonomous
+
+**Setup** (aoshimash/homelab-k8s's open Renovate PRs as read on 2026-11-12; ages, CI and Phase 0 results constructed): the user names #391 (aqua-installer action → v4.1.1, old enough, green) and #392 (aqua → v2.66.1, 1 day old against a 3-day cooldown, green). **(a)** The user is present and answers the table with "Add #386 too and go ahead." **(b)** The same request from a scheduled launch with no user reachable.
+
+**Expected behavior**: before any merge, one table row each for #391 and #392 with update, provisional blast radius, release age, CI, and notes, #392 marked as a cooldown wait with its eligible date; (a) Approve / Reorder / Scope down / Abort, waiting for the answer, #386 not added, the run then autonomous with #391; (b) no question, the table in the report, the run autonomous with #391.
+
+**Why it discriminates**: before this change autonomous mode reported the plan and went straight on, so (a) would not have waited; and an answer naming an extra PR is the easy place to widen the selected set.
 
 ## Evaluation Log
 
@@ -852,3 +860,23 @@ Cases 1–25 were not re-run, for the reason the previous entry gives.
 | 23 `selection-review-requested` | 5/5 | (a) Read the review-requested set, found it empty, ended without the config read, detection, drift check or probes, and reported "7 open PRs; none requests your review", explicitly not as Renovate PRs. (b) Selected #392 without a review-request check and ran it through detection and every gate, with #391 as a possible unselected prerequisite |
 
 No other case was re-run: the targets.md edits change only the empty-set path, which no other case reaches.
+
+### 2026-11-20 — The target table and its confirmation (Case 27)
+
+**Why.** The user wants to see the PRs a merge skill will process as a table and confirm them before any merge. Autonomous mode reported the plan at 1-5 and proceeded at once.
+
+**Change.** workflow.md 1-5 ("Target table and plan gate") shows a **target table** — PR, update, provisional blast radius, release age, CI, notes — with the plan, and asks Approve / Reorder / Scope down / Abort in either mode when a user is reachable; a multi-repository run relays it through the parent (targets.md M-1, M-3). The answer can only shrink or reorder the set. With no user reachable, the table goes into the report and the run proceeds autonomously. SKILL.md (mode, Phase 1 step 5, user choice), the Plan report hook link, and 3-1 "Selection" follow. Every autonomous case from 5 on except 11 now states that the table was answered Approve.
+
+**Decisions (the user's, 2026-11-20).** The table replaces the approval column of the other two skills with release age, because a Renovate PR needs no human approval. The table comes at 1-5, the first point the selected set is known: detection needs Phase 0's Renovate config read, so it cannot move before Phase 0. An unattended launch keeps merging without the confirmation (one scheduled unattended run of this skill was found, on 2026-11-13).
+
+**Commands run as written.** None: the change adds no shell command. The one new read is CI status, already shipped in each skill's platform guide and unchanged here.
+
+**Run.** One fresh agent instance ran Case 27 once as a paper exercise, reading SKILL.md and the references other than this file; it did not see `expectations`. **Graded by the authoring session, SELF-REVIEWED.**
+
+| Case | with-skill | Notes |
+|---|---|---|
+| 27 `target-table-confirmation` | 6/6 | Table rows for #391 and #392, #392 as a cooldown wait with its eligible date; (a) did not add #386; (b) asked nothing and proceeded with #391 |
+
+Cases 1–26 were not re-run: the interactive cases already had a gate at 1-5, and the autonomous ones state the Approve answer.
+
+**Open point** (from the run, not changed here): release-age.md reads a registry publish time for npm and PyPI only, so an aqua package is aged by its upstream release date and Renovate's lower bound.
