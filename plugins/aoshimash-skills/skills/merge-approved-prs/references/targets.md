@@ -32,7 +32,7 @@ A filter is the user's own criteria over one repository's open PRs — "the appr
 
 The search runs with `--limit 1000`, the search API's ceiling. It is complete only when the number of rows fetched is below 1,000; a count of exactly 1,000 may be short, and is reported as possibly incomplete. A short read only drops PRs — the safe direction — so the run proceeds and the report says why the set may be incomplete. The filter selects candidates only: every PR it returns still has to pass the merge decision below on platform state read per PR, never on the search's own approval qualifier.
 
-In interactive mode, the plan report's approval covers the filter's result. In autonomous mode the plan report lists every PR the filter returned before the first merge.
+The target table (workflow.md 0-2) lists every PR the filter returned before anything else runs. With a user reachable, their confirmation of it covers the filter's result; with none, the table goes into the report.
 
 ### Exclusions
 
@@ -47,7 +47,7 @@ Drop and report, with the reason, a named PR that:
 
 - **Never act on a PR outside it.** A stacked PR whose base PR is not in the set waits behind it: report the pair, merge neither, since the stacked PR's base is not the default branch.
 - **An empty set is a result.** Report what was named and why each was dropped. Do not look for other work.
-- **The set is fixed at run start.** A PR approved later, or one the filter would return now, joins only in a new run.
+- **The set is fixed at run start.** A PR approved later, or one the filter would return now, joins only in a new run. The user's answer to the target table (workflow.md 0-2) can remove PRs from it, never add one.
 
 ## The merge decision
 

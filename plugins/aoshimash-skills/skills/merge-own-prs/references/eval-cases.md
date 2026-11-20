@@ -1,6 +1,6 @@
 # Evaluation Test Cases
 
-Cases 1–6 mirror `evals/evals.json`, where each case's `expectations` are the grading list. Cases 1, 3, and 4 are modelled on real artifacts observed on 2026-11-12: `nulab-internal/github-config#2148` (a team review request, a ruleset bypass with `current_user_can_bypass: always`, `allowed_merge_methods: [merge]`, a Devin Review bot thread, a Workflow Lint bot report), `nulab-internal/datadog-terraform#567` (`viewerCanMergeAsAdmin: false`), the drafts `developer-platform#16` and `pet-cluster#500`, and `aoshimash/gh-costbook#70` (no protection, `reviewDecision: null`). Facts a fixture adds beyond those artifacts (the human comment in Case 3, the `required_deployments` rule in Case 4) are stated in the prompt.
+Cases 1–7 mirror `evals/evals.json`, where each case's `expectations` are the grading list. Cases 1, 3, and 4 are modelled on real artifacts observed on 2026-11-12: `nulab-internal/github-config#2148` (a team review request, a ruleset bypass with `current_user_can_bypass: always`, `allowed_merge_methods: [merge]`, a Devin Review bot thread, a Workflow Lint bot report), `nulab-internal/datadog-terraform#567` (`viewerCanMergeAsAdmin: false`), the drafts `developer-platform#16` and `pet-cluster#500`, and `aoshimash/gh-costbook#70` (no protection, `reviewDecision: null`). Facts a fixture adds beyond those artifacts (the human comment in Case 3, the `required_deployments` rule in Case 4) are stated in the prompt.
 
 ## Case 1: Selection across an org with a bypass (`selection-org-bypass`)
 
@@ -29,6 +29,14 @@ Cases 1–6 mirror `evals/evals.json`, where each case's `expectations` are the 
 ## Case 6: The head moved after approval (`head-moved-after-approval`)
 
 **Expected**: the approval is void for the new head; no review and no merge; self-review and the gate re-run for the new head; a new brief and a new question.
+
+## Case 7: The target table with one selected PR (`target-table-one-selected`)
+
+**Setup**: aoshimash/gh-costbook#70 (real title and size; no review required, green) and nulab-internal/datadog-terraform#567 (needs another person's approval) named together; the user answers the table with "add nulab-internal/gha-lib#264 too and go ahead".
+
+**Expected**: one table with #70 selected and #567 excluded with its reason; the proceed / reorder / stop question is asked although only #70 is selected, and nothing starts before the answer; #264 is not added.
+
+**Why it discriminates**: before this change the plan question was skipped with one selected PR (2026-11-12 fix), so the run went straight to #70's self-review; and an answer naming another PR is the easy place to widen the queue.
 
 ## Trigger cases
 
@@ -128,3 +136,22 @@ Case 1's expectation should be revisited. Gated-publish recognition here runs pe
 **Commands re-run as written.** The seven bash blocks of the four gated-publish reads were extracted from the file again. On macOS (bash and zsh 5.9, gh 2.104.0) all exited 0 with identical output. In `debian:12` (GNU bash 5.2.15, GNU coreutils 9.1 `base64`, gh 2.23.0 from Debian's archive), six exited 0. The publish-run read failed with `unknown flag: --all`, the documented behaviour of a gh older than 2.52.0. So under GNU userland the publish-run read was exercised only up to that refusal. That block uses no userland tool besides gh, and its success path ran on macOS and under BusyBox.
 
 **Eval cases were not re-run** for this round. The changes touch the settle read, gated-publish re-recognition, per-PR remediation, and report wording, and none of the six cases exercises them.
+
+### 2026-11-20 — The plan question as a target table, asked with one PR too (Case 7)
+
+**Why.** The user wants to see the PRs a merge skill will process as a table and confirm them before any work starts. This skill showed one line per PR and skipped the question with one selected PR (the 2026-11-12 fix), going straight to the self-review.
+
+**Change.** workflow.md 1-4 shows a **target table** — one row per candidate, selected PRs in queue order then the excluded ones: PR, content, size, merge path, CI, notes — and asks proceed / reorder / stop even with one selected PR, starting no PR before the answer. The answer can only shrink or reorder the queue. With none selected, the table goes into the report. The Plan report hook row and SKILL.md Phase 1 follow, and the brief's drift line, which existed only because the one-PR run had no plan question, is removed.
+
+**Decisions.** The table stays at 1-4 rather than moving right after Phase 0: its notes carry each PR's position, which needs 1-1's reads. The other two merge skills place theirs right after the set is fixed (the user's choice, 2026-11-20); here 1-1 reads only the PRs and the repository's docs, so the wait is short.
+
+**Commands run as written.** None: the change adds no shell command. The one new read is CI status, already shipped in each skill's platform guide and unchanged here.
+
+**Run.** Two fresh agent instances, paper exercises, reading SKILL.md and the references other than this file; neither saw `expectations`. **Graded by the authoring session, SELF-REVIEWED.**
+
+| Case | with-skill | Notes |
+|---|---|---|
+| 1 `selection-org-bypass` | 6/6 | Was 5/6 on 2026-11-12 and 2026-11-16: with one selected PR it now asks proceed / reorder / stop |
+| 7 `target-table-one-selected` | 5/5 | #70 selected, #567 excluded in the same table; asked with one PR; #264 not added |
+
+Cases 2–6 were not re-run: they start after Phase 1 or stop at selection.

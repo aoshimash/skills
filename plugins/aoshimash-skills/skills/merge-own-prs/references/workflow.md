@@ -29,7 +29,7 @@ What happens around and after each merge — the deploy mechanism, drift, the ve
 |---|---|
 | Modes | Always **interactive**: the human approves every merge and every mutating apply ([verification.md](verification.md) "Always interactive"). There is no autonomous mode, so nothing falls back to interactive. An unattended launch posts and merges nothing (SKILL.md "Environment Adaptation"), so no step from the merge on runs |
 | Run start | [1-1](#1-1-read-each-pr), once per repository: the safety net's "Deploy mechanism and merge method" and "Start-of-run drift". Its verification-plan section does not run here; the plan is built per PR at 2-4 |
-| Plan report | [1-4](#1-4-the-plan-question); drift is flagged there and the human is asked whether to resolve it first. With one selected PR, its brief (2-5) carries the drift line and asks that question before the merge question |
+| Plan report | [1-4](#1-4-the-plan-question), asked even with one selected PR; drift is flagged there and the human is asked whether to resolve it first |
 | Per-PR plan sources | The PR's own test plan or verification steps; they rank after the user's request and before the repository's docs, and join the plan at [2-4](#2-4-pre-merge-gate) item 6 ([verification.md](verification.md) "The verification plan") |
 | CI gate | [2-4](#2-4-pre-merge-gate) item 1 |
 | Go/defer step | [2-5](#2-5-brief-and-decision): the brief carries the A/B/C proposal, any downtime confirmation, and the rollback path (or its absence), and "skip this PR" is the deferral. "No verified rollback path" is said in the brief's 戻し方 line; the human decides |
@@ -68,14 +68,23 @@ The order is the agent's judgement from what 1-1 read; the plan states the reaso
 
 ### 1-4: The plan question
 
-Show, in the user's language:
+Show, in the user's language, a **target table** — one row per candidate, the selected PRs first in queue order, then the excluded ones; column headers in the user's language:
 
-- the queue — one line per PR: `owner/repo#N title` and why it sits there (dependency, or its impact);
-- the excluded candidates and their reasons ([targets.md](targets.md));
-- the enumeration's completeness and the platform access method;
+| Column | Content |
+|---|---|
+| PR | `owner/repo#N` |
+| Content | The title, or a one-line summary when the title does not say what changes |
+| Size | Additions / deletions and changed files |
+| Merge path | No review required (`reviewDecision` empty), or the bypass (`viewerCanMergeAsAdmin`) with the current `reviewDecision`; for an excluded candidate, "—" |
+| CI | Green, pending, or not green with the checks that are not — one read of 2-4 item 1's rollup, without waiting on pending checks |
+| Notes | For a selected PR, why it sits there (dependency, or its impact) and anything already known to stop it at the gate (CI not green, conflicts); for an excluded candidate, its reason ([targets.md](targets.md)) |
+
+Below the table:
+
+- the enumeration's completeness, team-list completeness, and the platform access method;
 - any drift found in 1-1, flagged prominently, with whether to resolve it first.
 
-Ask once (user choice): **proceed in this order** / **reorder** (the user gives the new order) / **stop**. With exactly one selected PR there is no order to approve: show the exclusions and go straight to Phase 2 — its brief is the question. The order may change later only when a merge changes a dependency (2-8), and the change is shown before the next PR starts.
+Ask once (user choice): **proceed in this order** / **reorder** (the user gives the new order) / **stop** — with one selected PR too, where the question confirms the set before any self-review or comment work begins. Start no PR before the answer. The answer can only shrink or reorder the queue: a PR the user adds that is not selected stays outside it; naming it in a new run is how it joins (targets.md "Target forms"). With no PR selected, ask nothing: the table goes into the report. With no user reachable (SKILL.md "Environment Adaptation"), the table goes into the report and the run continues only with what it does unattended. The order may change later only when a merge changes a dependency (2-8), and the change is shown before the next PR starts.
 
 ## Phase 2: Per-PR loop
 
@@ -138,7 +147,6 @@ Write the brief in the user's language, short enough to read in under a minute. 
 セルフレビュー: <blockers and should-fix left unfixed, or "指摘なし">（SELF-REVIEWED when it was not independent）
 他者のコミット: <author and what each changes, or "なし">（omit the line when there are none）
 マージ前チェック: CI <state> / 競合 <none> / バイパスで省略されるルール <none or list>
-未適用の変更: <drift found in 1-1>（only with one selected PR, where there is no plan question; omit otherwise）
 マージ前後の作業: <B/C steps with their class, or "なし">（omit the line when there are none）
 停止時間: <blast radius, expected downtime, timing>（only for a disruptive change; omit otherwise）
 マージ後の確認: <the checks, and which cannot be read now>

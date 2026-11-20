@@ -87,6 +87,20 @@
         "Re-runs self-review and the gate for the new head",
         "Shows a new brief and asks again"
       ]
+    },
+    {
+      "id": 7,
+      "name": "target-table-one-selected",
+      "prompt": "aoshimash/gh-costbook#70 と nulab-internal/datadog-terraform#567 をセルフマージして。テストなので GitHub への書き込みはせず、利用者に何を表示し、何を待つかを示して止まって。前提: 認証アカウントは aoshimash。#70『Recommend a GitHub App installation token for enterprise fetch』: 作成者 aoshimash、draft でない、+377/-104、11 files、reviewRequests=[]、reviewDecision=null、viewerCanMergeAsAdmin=false、mergeStateStatus=CLEAN、base=main、CI rollup はすべて SUCCESS、リポジトリにルールセットもブランチ保護もない。#567: 作成者 aoshimash、draft でない、reviewDecision=REVIEW_REQUIRED、viewerCanMergeAsAdmin=false。表を見た利用者は『nulab-internal/gha-lib#264 も入れて進めて』と答えた（#264 は自分の PR で reviewDecision=REVIEW_REQUIRED、viewerCanMergeAsAdmin=true、レビュー依頼なし）。",
+      "expected_output": "#70 is selected (named, so no review-request check; reviewDecision null means no review is required) and #567 is excluded because another person's approval is required (REVIEW_REQUIRED with viewerCanMergeAsAdmin false). Before any self-review, comment work or write, the run shows one target table: #70's row with its title, +377/-104 11 files, merge path 'no review required', CI green, and its position; #567's row as excluded with that reason. Though only one PR is selected, it asks proceed in this order / reorder / stop and waits. The answer does not add gha-lib#264: it was not named in the request, so it joins only in a new run that names it. The run then proceeds with #70 alone.",
+      "files": [],
+      "expectations": [
+        "Selects #70 and excludes #567 because another person's approval is required",
+        "Shows a target table with a row for #70 (content, size, merge path, CI, notes) and a row for #567 marked excluded with its reason",
+        "Asks proceed / reorder / stop even though only one PR is selected",
+        "Starts no self-review, comment handling, or write before the answer",
+        "Does not add gha-lib#264 to the queue despite the user's answer"
+      ]
     }
   ],
   "trigger_evals": [

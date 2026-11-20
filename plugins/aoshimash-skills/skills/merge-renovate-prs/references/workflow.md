@@ -23,7 +23,7 @@ Detailed procedures for Phases 0–3 of the merge-renovate-prs skill.
 
 Pick the mode once, at the start of the run:
 
-- **Autonomous (default).** Use when the user asked to process/merge the dependency PRs without asking to be consulted per step. After Phase 0's precondition verification passes, there are **no approval gates**: the run proceeds through review → merge → apply → verify → (revert on failure) unattended, and ends with a report.
+- **Autonomous (default).** Use when the user asked to process/merge the dependency PRs without asking to be consulted per step. After Phase 0's precondition verification passes and, when a user is reachable, the user has confirmed the target table (1-5), there are **no approval gates**: the run proceeds through review → merge → apply → verify → (revert on failure) unattended, and ends with a report.
 - **Interactive.** Use when the user asked to confirm each step ("1個ずつ確認しながら", "check with me before merging"), or as the **fallback** when Phase 0's autonomous preconditions fail and are not cleared at run start (0-4 separates structural failures from recoverable ones) — in that case, state which precondition failed and why before continuing interactively.
 
 This file describes one repository's run. Which repository it runs on, and which of its PRs it may act on (the **selected set**), is resolved before Phase 0 ([targets.md](targets.md)); a run over several repositories runs this whole file once per repository, each in its own agent instance, and its user-choice questions reach the user through the parent (targets.md M-3).
@@ -38,7 +38,7 @@ What happens around and after each merge — the deploy mechanism, drift, the ve
 |---|---|
 | Modes | [Mode selection](#mode-selection): autonomous (default) and interactive |
 | Run start | [Phase 0](#phase-0-discover-repo-conventions--verify-preconditions) |
-| Plan report | [1-5](#1-5-plan-gate-interactive--plan-report-autonomous) |
+| Plan report | [1-5](#1-5-target-table-and-plan-gate) |
 | Per-PR plan sources | Renovate `prBodyNotes` ([0-4](#0-4-assemble-the-verification-plan--verify-autonomous-preconditions-autonomous-mode-only), joining at [2-4](#2-4-classify-prepost-work--the-abc-taxonomy)) |
 | CI gate | [2-3](#2-3-ci-gate) |
 | Go/defer step | [2-5](#2-5-godefer-decision-autonomous-or-approval-gate-interactive); "no verified rollback path" is its condition 2 |
@@ -119,10 +119,25 @@ The blast radius here is an **estimate**, made from package names, update types 
 
 Interactive mode may additionally offer to scope the set: security-only, skip majors, only a subset of packages. Autonomous mode processes the full detected set unless the user scoped it in their request.
 
-### 1-5: Plan gate (interactive) / plan report (autonomous)
+### 1-5: Target table and plan gate
 
-- **Autonomous:** report the plan — the PR set, the order, the constraint edges, **the verification plan per target (which checks, from which source — user request / repo docs / baseline)**, anything excluded (ambiguous candidates, drift-blocked PRs, cooldown waits with their eligible dates), the order marked as a provisional blast-radius estimate (1-4), and any precondition remediated at run start (0-4) with its re-probe result — then **proceed immediately**. The report is for the record, not a question; it lets the human see *what will be checked* before the unattended stretch and interrupt if the checks look wrong.
-- **Interactive:** Hard Gate — present the triaged plan + order and ask the user to choose (see Environment Adaptation in SKILL.md): **Approve / Reorder / Scope down / Abort**. Approving the *plan* is a batch approval of *what* will be processed and in *what order*; it does **not** authorize any merge — each PR still hits its own approval gate at step 2-5.
+Both modes show the plan around a **target table** — one row per selected PR, in the proposed order, with column headers in the user's language:
+
+| Column | Content |
+|---|---|
+| PR | `owner/repo#N` |
+| Update | The package or packages, from → to, and the update type (digest / patch / minor / major); a grouped PR lists its members |
+| Blast radius | The provisional estimate from 1-4, marked provisional |
+| Release age | The PR's age and the source that set it (1-3), or the eligible date of a cooldown wait |
+| CI | Green, pending, or not green with the checks that are not — one read of 2-3's CI status, without waiting on pending checks |
+| Notes | What will keep the PR from merging this run on what was read so far — a cooldown wait, an unknown age, an unselected prerequisite, drift, CI not green, a superseded pair — and the constraint edges that touch it |
+
+Below the table: the constraint edges, **the verification plan per target (which checks, from which source — user request / repo docs / baseline)**, anything excluded (ambiguous candidates, drift-blocked PRs), and any precondition remediated at run start (0-4) with its re-probe result.
+
+- **A user is reachable** (either mode) → ask (user choice, see Environment Adaptation in SKILL.md): **Approve / Reorder / Scope down / Abort**. Wait for the answer; nothing is merged, updated, or approved before it. The answer can only shrink or reorder the set: a PR the user adds that is not selected stays outside it ([targets.md](targets.md) "The selected set"), and a cooldown wait the user includes enters only in interactive mode (1-3). In a multi-repository run the question reaches the user through the parent ([targets.md](targets.md) M-3).
+- **No user reachable** (an unattended launch, or a parent that cannot relay — M-3's fallbacks) → put the table and the plan at the top of the report and proceed autonomously. The report is for the record, not a question.
+- **Interactive** additionally: approving the *plan* is a batch approval of *what* will be processed and in *what order*; it does **not** authorize any merge — each PR still hits its own approval gate at step 2-5. Ambiguous candidates are confirmed with the user (1-1).
+- **Autonomous** after the answer (or with no user reachable): proceed through the confirmed set with no further gate. The table lets the human see *what will be merged and checked* before the unattended stretch.
 
 ## Phase 2: Per-PR loop (strictly serial)
 
@@ -270,7 +285,7 @@ Present what happened across the run:
 - **Disruptive changes executed** — flagged prominently with what downtime occurred, each with its recomputed class (2-5): the workloads that restart, the values or controller that move them, and the Phase 1 estimate it replaced when they differ.
 - **Follow-ups** — anything that needs a human later, including a gated-publish merge 0-3 found without its not-yet-published comment.
 - **Platform access** — the method the run used (SKILL.md "Platform Access"), and any operation whose failure under it deferred a PR, stopped the line, or escalated.
-- **Selection** — the target, how the set was selected (review-requested, as which account; or the named PRs), the number of open Renovate PRs that were context only, the selected PRs that were not Renovate PRs, superseded PRs left open because they were outside the set, and every PR the run approved without merging, with the note that it leaves the next run's review-requested set ([targets.md](targets.md)). An empty selected set is reported here and ends the run; detection did not run, so report the number of open PRs, never as Renovate PRs (targets.md).
+- **Selection** — the PRs the user removed or reordered at the target table (1-5), or, with no user reachable, the table itself; the target, how the set was selected (review-requested, as which account; or the named PRs), the number of open Renovate PRs that were context only, the selected PRs that were not Renovate PRs, superseded PRs left open because they were outside the set, and every PR the run approved without merging, with the note that it leaves the next run's review-requested set ([targets.md](targets.md)). An empty selected set is reported here and ends the run; detection did not run, so report the number of open PRs, never as Renovate PRs (targets.md).
 - **Local checkout** — the clone's path when the run cloned the repository.
 
 ### 3-2: Surface improvements (do not auto-fix)

@@ -83,7 +83,7 @@ See [references/workflow.md](references/workflow.md) "Phase 1".
 
 1. Read each selected PR's diff summary, base, files, and description.
 2. Order them: hard dependencies first (a stacked PR after its base PR; a PR that consumes what another introduces after it; overlapping files in the order that keeps conflicts smallest); among independent PRs, smallest impact first — lower risk, smaller blast radius, smaller diff.
-3. Show the plan: one line per PR (repository, number, title, one-line reason for its position), then the excluded candidates. Ask once whether to proceed in that order (user choice: proceed / reorder / stop); with one selected PR, skip the question — its brief is the decision. Across repositories the run is still one serial queue.
+3. Show the plan as a **target table** — one row per candidate, selected PRs in queue order, then the excluded ones: PR, content, size, merge path (no review required, or the bypass), CI, and notes (why it sits there, or why it is excluded). Ask once whether to proceed in that order (user choice: proceed / reorder / stop), even with one selected PR, and start no PR before the answer. With none selected, the table goes into the report and nothing is asked. Across repositories the run is still one serial queue.
 
 ### Phase 2: Per-PR loop (one PR at a time)
 

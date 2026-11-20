@@ -44,7 +44,7 @@ below use capability terms; map them to your environment as follows.
 | **Platform access** — read PRs, reviews, checks, rules, workflow runs; merge; create and merge revert PRs; comment | A connector or MCP server for GitHub, only when it covers every operation the run can use (see [Platform Access](#platform-access)) | The `gh` CLI; with neither, ask the user how to reach GitHub, or stop and merge nothing when no user is reachable |
 | **Background execution** — wait for CI, reconciles, and post-merge workflow runs without blocking | Background shell (e.g. Claude Code's background Bash) | Poll sequentially; nothing is lost but time |
 
-User choice is used by interactive mode's gates, by the safety net's run-start questions (the knowledge-gap question and the credential-remediation question), and by escalation. With no user reachable, those questions resolve the way the safety net says for an unattended launch, and interactive mode merges nothing.
+User choice is used by the target confirmation (both modes), by interactive mode's gates, by the safety net's run-start questions (the knowledge-gap question and the credential-remediation question), and by escalation. With no user reachable, those questions resolve the way the safety net says for an unattended launch, and interactive mode merges nothing.
 
 ## Platform Access
 
@@ -68,12 +68,12 @@ See [references/workflow.md](references/workflow.md) for each step, and its "The
 
 ### Mode
 
-**Autonomous (default)** — after run start's preconditions pass, no further gate: the human approval stands in for the per-merge sign-off, and machine checks cover the rest. **Interactive** — when the user asks to confirm each merge, or as the fallback when an autonomous precondition fails at run start: the user also says yes to each merge and each mutating apply.
+Both modes show the named set as a table and wait for the user's confirmation before the run-start discovery (Phase 0 step 2); with no user reachable, the table goes into the report and the run continues. **Autonomous (default)** — after that confirmation and run start's preconditions pass, no further gate: the human approval stands in for the per-merge sign-off, and machine checks cover the rest. **Interactive** — when the user asks to confirm each merge, or as the fallback when an autonomous precondition fails at run start: the user also says yes to each merge and each mutating apply.
 
 ### Phase 0: Run start (once)
 
 1. Confirm the repository is on GitHub; resolve the platform access method.
-2. **Resolve the named set** — exactly the PRs the user named, or the PRs a filter the user stated returns from a complete read; drop and report any PR that is not open, is a draft, is based on a branch other than the default branch, or is based on an `integration/**` branch ([references/targets.md](references/targets.md)). An empty set ends the run with the report.
+2. **Resolve the named set** — exactly the PRs the user named, or the PRs a filter the user stated returns from a complete read; drop and report any PR that is not open, is a draft, is based on a branch other than the default branch, or is based on an `integration/**` branch ([references/targets.md](references/targets.md)). An empty set ends the run with the report. Then read each PR's merge decision and CI state, show the **target table** — PR, content, size, approval, CI, notes on what will defer it — and ask the user to proceed, remove some PRs, or stop; nothing else runs before the answer, which can only shrink the set and never stands in for an approval ([references/workflow.md](references/workflow.md) 0-2).
 3. Learn the deploy mechanism and merge method, detect start-of-run drift, assemble the verification plan, and probe its preconditions — the safety net's run-start sections. Also read the default branch's rules, which the plan report uses to forecast whether an auto-revert can land.
 
 ### Phase 1: Plan report
